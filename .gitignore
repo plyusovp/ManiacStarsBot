@@ -1,0 +1,17 @@
+# macOS
+.DS_Store
+
+# Python
+__pycache__/
+*.pyc
+.venv/
+env/
+venv/
+
+# SQLite базы и их журналы
+*.db
+*.db-shm
+*.db-wal
+
+# VS Code
+.vscode/
