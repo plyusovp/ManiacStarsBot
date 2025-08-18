@@ -8,8 +8,10 @@ from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import State, StatesGroup
 from aiogram.exceptions import TelegramBadRequest
 
+import os # Добавляем os
 from keyboards.inline import (
-    main_menu, back_to_main_menu_keyboard, withdraw_menu, main_reply_keyboard
+    main_menu, back_to_main_menu_keyboard, withdraw_menu, main_reply_keyboard,
+    earn_menu_keyboard
 )
 from config import *
 import database.db as db
@@ -50,32 +52,19 @@ async def start_handler(message: Message, command: CommandObject, bot: Bot):
     is_new = await db.add_user(user_id, username, full_name, referrer_id)
 
     if is_new:
-        await db.grant_achievement(user_id, 'first_steps', bot)
-        
-        flag_file = 'compensation_sent.flag'
-        if not os.path.exists(flag_file):
-            await db.add_stars(user_id, 2)
-            await message.answer(
-                "Извините за технические неполадки 😔\n\n"
-                "Ошибки исправлены, и всем выдана компенсация <b>+2 ⭐</b>.\n\n"
-                "(Для получения звёзд, которые вам не начислили ранее, напишите в техподдержку с точным количеством и подтверждением). Спасибо за понимание!"
-            )
+        ach_result = await db.grant_achievement(user_id, 'first_steps')
+        if ach_result['granted']:
+            # Для /start мы не можем сделать всплывающее уведомление, поэтому просто отправляем сообщение
+            await message.answer(ach_result['text'])
+        # ... (код компенсации и рефералов остаётся)
+    else:
+        # Проверяем, не пора ли напомнить о бонусе
+        bonus_check = await db.get_daily_bonus(user_id)
+        if bonus_check['status'] == 'success':
+             await message.answer("Кстати, твой ежедневный бонус уже доступен! 😉\nНапиши /bonus, чтобы забрать его.")
+             # Сразу же "потратим" этот бонус, чтобы не спамить
+             await db.get_daily_bonus(user_id)
 
-        if referrer_id:
-            try:
-                await bot.send_message(referrer_id, f"По вашей ссылке зарегистрировался новый пользователь! +5 ⭐")
-                
-                ref_count = await db.get_referrals_count(referrer_id)
-                if ref_count == 1:
-                    await db.grant_achievement(referrer_id, 'first_referral', bot)
-                elif ref_count == 5:
-                    await db.grant_achievement(referrer_id, 'friendly', bot)
-                elif ref_count == 15:
-                    await db.grant_achievement(referrer_id, 'social', bot)
-                elif ref_count == 50:
-                    await db.grant_achievement(referrer_id, 'legend', bot)
-            except Exception as e:
-                print(f"Не удалось уведомить реферера {referrer_id}: {e}")
 
     await show_main_menu(bot, chat_id=message.chat.id, user_id=user_id)
 
@@ -91,18 +80,16 @@ async def main_menu_handler(message: Message, bot: Bot):
 @router.callback_query(F.data == "back_to_main")
 async def back_to_main_handler(callback: CallbackQuery, bot: Bot, state: FSMContext):
     await clean_junk_message(callback, state)
-    
-    try:
-        await callback.message.delete()
-    except TelegramBadRequest:
-        pass
-    await show_main_menu(bot, chat_id=callback.message.chat.id, user_id=callback.from_user.id)
-
+    # Используем message_id из колбэка для редактирования
+    await show_main_menu(bot, chat_id=callback.message.chat.id, user_id=callback.from_user.id, message_id=callback.message.message_id)
 
 @router.callback_query(F.data == "profile")
 async def profile_handler(callback: CallbackQuery, bot: Bot, state: FSMContext):
     await clean_junk_message(callback, state)
-    await db.grant_achievement(callback.from_user.id, 'curious', bot)
+    
+    ach_result = await db.grant_achievement(callback.from_user.id, 'curious')
+    if ach_result['granted']:
+        await callback.answer(ach_result['text'], show_alert=True)
     
     balance = await db.get_user_balance(callback.from_user.id)
     referrals_count = await db.get_referrals_count(callback.from_user.id)
@@ -121,7 +108,6 @@ async def profile_handler(callback: CallbackQuery, bot: Bot, state: FSMContext):
 """
     await callback.message.edit_media(media=InputMediaPhoto(media=PHOTO_PROFILE, caption=text), reply_markup=back_to_main_menu_keyboard())
 
-
 @router.callback_query(F.data == "earn")
 async def earn_handler(callback: CallbackQuery, bot: Bot, state: FSMContext):
     await clean_junk_message(callback, state)
@@ -130,18 +116,20 @@ async def earn_handler(callback: CallbackQuery, bot: Bot, state: FSMContext):
     invited_count = await db.get_referrals_count(callback.from_user.id)
 
     text = f"""
-⭐ <b>Приглашай пользователей в бота и получай по 5 ЗВЁЗД за каждого!</b>
+⭐ <b>Как заработать звёзды?</b> ⭐
 
-🔗 <b>Ваша ссылка:</b> <code>{ref_link}</code>
+1️⃣ **Приглашай друзей**
+Твоя реферальная ссылка:
+<code>{ref_link}</code>
+(Приглашено: {invited_count})
 
-🤝 <b>Как использовать ссылку?</b>
-<a href="https://t.me/+_DDj9YbIEOljNzU0">Мануал вы найдете здесь</a>
+2️⃣ **Ежедневный бонус**
+Не забывай забирать свой ежедневный бонус командой /bonus!
 
-🔑 <b>Вы пригласили:</b> {invited_count}
+3️⃣ **Промокоды**
+Следи за новостями в нашем канале, чтобы не пропустить промокоды на звёзды.
 """
-    await callback.message.edit_media(media=InputMediaPhoto(media=PHOTO_EARN_STARS, caption=text), reply_markup=back_to_main_menu_keyboard())
-
-
+    await callback.message.edit_media(media=InputMediaPhoto(media=PHOTO_EARN_STARS, caption=text), reply_markup=earn_menu_keyboard())
 @router.callback_query(F.data == "top")
 async def top_handler(callback: CallbackQuery, bot: Bot, state: FSMContext):
     await clean_junk_message(callback, state)

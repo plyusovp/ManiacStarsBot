@@ -243,16 +243,20 @@ async def update_user_balance(user_id, amount):
         await db.execute("UPDATE users SET balance = balance + ? WHERE user_id = ?", (amount, user_id))
         await db.commit()
 
-async def grant_achievement(user_id, ach_id, bot: Bot):
+async def grant_achievement(user_id, ach_id):
+    """
+    Присваивает достижение пользователю, если у него его ещё нет.
+    Возвращает словарь с результатом и текстом для уведомления.
+    """
     async with aiosqlite.connect(DB_NAME) as db:
         cursor = await db.execute("SELECT id FROM user_achievements WHERE user_id = ? AND achievement_id = ?", (user_id, ach_id))
         if await cursor.fetchone():
-            return False
+            return {'granted': False} # Достижение уже было
 
         cursor = await db.execute("SELECT name, reward FROM achievements WHERE id = ?", (ach_id,))
         details = await cursor.fetchone()
         if not details:
-            return False
+            return {'granted': False}
 
         ach_name, reward = details
         
@@ -261,12 +265,8 @@ async def grant_achievement(user_id, ach_id, bot: Bot):
         await db.execute("UPDATE users SET balance = balance + ? WHERE user_id = ?", (reward, user_id))
         await db.commit()
 
-        try:
-            await bot.send_message(user_id, f"🏆 <b>Новое достижение!</b>\nВы открыли: «{ach_name}» (+{reward} ⭐)")
-        except Exception as e:
-            print(f"Не удалось уведомить пользователя {user_id} о достижении: {e}")
-            
-        return True
+        notification_text = f"🏆 Новое достижение!\n«{ach_name}» (+{reward} ⭐)"
+        return {'granted': True, 'text': notification_text}
 
 async def get_user_by_username(username: str):
     async with aiosqlite.connect(DB_NAME) as db:
@@ -450,4 +450,17 @@ async def interrupt_timer_match(match_id: int):
 async def get_all_active_timers():
     async with aiosqlite.connect(DB_NAME) as db:
         cursor = await db.execute("SELECT id FROM timer_matches WHERE state = 'active'")
+        return [row[0] for row in await cursor.fetchall()]
+    
+    async def get_users_for_notification():
+     """Выбирает пользователей, которым можно отправить уведомление о бонусе."""
+    async with aiosqlite.connect(DB_NAME) as db:
+        # Мы выбираем тех, кто получил бонус больше 23 часов назад,
+        # чтобы уведомление пришло с небольшим запасом.
+        # time() - 82800 секунд = 23 часа назад
+        twenty_three_hours_ago = int(time.time()) - 82800
+        cursor = await db.execute(
+            "SELECT user_id FROM users WHERE last_bonus_time > 0 AND last_bonus_time < ?",
+            (twenty_three_hours_ago,)
+        )
         return [row[0] for row in await cursor.fetchall()]

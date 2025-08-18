@@ -1,27 +1,36 @@
 # handlers/menu_handler.py
 from aiogram import Router, Bot
-from aiogram.types import Message
+from aiogram.types import Message, InputMediaPhoto
 from keyboards.inline import main_menu
 from config import PHOTO_MAIN_MENU
 
 router = Router()
 
-async def show_main_menu(bot: Bot, chat_id: int, user_id: int):
-    """Отправляет главное меню с фотографией."""
-    bot_info = await bot.get_me()
-    ref_link = f"https://t.me/{bot_info.username}?start={user_id}"
-    
+async def show_main_menu(bot: Bot, chat_id: int, user_id: int, message_id: int = None):
+    """
+    Отправляет или редактирует главное меню.
+    Если message_id передан - редактирует, иначе отправляет новое.
+    """
     text = f"""
 🔪 <b>Добро пожаловать в Maniac Stars!</b> 🔪
 
-Зови друзей и лутай по <b>5 ⭐</b> за каждого.
-<i>Всего 3 кента и у тебя уже подарок!</i>
+Это главный экран. Используй кнопки ниже для навигации по разделам.
 
-💪 <b>Только у нас:</b>
-— Уникальные Достижения с наградами!
-— Ежедневный бонус! Жми /bonus
-
-<b>Твоя реферальная ссылка:</b>
-<code>{ref_link}</code>
+Здесь ты можешь играть, соревноваться с друзьями и получать за это звёзды! 💫
 """
+    
+    # Если есть ID сообщения, пытаемся его отредактировать
+    if message_id:
+        try:
+            await bot.edit_message_media(
+                media=InputMediaPhoto(media=PHOTO_MAIN_MENU, caption=text),
+                chat_id=chat_id,
+                message_id=message_id,
+                reply_markup=main_menu()
+            )
+            return
+        except Exception: # Если не вышло (например, сообщение было удалено), просто отправим новое
+            pass
+
+    # Если редактирование не удалось или не требовалось, отправляем новое сообщение
     await bot.send_photo(chat_id=chat_id, photo=PHOTO_MAIN_MENU, caption=text, reply_markup=main_menu())

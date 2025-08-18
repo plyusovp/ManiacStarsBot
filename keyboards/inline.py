@@ -11,21 +11,29 @@ def main_reply_keyboard():
     )
 
 def main_menu():
-    """Создаёт главное меню с разделом 'Развлечения'."""
+    """Создаёт главное меню с кастомным текстом и расположением."""
     return InlineKeyboardMarkup(inline_keyboard=[
-        [InlineKeyboardButton(text="⭐ Заработать звёзды ⭐", callback_data="earn")],
-        [InlineKeyboardButton(text="🪪 Профиль", callback_data="profile")],
+        [InlineKeyboardButton(text="⭐ Заработать на хлеб ⭐", callback_data="earn")],
+        [
+            InlineKeyboardButton(text="👾 Развлечения", callback_data="entertainment_menu"),
+            InlineKeyboardButton(text="🪪 Профиль", callback_data="profile")
+        ],
         [
             InlineKeyboardButton(text="💸 Вывод", callback_data="withdraw"),
             InlineKeyboardButton(text="📈 Топ", callback_data="top")
         ],
-        [InlineKeyboardButton(text="🎟️ Промокод", callback_data="promo_code")],
-        [InlineKeyboardButton(text="👾 Развлечения 👾", callback_data="entertainment_menu")],
         [
             InlineKeyboardButton(text="📰 Наш канал", url="https://t.me/+Hu5bVLrGpRpiMTBk"),
             InlineKeyboardButton(text="😍 Наши выводы", url="https://t.me/+234P6hHN4YEwMDE8")
         ],
-        [InlineKeyboardButton(text="☎️ Техподдержка (10:00 - 21:00)", url="https://t.me/m/0gHWD35HYTZk")]
+        [InlineKeyboardButton(text="☎️ Техподдержка", url="https://t.me/m/0gHWD35HYTZk")]
+    ])
+
+def earn_menu_keyboard():
+    """Создаёт меню для раздела 'Заработать' с кнопкой промокода."""
+    return InlineKeyboardMarkup(inline_keyboard=[
+        [InlineKeyboardButton(text="🎟️ Ввести промокод", callback_data="promo_code")],
+        [InlineKeyboardButton(text="🔙 Назад", callback_data="back_to_main")]
     ])
 
 def entertainment_menu_keyboard():

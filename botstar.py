@@ -5,6 +5,7 @@ import os
 from aiogram import Bot, Dispatcher
 from aiogram.enums import ParseMode
 from aiogram.client.default import DefaultBotProperties
+from apscheduler.schedulers.asyncio import AsyncIOScheduler
 
 from config import BOT_TOKEN
 import database.db as db
@@ -52,7 +53,8 @@ async def run_compensation(bot: Bot):
             try:
                 await db.add_stars(user_id, 2)
                 await bot.send_message(user_id, message_text)
-                await asyncio.sleep(0.1)
+                await asyncio.sleep(0.1) # Небольшая задержка, чтобы не попасть под лимиты Telegram
+                success_count += 1
             except Exception as e:
                 fail_count += 1
                 print(f"Не удалось отправить компенсацию пользователю {user_id}: {e}")
@@ -63,6 +65,24 @@ async def run_compensation(bot: Bot):
     else:
         print("Компенсация уже была отправлена ранее. Пропускаю...")
 
+async def send_bonus_reminders(bot: Bot):
+    """Рассылает пользователям уведомления о доступном бонусе."""
+    users_to_notify = await db.get_users_for_notification()
+    if not users_to_notify:
+        print("Нет пользователей для уведомления о бонусе.")
+        return
+
+    print(f"Начинаю рассылку уведомлений о бонусе для {len(users_to_notify)} пользователей...")
+    sent_count = 0
+    for user_id in users_to_notify:
+        try:
+            await bot.send_message(user_id, "⏰ Эй! Твой ежедневный бонус уже доступен. Не забудь забрать его командой /bonus 😉")
+            sent_count += 1
+            await asyncio.sleep(0.1)
+        except Exception:
+            pass 
+    print(f"Уведомления о бонусе отправлены. Успешно: {sent_count}.")
+
 
 async def main():
     await db.init_db()
@@ -70,13 +90,18 @@ async def main():
     bot = Bot(token=BOT_TOKEN, default=DefaultBotProperties(parse_mode=ParseMode.HTML))
     dp = Dispatcher()
 
-    # Запускаем очистку и компенсацию перед стартом
     print("Проверка незавершённых игр...")
     await cleanup_active_duels()
     await cleanup_active_timers()
     
     print("Проверка необходимости рассылки компенсации...")
     await run_compensation(bot)
+
+    # ЗАПУСКАЕМ ПЛАНИРОВЩИК УВЕДОМЛЕНИЙ
+    scheduler = AsyncIOScheduler(timezone="Europe/Moscow")
+    scheduler.add_job(send_bonus_reminders, 'interval', hours=2, args=(bot,))
+    scheduler.start()
+    print("Планировщик уведомлений о бонусе запущен.")
 
     # Регистрируем роутеры (обработчики)
     dp.include_router(admin_handlers.router)
