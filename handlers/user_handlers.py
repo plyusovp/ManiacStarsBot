@@ -8,7 +8,6 @@ from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import State, StatesGroup
 from aiogram.exceptions import TelegramBadRequest
 
-import os # Добавляем os
 from keyboards.inline import (
     main_menu, back_to_main_menu_keyboard, withdraw_menu, main_reply_keyboard,
     earn_menu_keyboard
@@ -16,7 +15,8 @@ from keyboards.inline import (
 from config import *
 import database.db as db
 from handlers.menu_handler import show_main_menu
-from .utils import clean_junk_message # 🔥 Импортируем из нового файла
+from .utils import clean_junk_message
+from texts.texts import LEXICON
 
 router = Router()
 
@@ -33,7 +33,7 @@ async def check_subscription(user_id: int, bot: Bot):
         return False
 
 @router.message(CommandStart())
-async def start_handler(message: Message, command: CommandObject, bot: Bot):
+async def start_handler(message: Message, command: CommandObject, bot: Bot, state: FSMContext):
     await message.answer(
         "Добро пожаловать!",
         reply_markup=main_reply_keyboard()
@@ -54,17 +54,31 @@ async def start_handler(message: Message, command: CommandObject, bot: Bot):
     if is_new:
         ach_result = await db.grant_achievement(user_id, 'first_steps')
         if ach_result['granted']:
-            # Для /start мы не можем сделать всплывающее уведомление, поэтому просто отправляем сообщение
-            await message.answer(ach_result['text'])
-        # ... (код компенсации и рефералов остаётся)
-    else:
-        # Проверяем, не пора ли напомнить о бонусе
-        bonus_check = await db.get_daily_bonus(user_id)
-        if bonus_check['status'] == 'success':
-             await message.answer("Кстати, твой ежедневный бонус уже доступен! 😉\nНапиши /bonus, чтобы забрать его.")
-             # Сразу же "потратим" этот бонус, чтобы не спамить
-             await db.get_daily_bonus(user_id)
+            # Всплывающее уведомление здесь невозможно, поэтому отправляем обычное сообщение
+            reply = await message.answer(ach_result['text'])
+            await state.update_data(junk_message_id=reply.message_id)
 
+        flag_file = 'compensation_sent.flag'
+        if not os.path.exists(flag_file):
+            await db.add_stars(user_id, 2)
+            await message.answer(
+                "Извините за технические неполадки 😔\n\n"
+                "Ошибки исправлены, и всем выдана компенсация <b>+2 ⭐</b>.\n\n"
+                "(Для получения звёзд, которые вам не начислили ранее, напишите в техподдержку с точным количеством и подтверждением). Спасибо за понимание!"
+            )
+
+        if referrer_id:
+            try:
+                await bot.send_message(referrer_id, f"По вашей ссылке зарегистрировался новый пользователь! +5 ⭐")
+                
+                ref_count = await db.get_referrals_count(referrer_id)
+                if ref_count in [1, 5, 15, 50]: # Проверяем сразу несколько порогов
+                    ach_map = {1: 'first_referral', 5: 'friendly', 15: 'social', 50: 'legend'}
+                    ach_result_ref = await db.grant_achievement(referrer_id, ach_map[ref_count])
+                    if ach_result_ref['granted']:
+                         await bot.send_message(referrer_id, ach_result_ref['text'])
+            except Exception as e:
+                print(f"Не удалось уведомить реферера {referrer_id}: {e}")
 
     await show_main_menu(bot, chat_id=message.chat.id, user_id=user_id)
 
@@ -80,62 +94,54 @@ async def main_menu_handler(message: Message, bot: Bot):
 @router.callback_query(F.data == "back_to_main")
 async def back_to_main_handler(callback: CallbackQuery, bot: Bot, state: FSMContext):
     await clean_junk_message(callback, state)
-    # Используем message_id из колбэка для редактирования
     await show_main_menu(bot, chat_id=callback.message.chat.id, user_id=callback.from_user.id, message_id=callback.message.message_id)
+
 
 @router.callback_query(F.data == "profile")
 async def profile_handler(callback: CallbackQuery, bot: Bot, state: FSMContext):
     await clean_junk_message(callback, state)
+    user_id = callback.from_user.id
     
-    ach_result = await db.grant_achievement(callback.from_user.id, 'curious')
+    ach_result = await db.grant_achievement(user_id, 'curious')
     if ach_result['granted']:
         await callback.answer(ach_result['text'], show_alert=True)
     
-    balance = await db.get_user_balance(callback.from_user.id)
-    referrals_count = await db.get_referrals_count(callback.from_user.id)
-    stats = await db.get_user_duel_stats(callback.from_user.id)
+    balance = await db.get_user_balance(user_id)
+    referrals_count = await db.get_referrals_count(user_id)
+    stats = await db.get_user_duel_stats(user_id)
 
-    text = f"""
-🔥 <b>Профиль</b> 🔥
-
-👤 <b>Имя:</b> {callback.from_user.full_name}
-🔑 <b>ID:</b> <code>{callback.from_user.id}</code>
-
-📄 <b>Статистика</b> 📄
-- <b>Приглашено друзей:</b> {referrals_count}
-- <b>Дуэли (Побед/Поражений):</b> {stats['wins']}/{stats['losses']}
-- <b>Баланс:</b> {balance} ⭐
-"""
+    text = LEXICON['profile'].format(
+        full_name=callback.from_user.full_name,
+        user_id=user_id,
+        referrals_count=referrals_count,
+        duel_wins=stats['wins'],
+        duel_losses=stats['losses'],
+        balance=balance
+    )
     await callback.message.edit_media(media=InputMediaPhoto(media=PHOTO_PROFILE, caption=text), reply_markup=back_to_main_menu_keyboard())
+
 
 @router.callback_query(F.data == "earn")
 async def earn_handler(callback: CallbackQuery, bot: Bot, state: FSMContext):
     await clean_junk_message(callback, state)
     bot_info = await bot.get_me()
-    ref_link = f"https://t.me/{bot_info.username}?start={callback.from_user.id}"
-    invited_count = await db.get_referrals_count(callback.from_user.id)
+    user_id = callback.from_user.id
+    ref_link = f"https://t.me/{bot_info.username}?start={user_id}"
+    invited_count = await db.get_referrals_count(user_id)
 
-    text = f"""
-⭐ <b>Как заработать звёзды?</b> ⭐
-
-1️⃣ **Приглашай друзей**
-Твоя реферальная ссылка:
-<code>{ref_link}</code>
-(Приглашено: {invited_count})
-
-2️⃣ **Ежедневный бонус**
-Не забывай забирать свой ежедневный бонус командой /bonus!
-
-3️⃣ **Промокоды**
-Следи за новостями в нашем канале, чтобы не пропустить промокоды на звёзды.
-"""
+    text = LEXICON['earn_menu'].format(
+        ref_link=ref_link,
+        invited_count=invited_count
+    )
     await callback.message.edit_media(media=InputMediaPhoto(media=PHOTO_EARN_STARS, caption=text), reply_markup=earn_menu_keyboard())
+
+
 @router.callback_query(F.data == "top")
 async def top_handler(callback: CallbackQuery, bot: Bot, state: FSMContext):
     await clean_junk_message(callback, state)
     top_users = await db.get_top_referrers(5)
     
-    text = "🏆 <b>Топ-5 пользователей по приглашениям:</b>\n\n"
+    text = LEXICON['top_menu']
     if not top_users:
         text += "Пока никто никого не пригласил."
     else:
@@ -156,15 +162,10 @@ async def withdraw_handler(callback: CallbackQuery, bot: Bot, state: FSMContext)
     balance = await db.get_user_balance(callback.from_user.id)
     referrals_count = await db.get_referrals_count(callback.from_user.id)
 
-    text = f"""
-💵 <b>Баланс:</b> {balance} ⭐
-
-‼️ <b>Для вывода требуется:</b>
-— Минимум 5 приглашённых друзей (у вас {referrals_count})
-— Быть подписанным на <a href="https://t.me/+Hu5bVLrGpRpiMTBk">наш канал</a>
-
-<b>Выберите подарок:</b>
-"""
+    text = LEXICON['withdraw_menu'].format(
+        balance=balance,
+        referrals_count=referrals_count
+    )
     await callback.message.edit_media(media=InputMediaPhoto(media=PHOTO_WITHDRAW, caption=text), reply_markup=withdraw_menu())
 
 
@@ -217,7 +218,7 @@ async def withdraw_gift_handler(callback: CallbackQuery, bot: Bot, state: FSMCon
 async def promo_code_start(callback: CallbackQuery, state: FSMContext):
     await clean_junk_message(callback, state)
     await callback.message.edit_media(
-        media=InputMediaPhoto(media=PHOTO_PROMO, caption="<b>Введите ваш промокод:</b>"),
+        media=InputMediaPhoto(media=PHOTO_PROMO, caption=LEXICON['promo_prompt']),
         reply_markup=back_to_main_menu_keyboard()
     )
     await state.set_state(PromoCode.waiting_for_code)
@@ -236,20 +237,32 @@ async def process_promo_code(message: Message, state: FSMContext, bot: Bot):
     
     result = await db.activate_promo(user_id, code)
     response_text = ""
+    notifications = []
+
     if isinstance(result, int):
         response_text = f"✅ Промокод успешно активирован! Вам начислено {result} ⭐"
-        await db.grant_achievement(user_id, 'code_breaker', bot)
         
+        ach_result = await db.grant_achievement(user_id, 'code_breaker')
+        if ach_result['granted']:
+            notifications.append(ach_result['text'])
+
         full_info = await db.get_full_user_info(user_id)
         if full_info and len(full_info['activated_codes']) == 3:
-            await db.grant_achievement(user_id, 'promo_master', bot)
+            ach_result_master = await db.grant_achievement(user_id, 'promo_master')
+            if ach_result_master['granted']:
+                notifications.append(ach_result_master['text'])
             
     elif result == "not_found":
         response_text = "❌ Такого промокода не существует или его срок действия истёк."
     elif result == "already_activated":
         response_text = "❌ Вы уже активировали этот промокод."
 
-    reply = await message.answer(response_text)
+    # Соединяем все уведомления в одно сообщение
+    final_response = response_text
+    if notifications:
+        final_response += "\n\n" + "\n".join(notifications)
+
+    reply = await message.answer(final_response)
     await state.update_data(junk_message_id=reply.message_id)
     
     await message.delete()

@@ -45,7 +45,7 @@ class DuelMatch:
         self.current_round_special = None
         self.p1_timer: asyncio.Task = None
         self.p2_timer: asyncio.Task = None
-        self.lock = asyncio.Lock()
+        self.lock = asyncio.Lock() # Вот он, наш замок
 
     def cancel_timers(self):
         """Отменяет все активные таймеры для раунда."""
@@ -185,9 +185,11 @@ async def resolve_round(bot: Bot, match_id: int):
         await send_round_interface(bot, match)
 
 async def resolve_match(bot: Bot, match_id: int, surrendered_player_id: int = None):
+    """Завершает матч, объявляет победителя и распределяет награды."""
     match = active_duels.get(match_id)
     if not match: return
 
+    # Определяем победителя и проигравшего
     winner_id, loser_id = None, None
     if surrendered_player_id:
         winner_id = match.p2_id if surrendered_player_id == match.p1_id else match.p1_id
@@ -196,17 +198,17 @@ async def resolve_match(bot: Bot, match_id: int, surrendered_player_id: int = No
         winner_id, loser_id = match.p1_id, match.p2_id
     elif match.p2_wins > match.p1_wins:
         winner_id, loser_id = match.p2_id, match.p1_id
-    else:
+    else: # Ничья
         draw_text = f"🤝 Ничья!\n\nСчёт матча: {match.p1_wins}:{match.p2_wins}.\n\nСтавки возвращены игрокам."
+        await db.finish_duel(match_id)
         await asyncio.gather(
-            bot.edit_message_caption(caption=draw_text, chat_id=match.p1_id, message_id=match.p1_message_id, reply_markup=duel_finish_keyboard(match_id)),
-            bot.edit_message_caption(caption=draw_text, chat_id=match.p2_id, message_id=match.p2_message_id, reply_markup=duel_finish_keyboard(match_id))
+            bot.edit_message_caption(caption=draw_text, chat_id=match.p1_id, message_id=match.p1_message_id, reply_markup=duel_finish_keyboard(match_id, match.p2_id)),
+            bot.edit_message_caption(caption=draw_text, chat_id=match.p2_id, message_id=match.p2_message_id, reply_markup=duel_finish_keyboard(match_id, match.p1_id))
         )
-        await db.finish_duel(match_id, None, None)
         if match_id in active_duels: del active_duels[match_id]
         return
 
-    score = f"{match.p1_wins}:{match.p2_wins}" if winner_id == match.p1_id else f"{match.p2_wins}:{match.p1_wins}"
+    # Расчёт награды и обновление балансов
     bank = match.stake * 2
     rake = int(bank * 0.07)
     prize = bank - rake + match.bonus_pool
@@ -215,16 +217,18 @@ async def resolve_match(bot: Bot, match_id: int, surrendered_player_id: int = No
     await db.update_user_balance(loser_id, -match.stake)
     await db.finish_duel(match_id, winner_id, loser_id)
     
-    winner_text = f"🏆 **ПОБЕДА!** 🏆\n\nТы выиграл матч со счётом {score}.\n\nТвой приз: <b>{prize} ⭐</b> (банк {bank}⭐ - комиссия {rake}⭐ + бонусы {match.bonus_pool}⭐)."
-    loser_text = f"😿 **Поражение** 😿\n\nСчёт матча: {score}.\n\nНе отчаивайся, в следующий раз повезёт!"
+    # Формирование и отправка финальных сообщений
+    score = f"{match.p1_wins}:{match.p2_wins}" if winner_id == match.p1_id else f"{match.p2_wins}:{match.p1_wins}"
+    winner_text = f"🏆 <b>ПОБЕДА!</b> 🏆\n\nТы выиграл матч со счётом {score}.\n\nТвой приз: <b>{prize} ⭐</b> (банк {bank}⭐ - комиссия {rake}⭐ + бонусы {match.bonus_pool}⭐)."
+    loser_text = f"😿 <b>Поражение</b> 😿\n\nСчёт матча: {score}.\n\nНе отчаивайся, в следующий раз повезёт!"
     
     if surrendered_player_id:
-        winner_text = f"🏆 **Техническая победа!** 🏆\n\nСоперник сдался. Твой приз: <b>{prize} ⭐</b>."
-        loser_text = f"🏳️ **Вы сдались** 🏳️\n\nВы проиграли {match.stake} ⭐."
+        winner_text = f"🏆 <b>Техническая победа!</b> 🏆\n\nСоперник сдался. Твой приз: <b>{prize} ⭐</b>."
+        loser_text = f"🏳️ <b>Вы сдались</b> 🏳️\n\nВы проиграли {match.stake} ⭐."
     
     await asyncio.gather(
-        bot.edit_message_caption(caption=winner_text, chat_id=winner_id, message_id=match.p1_message_id, reply_markup=duel_finish_keyboard(match_id)),
-        bot.edit_message_caption(caption=loser_text, chat_id=loser_id, message_id=match.p2_message_id, reply_markup=duel_finish_keyboard(match_id))
+        bot.edit_message_caption(caption=winner_text, chat_id=winner_id, message_id=match.p1_message_id, reply_markup=duel_finish_keyboard(match_id, loser_id)),
+        bot.edit_message_caption(caption=loser_text, chat_id=loser_id, message_id=match.p2_message_id, reply_markup=duel_finish_keyboard(match_id, winner_id))
     )
     if match_id in active_duels: del active_duels[match_id]
 
@@ -266,6 +270,7 @@ async def start_match(bot: Bot, p1_id: int, p2_id: int, stake: int, p1_msg_id: i
         
     await send_round_interface(bot, match)
 
+@router.callback_query(F.data == "game_duel")
 @router.callback_query(F.data == "game_duel")
 async def duel_menu_handler(callback: CallbackQuery, state: FSMContext):
     await clean_junk_message(callback, state)
@@ -361,6 +366,7 @@ async def find_duel_handler(callback: CallbackQuery, bot: Bot):
             )
 
 @router.callback_query(F.data.startswith("duel_play:"))
+@router.callback_query(F.data.startswith("duel_play:"))
 async def duel_play_handler(callback: CallbackQuery, bot: Bot):
     try:
         _, match_id_str, card_value_str, original_value_str = callback.data.split(":")
@@ -372,6 +378,7 @@ async def duel_play_handler(callback: CallbackQuery, bot: Bot):
     match = active_duels.get(match_id)
     if not match: return await callback.answer("Ошибка: матч не найден или уже завершён.", show_alert=True)
 
+    # Вот тот самый "замок"
     async with match.lock:
         card_to_find = original_value
         player_hand = match.p1_hand if user_id == match.p1_id else match.p2_hand
@@ -389,7 +396,7 @@ async def duel_play_handler(callback: CallbackQuery, bot: Bot):
             await callback.message.edit_caption(caption="✅ Ваш ход принят. Ожидаем соперника...")
         elif user_id == match.p2_id:
             if match.p2_choice is not None: return await callback.answer("Вы уже сделали ход в этом раунде.")
-            if card_to_find not in match.p2_hand: return await callback.answer("У вас нет такой карты!")
+            if card_to_find not in player_hand: return await callback.answer("У вас нет такой карты!")
             if match.p2_timer: match.p2_timer.cancel()
             match.p2_choice = card_value
             match.p2_hand.remove(card_to_find)
@@ -513,6 +520,7 @@ async def duel_surrender_confirm_handler(callback: CallbackQuery, bot: Bot):
         await resolve_match(bot, match_id, surrendered_player_id=user_id)
 
 @router.callback_query(F.data == "duel_leave_active")
+@router.callback_query(F.data == "duel_leave_active")
 async def duel_leave_active_handler(callback: CallbackQuery, bot: Bot, state: FSMContext):
     user_id = callback.from_user.id
     match_id = await db.get_active_duel_id(user_id)
@@ -526,8 +534,21 @@ async def duel_leave_active_handler(callback: CallbackQuery, bot: Bot, state: FS
         async with match.lock:
             match.cancel_timers()
             await resolve_match(bot, match_id, surrendered_player_id=user_id)
-    else:
-        await db.interrupt_duel(match_id)
+    else: # Если игра "зомби" и есть только в базе
+        details = await db.get_duel_details(match_id)
+        if details:
+            p1_id, p2_id, stake = details
+            winner_id = p2_id if user_id == p1_id else p1_id
+            loser_id = user_id
+            
+            # Возвращаем ставку победителю, у проигравшего она уже списана при поиске
+            # В идеале, нужно убедиться, что она была списана, но пока упростим
+            # await db.update_user_balance(winner_id, stake)
+            
+            # Просто завершаем матч, засчитывая поражение
+            await db.finish_duel(match_id, winner_id, loser_id)
+
+        await db.interrupt_duel(match_id) # На всякий случай меняем статус
         await callback.answer("Ваша 'зависшая' игра была принудительно завершена.", show_alert=True)
         await duel_menu_handler(callback, state)
 

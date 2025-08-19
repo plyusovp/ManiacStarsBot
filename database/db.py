@@ -11,22 +11,7 @@ async def init_db():
         await db.execute("PRAGMA journal_mode=WAL;")
         await db.execute("PRAGMA busy_timeout = 5000;")
         
-        # --- Миграции (обновление структуры старых таблиц) ---
-        cursor = await db.execute("PRAGMA table_info(users)")
-        columns = [column[1] for column in await cursor.fetchall()]
-        if 'last_bonus_time' not in columns:
-            await db.execute("ALTER TABLE users ADD COLUMN last_bonus_time INTEGER DEFAULT 0")
-        if 'duel_wins' not in columns:
-            await db.execute("ALTER TABLE users ADD COLUMN duel_wins INTEGER DEFAULT 0")
-        if 'duel_losses' not in columns:
-            await db.execute("ALTER TABLE users ADD COLUMN duel_losses INTEGER DEFAULT 0")
-
-        cursor = await db.execute("PRAGMA table_info(duel_rounds)")
-        columns = [column[1] for column in await cursor.fetchall()]
-        if 'special' not in columns:
-            await db.execute("ALTER TABLE duel_rounds ADD COLUMN special TEXT")
-
-        # --- Создание всех таблиц (если их нет) ---
+        # --- ШАГ 1: СОЗДАЁМ ВСЕ ТАБЛИЦЫ, ЕСЛИ ИХ НЕТ (ПРАВИЛЬНЫЙ ПОРЯДОК) ---
         await db.execute("""
         CREATE TABLE IF NOT EXISTS users (
             user_id INTEGER PRIMARY KEY, username TEXT, full_name TEXT,
@@ -34,7 +19,6 @@ async def init_db():
             registration_date INTEGER NOT NULL, last_bonus_time INTEGER DEFAULT 0,
             duel_wins INTEGER DEFAULT 0, duel_losses INTEGER DEFAULT 0
         )""")
-        
         await db.execute("""
         CREATE TABLE IF NOT EXISTS referrals (
             id INTEGER PRIMARY KEY AUTOINCREMENT, referrer_id INTEGER NOT NULL,
@@ -61,50 +45,57 @@ async def init_db():
             achievement_id TEXT NOT NULL, completion_date INTEGER NOT NULL,
             UNIQUE(user_id, achievement_id)
         )""")
-        
         await db.execute("""
         CREATE TABLE IF NOT EXISTS duel_matches (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            stake INTEGER NOT NULL, bank INTEGER NOT NULL, rake_percent INTEGER DEFAULT 7,
-            bonus_pool INTEGER DEFAULT 0, state TEXT NOT NULL,
+            id INTEGER PRIMARY KEY AUTOINCREMENT, stake INTEGER NOT NULL, bank INTEGER NOT NULL,
+            rake_percent INTEGER DEFAULT 7, bonus_pool INTEGER DEFAULT 0, state TEXT NOT NULL,
             created_at DATETIME DEFAULT CURRENT_TIMESTAMP, updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
         )""")
-        
         await db.execute("""
         CREATE TABLE IF NOT EXISTS duel_players (
             id INTEGER PRIMARY KEY AUTOINCREMENT, match_id INTEGER NOT NULL, user_id INTEGER NOT NULL,
             role TEXT NOT NULL, hand_json TEXT, wins INTEGER DEFAULT 0, is_winner BOOLEAN,
             FOREIGN KEY (match_id) REFERENCES duel_matches(id)
         )""")
-
         await db.execute("""
         CREATE TABLE IF NOT EXISTS duel_rounds (
             id INTEGER PRIMARY KEY AUTOINCREMENT, match_id INTEGER NOT NULL, round_no INTEGER NOT NULL,
             p1_card INTEGER, p2_card INTEGER, result TEXT, special TEXT,
             FOREIGN KEY (match_id) REFERENCES duel_matches(id)
         )""")
-
-        # 🔥 ИСПРАВЛЕНИЕ ЗДЕСЬ: Добавлена колонка state
         await db.execute("""
         CREATE TABLE IF NOT EXISTS timer_matches (
             id INTEGER PRIMARY KEY AUTOINCREMENT, stake INTEGER NOT NULL, bank INTEGER NOT NULL,
-            winner_id INTEGER, stop_second INTEGER NOT NULL, jackpot_rematch INTEGER DEFAULT 0,
+            winner_id INTEGER, stop_second INTEGER NOT NULL,
             state TEXT DEFAULT 'active', created_at DATETIME DEFAULT CURRENT_TIMESTAMP
         )""")
-
         await db.execute("""
         CREATE TABLE IF NOT EXISTS timer_players (
             id INTEGER PRIMARY KEY AUTOINCREMENT, match_id INTEGER NOT NULL,
             user_id INTEGER NOT NULL, clicked_at REAL, is_winner BOOLEAN,
             FOREIGN KEY (match_id) REFERENCES timer_matches(id)
         )""")
-        
-        # 🔥 ИСПРАВЛЕНИЕ ЗДЕСЬ: Добавляем миграцию для новой колонки
+
+        # --- ШАГ 2: ОБНОВЛЯЕМ СТРУКТУРУ СТАРЫХ ТАБЛИЦ (МИГРАЦИИ) ---
+        cursor = await db.execute("PRAGMA table_info(users)")
+        columns = [column[1] for column in await cursor.fetchall()]
+        if 'last_bonus_time' not in columns:
+            await db.execute("ALTER TABLE users ADD COLUMN last_bonus_time INTEGER DEFAULT 0")
+        if 'duel_wins' not in columns:
+            await db.execute("ALTER TABLE users ADD COLUMN duel_wins INTEGER DEFAULT 0")
+        if 'duel_losses' not in columns:
+            await db.execute("ALTER TABLE users ADD COLUMN duel_losses INTEGER DEFAULT 0")
+
+        cursor = await db.execute("PRAGMA table_info(duel_rounds)")
+        columns = [column[1] for column in await cursor.fetchall()]
+        if 'special' not in columns:
+            await db.execute("ALTER TABLE duel_rounds ADD COLUMN special TEXT")
+
         cursor = await db.execute("PRAGMA table_info(timer_matches)")
         columns = [column[1] for column in await cursor.fetchall()]
         if 'state' not in columns:
             await db.execute("ALTER TABLE timer_matches ADD COLUMN state TEXT DEFAULT 'active'")
-
+        
         await db.commit()
     await populate_achievements()
 
@@ -217,6 +208,15 @@ async def get_daily_bonus(user_id):
         else:
             return {"status": "wait", "seconds_left": 86400 - time_passed}
 
+async def get_users_for_notification():
+    async with aiosqlite.connect(DB_NAME) as db:
+        twenty_three_hours_ago = int(time.time()) - 82800
+        cursor = await db.execute(
+            "SELECT user_id FROM users WHERE last_bonus_time > 0 AND last_bonus_time < ?",
+            (twenty_three_hours_ago,)
+        )
+        return [row[0] for row in await cursor.fetchall()]
+
 async def get_all_achievements():
     async with aiosqlite.connect(DB_NAME) as db:
         cursor = await db.execute("SELECT id, name FROM achievements ORDER BY rarity, name")
@@ -244,14 +244,10 @@ async def update_user_balance(user_id, amount):
         await db.commit()
 
 async def grant_achievement(user_id, ach_id):
-    """
-    Присваивает достижение пользователю, если у него его ещё нет.
-    Возвращает словарь с результатом и текстом для уведомления.
-    """
     async with aiosqlite.connect(DB_NAME) as db:
         cursor = await db.execute("SELECT id FROM user_achievements WHERE user_id = ? AND achievement_id = ?", (user_id, ach_id))
         if await cursor.fetchone():
-            return {'granted': False} # Достижение уже было
+            return {'granted': False}
 
         cursor = await db.execute("SELECT name, reward FROM achievements WHERE id = ?", (ach_id,))
         details = await cursor.fetchone()
@@ -424,8 +420,15 @@ async def finish_timer_match(match_id: int, winner_id: int = None, is_draw: bool
         
 async def get_timer_match_details(match_id: int):
     async with aiosqlite.connect(DB_NAME) as db:
-        cursor = await db.execute("SELECT stake, bank, p1.user_id, p2.user_id FROM timer_matches m JOIN timer_players p1 ON m.id = p1.match_id JOIN timer_players p2 ON m.id = p2.match_id WHERE m.id = ? AND p1.user_id != p2.user_id", (match_id,))
-        return await cursor.fetchone()
+        cursor = await db.execute("""
+            SELECT m.stake, m.bank, p1.user_id, p2.user_id
+            FROM timer_matches m
+            JOIN timer_players p1 ON m.id = p1.match_id
+            JOIN timer_players p2 ON m.id = p2.match_id
+            WHERE m.id = ? AND p1.user_id != p2.user_id
+        """, (match_id,))
+        rows = await cursor.fetchall()
+        return rows[0] if rows else None
 
 async def get_timer_players(match_id: int):
     async with aiosqlite.connect(DB_NAME) as db:
@@ -450,17 +453,4 @@ async def interrupt_timer_match(match_id: int):
 async def get_all_active_timers():
     async with aiosqlite.connect(DB_NAME) as db:
         cursor = await db.execute("SELECT id FROM timer_matches WHERE state = 'active'")
-        return [row[0] for row in await cursor.fetchall()]
-    
-    async def get_users_for_notification():
-     """Выбирает пользователей, которым можно отправить уведомление о бонусе."""
-    async with aiosqlite.connect(DB_NAME) as db:
-        # Мы выбираем тех, кто получил бонус больше 23 часов назад,
-        # чтобы уведомление пришло с небольшим запасом.
-        # time() - 82800 секунд = 23 часа назад
-        twenty_three_hours_ago = int(time.time()) - 82800
-        cursor = await db.execute(
-            "SELECT user_id FROM users WHERE last_bonus_time > 0 AND last_bonus_time < ?",
-            (twenty_three_hours_ago,)
-        )
         return [row[0] for row in await cursor.fetchall()]
