@@ -16,7 +16,7 @@ from config import *
 import database.db as db
 from handlers.menu_handler import show_main_menu
 from .utils import clean_junk_message
-from texts.texts import LEXICON
+from keyboards.texts.texts import LEXICON
 
 router = Router()
 

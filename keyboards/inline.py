@@ -11,7 +11,7 @@ def main_reply_keyboard():
     )
 
 def main_menu():
-    """Создаёт главное меню с кастомным текстом и расположением."""
+    """Создаёт главное меню с компактным расположением кнопок."""
     return InlineKeyboardMarkup(inline_keyboard=[
         [InlineKeyboardButton(text="⭐ Заработать на хлеб ⭐", callback_data="earn")],
         [
@@ -39,9 +39,9 @@ def earn_menu_keyboard():
 def entertainment_menu_keyboard():
     """Создаёт клавиатуру для меню развлечений."""
     return InlineKeyboardMarkup(inline_keyboard=[
-        [InlineKeyboardButton(text="🏆 Достижения 🏆", callback_data="achievements_menu")],
+        [InlineKeyboardButton(text="🏆 Достижения", callback_data="achievements_menu")],
         [InlineKeyboardButton(text="🪙 Орёл и Решка", callback_data="game_coinflip")],
-        [InlineKeyboardButton(text="⚡ Дуэли 1x1 ⚡", callback_data="game_duel")],
+        [InlineKeyboardButton(text="⚡ Дуэли 1x1", callback_data="game_duel")],
         [InlineKeyboardButton(text="⏳ Звёздный Таймер", callback_data="game_timer")],
         [InlineKeyboardButton(text="🎰 Казик", callback_data="game_casino")],
         [InlineKeyboardButton(text="🔙 Назад", callback_data="back_to_main")]
@@ -59,6 +59,12 @@ def duel_stake_keyboard():
             InlineKeyboardButton(text="ℹ️ Правила", callback_data="duel_rules"),
             InlineKeyboardButton(text="⬅️ Назад", callback_data="entertainment_menu")
         ]
+    ])
+    
+def duel_searching_keyboard():
+    """Клавиатура для отмены поиска дуэли."""
+    return InlineKeyboardMarkup(inline_keyboard=[
+        [InlineKeyboardButton(text="❌ Отменить поиск", callback_data="duel_cancel_search")]
     ])
 
 def duel_stuck_keyboard():
@@ -129,10 +135,10 @@ def duel_surrender_confirm_keyboard(match_id: int):
         ]
     ])
 
-def duel_finish_keyboard(match_id: int):
+def duel_finish_keyboard(match_id: int, opponent_id: int):
     """Клавиатура для экрана после матча."""
     return InlineKeyboardMarkup(inline_keyboard=[
-        [InlineKeyboardButton(text="🔁 Реванш", callback_data=f"duel_rematch:{match_id}")],
+        [InlineKeyboardButton(text="🔁 Реванш", callback_data=f"duel_rematch:{match_id}:{opponent_id}")],
         [InlineKeyboardButton(text="🏠 В лобби дуэлей", callback_data="game_duel")]
     ])
     
@@ -153,17 +159,18 @@ def timer_game_keyboard(match_id: int):
         [InlineKeyboardButton(text="⚡ ЗАБРАТЬ БАНК ⚡", callback_data=f"timer_play:{match_id}")]
     ])
 
-def timer_finish_keyboard(match_id: int):
+def timer_finish_keyboard(match_id: int, opponent_id: int):
     """Клавиатура для экрана после 'Звёздного таймера'."""
     return InlineKeyboardMarkup(inline_keyboard=[
-        [InlineKeyboardButton(text="🔁 Реванш", callback_data=f"timer_rematch:{match_id}")],
+        [InlineKeyboardButton(text="🔁 Реванш", callback_data=f"timer_rematch:{match_id}:{opponent_id}")],
         [InlineKeyboardButton(text="🏠 В лобби таймера", callback_data="game_timer")]
     ])
+  
 
 def timer_stuck_keyboard():
     """Клавиатура для игрока, который застрял в 'Звёздном таймере'."""
     return InlineKeyboardMarkup(inline_keyboard=[
-        [InlineKeyboardButton(text="❌ Покинуть игру (поражение)", callback_data="timer_leave_active")],
+        [InlineKeyboardButton(text="❌ Покинуть игру", callback_data="timer_leave_active")],
         [InlineKeyboardButton(text="⬅️ Назад в развлечения", callback_data="entertainment_menu")]
     ])
 
@@ -234,7 +241,6 @@ def withdraw_menu():
         [InlineKeyboardButton(text="🔙 Назад", callback_data="back_to_main")]
     ])
 
-
 def achievements_menu_keyboard(all_achievements: list, user_achievements: list, page: int = 1):
     """Создаёт клавиатуру для меню достижений с пагинацией."""
     builder = InlineKeyboardBuilder()
@@ -257,3 +263,17 @@ def achievements_menu_keyboard(all_achievements: list, user_achievements: list, 
 
     builder.row(InlineKeyboardButton(text="🔙 Назад", callback_data="back_to_main"))
     return builder.as_markup()
+
+def timer_rematch_keyboard(match_id: int, opponent_id: int, bank: int):
+    """Клавиатура для предложения реванша в 'Звёздном таймере'."""
+    return InlineKeyboardMarkup(inline_keyboard=[
+        [InlineKeyboardButton(text=f"🔁 Принять реванш на {bank} ⭐", callback_data=f"timer_rematch:{match_id}:{opponent_id}")],
+        [InlineKeyboardButton(text="🏠 В лобби таймера", callback_data="game_timer")]
+    ])
+
+def timer_rematch_offer_keyboard(match_id: int, opponent_id: int, bank: int):
+    """Клавиатура для ПРИНЯТИЯ реванша."""
+    return InlineKeyboardMarkup(inline_keyboard=[
+        [InlineKeyboardButton(text=f"✅ Принять реванш на {bank} ⭐", callback_data=f"timer_rematch_accept:{match_id}:{opponent_id}")],
+        [InlineKeyboardButton(text="❌ Отклонить", callback_data=f"timer_rematch_decline:{match_id}")]
+    ])

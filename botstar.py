@@ -6,6 +6,7 @@ from aiogram import Bot, Dispatcher
 from aiogram.enums import ParseMode
 from aiogram.client.default import DefaultBotProperties
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
+from database.middlewares import LastSeenMiddleware
 
 from config import BOT_TOKEN
 import database.db as db
@@ -89,6 +90,7 @@ async def main():
     
     bot = Bot(token=BOT_TOKEN, default=DefaultBotProperties(parse_mode=ParseMode.HTML))
     dp = Dispatcher()
+    dp.update.middleware.register(LastSeenMiddleware())
 
     print("Проверка незавершённых игр...")
     await cleanup_active_duels()

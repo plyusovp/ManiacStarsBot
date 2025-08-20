@@ -3,7 +3,7 @@ from aiogram import Router, Bot
 from aiogram.types import Message, InputMediaPhoto
 from keyboards.inline import main_menu
 from config import PHOTO_MAIN_MENU
-from texts.texts import LEXICON
+from keyboards.texts.texts import LEXICON
 
 router = Router()
 
