@@ -1,234 +1,285 @@
 # handlers/admin_handlers.py
-import datetime
 import html
-import logging
-from typing import Any, Optional
-
+import re
 from aiogram import Bot, F, Router
-from aiogram.filters import Command, CommandObject
-from aiogram.types import Message
+from aiogram.filters import Command
+from aiogram.fsm.context import FSMContext
+from aiogram.fsm.state import State, StatesGroup
+from aiogram.types import CallbackQuery, Message
 
-from config import ADMIN_IDS
+from config import settings
 from database import db
+from lexicon.texts import ECONOMY_ERROR_MESSAGES, LEXICON
 
-# --- Router & filters ---
+from keyboards.inline import (admin_main_menu, admin_manage_menu,
+                              admin_promos_menu, admin_reward_details_menu,
+                              admin_rewards_menu)
+
 router = Router()
-# Фильтр: только админы из конфига
-router.message.filter(F.from_user.id.in_(ADMIN_IDS))
-logger = logging.getLogger(__name__)
-
-# --- Constants ---
-REG_DT_FORMAT = "%Y-%m-%d %H:%M:%S"
+router.message.filter(F.from_user.id.in_(settings.ADMIN_IDS))
+router.callback_query.filter(F.from_user.id.in_(settings.ADMIN_IDS))
 
 
-# --- Helpers ---
-async def get_user_id(arg: str) -> Optional[int]:
-    """Преобразует аргумент команды в user_id."""
-    if not arg:
-        return None
-    token = arg.strip().split(maxsplit=1)[0]
-    if token.isdigit():
-        return int(token)
-
-    username = token.replace("@", "").strip()
-    if not username:
-        return None
-
-    try:
-        return await db.get_user_by_username(username)
-    except Exception:
-        logger.exception("Failed to fetch user_id for username: %s", username)
-        return None
+class Broadcast(StatesGroup):
+    waiting_for_message = State()
 
 
-def safe_format_ts(ts: Any) -> str:
-    """Безопасно форматирует timestamp в строку."""
-    try:
-        ts_int = int(ts)
-        if ts_int <= 0:
-            return "неизвестно"
-        dt = datetime.datetime.fromtimestamp(ts_int)
-        return dt.strftime(REG_DT_FORMAT)
-    except (ValueError, TypeError, OSError, OverflowError):
-        return "неизвестно"
+class Promo(StatesGroup):
+    waiting_for_name = State()
+    waiting_for_reward = State()
+    waiting_for_uses = State()
 
 
-def _escape_or_na(value: Any, na_text: str = "не указан") -> str:
-    """Экранирует значение для HTML. Пустые/None -> 'не указан'."""
-    if value is None:
-        return na_text
-    s = str(value).strip()
-    return html.escape(s) if s else na_text
+class ManageBalance(StatesGroup):
+    waiting_for_user = State()
+    waiting_for_amount = State()
+    is_debit = State()
 
 
-def _format_username(value: Any) -> str:
-    """Красиво отображает username."""
-    raw = str(value or "").strip().lstrip("@")
-    if not raw:
-        return "не указан"
-    return f"@{html.escape(raw)}"
+@router.message(Command("admin"))
+async def admin_panel_handler(message: Message):
+    await message.answer("Добро пожаловать в админ-панель!", reply_markup=admin_main_menu())
 
 
-# --- Handlers ---
-@router.message(Command("info"))
-async def get_user_info_handler(
-    message: Message, command: CommandObject, bot: Bot
-) -> None:
-    """/info <id|@username> — показать полную информацию о пользователе."""
-    if not command.args:
-        await message.answer(
-            "Пожалуйста, укажите ID или @username пользователя.\n"
-            "Пример: `/info 12345678` или `/info @username`"
-        )
-        return
+@router.callback_query(F.data == "admin_panel")
+async def admin_panel_callback_handler(callback: CallbackQuery):
+    await callback.message.edit_text("Добро пожаловать в админ-панель!", reply_markup=admin_main_menu())
 
-    user_to_find = await get_user_id(command.args)
-    if not user_to_find:
-        await message.answer("Пользователь не найден в базе данных.")
-        return
 
-    if user_to_find == message.from_user.id:
-        await db.grant_achievement(message.from_user.id, "meta", bot)
+@router.callback_query(F.data == "admin_rewards")
+async def admin_rewards_handler(callback: CallbackQuery, state: FSMContext):
+    await state.clear()
+    page = 1
+    limit = 5
+    pending_rewards = await db.get_pending_rewards(page, limit)
+    total_count = await db.get_pending_rewards_count()
+    total_pages = (total_count + limit - 1) // limit
 
-    try:
-        info = await db.get_full_user_info(user_to_find)
-    except Exception:
-        logger.exception("get_full_user_info failed for user_id: %s", user_to_find)
-        await message.answer(
-            f"Не удалось получить информацию о пользователе `{user_to_find}`."
-        )
-        return
-
-    if not info or not info.get("user_data"):
-        await message.answer(
-            f"Не удалось получить полную информацию о пользователе `{user_to_find}`."
-        )
-        return
-
-    user_data = info["user_data"]
-    invited_users = info.get("invited_users", [])
-    activated_codes = info.get("activated_codes", [])
-
-    reg_date = safe_format_ts(user_data[5])
-    duel_wins = user_data[7]
-    duel_losses = user_data[8]
-
-    text = "\n".join(
-        [
-            "ℹ️ <b>Полная информация о пользователе:</b>",
-            "",
-            f"<b>ID:</b> <code>{user_data[0]}</code>",
-            f"<b>Username:</b> {_format_username(user_data[1])}",
-            f"<b>Full Name:</b> {_escape_or_na(user_data[2])}",
-            f"<b>Баланс:</b> {user_data[3]} ⭐",
-            "",
-            f"<b>Дата регистрации:</b> {reg_date}",
-            f"<b>Приглашен от:</b> {_escape_or_na(user_data[4], 'Никто')}",
-            "",
-            "📊 <b>Статистика:</b>",
-            f"- Всего приглашено: {len(invited_users)}",
-            f"- Активировано промокодов: {len(activated_codes)}",
-            f"- Дуэли (Побед/Поражений): {duel_wins}/{duel_losses}",
-        ]
+    text = f"⏳ Новые заявки на вывод ({total_count} шт.)\n\n"
+    if not pending_rewards:
+        text += "Нет активных заявок."
+    else:
+        for reward in pending_rewards:
+            text += (
+                f"🔹 /reward_{reward['id']} от @{reward['username']} "
+                f"({reward['stars_cost']} ⭐) - {reward['created_at']}\n"
+            )
+    
+    await callback.message.edit_text(
+        text,
+        reply_markup=admin_rewards_menu(page, total_pages)
     )
-    await message.answer(text)
 
 
-@router.message(Command("addpromo"))
-async def add_promo_handler(message: Message, command: CommandObject) -> None:
-    """/addpromo <NAME> <REWARD:int> <USES:int>"""
-    if not command.args or len(command.args.split()) != 3:
-        await message.answer(
-            "Ошибка. Используй формат:\n`/addpromo НАЗВАНИЕ НАГРАДА КОЛИЧЕСТВО`\n"
-            "Пример: `/addpromo HELLO5 5 100`"
-        )
-        return
+@router.callback_query(F.data.startswith("admin_rewards_page_"))
+async def admin_rewards_page_handler(callback: CallbackQuery, state: FSMContext):
+    page = int(callback.data.split("_")[-1])
+    limit = 5
+    pending_rewards = await db.get_pending_rewards(page, limit)
+    total_count = await db.get_pending_rewards_count()
+    total_pages = (total_count + limit - 1) // limit
 
-    name, reward_str, uses_str = command.args.split()
+    text = f"⏳ Новые заявки на вывод ({total_count} шт.)\n\n"
+    if not pending_rewards:
+        text += "Нет активных заявок."
+    else:
+        for reward in pending_rewards:
+            text += (
+                f"🔹 /reward_{reward['id']} от @{reward['username']} "
+                f"({reward['stars_cost']} ⭐) - {reward['created_at']}\n"
+            )
+
+    await callback.message.edit_text(
+        text,
+        reply_markup=admin_rewards_menu(page, total_pages)
+    )
+
+
+# --- ИЗМЕНЕНО: Исправлен фильтр для команды ---
+@router.message(Command(re.compile(r"reward_\d+")))
+async def reward_details_command_handler(message: Message, state: FSMContext):
     try:
-        reward = int(reward_str)
-        uses = int(uses_str)
-        if reward <= 0 or uses < 0:
-            raise ValueError("Reward and uses must be positive.")
-    except ValueError:
-        await message.answer(
-            "Ошибка. Награда и количество должны быть положительными числами."
-        )
-        return
+        # Логика извлечения ID из текста команды
+        reward_id = int(message.text.split("_")[1])
+    except (ValueError, IndexError):
+        return await message.answer("Неверный формат команды.")
+# --- КОНЕЦ ИЗМЕНЕНИЙ ---
 
-    try:
-        await db.add_promo_code(name.upper(), reward, uses)
-    except Exception:
-        logger.exception("add_promo_code failed")
-        await message.answer("Не удалось создать промокод из-за ошибки БД.")
-        return
+    details = await db.get_reward_full_details(reward_id)
+    if not details:
+        return await message.answer(f"Заявка #{reward_id} не найдена.")
+
+    reward = details["reward"]
+    user = details["reward"] 
+    ledger = details["ledger"]
+
+    ledger_text = "\n".join([f"• {l['amount']}⭐ за `{l['reason']}` ({l['created_at']})" for l in ledger])
+
+    text = (
+        f"<b>Детали заявки #{reward_id}</b>\n\n"
+        f"<b>Пользователь:</b> @{user['username']} (<code>{user['user_id']}</code>)\n"
+        f"<b>Имя:</b> {html.escape(user['full_name'])}\n"
+        f"<b>Статус заявки:</b> {reward['status']}\n"
+        f"<b>Запрошено:</b> {reward['item_id']} за {reward['stars_cost']} ⭐\n"
+        f"<b>Дата создания:</b> {reward['created_at']}\n\n"
+        f"<b>Баланс юзера:</b> {user['balance']} ⭐\n"
+        f"<b>Дата регистрации:</b> {user['registration_date']}\n"
+        f"<b>Уровень риска:</b> {user['risk_level']}\n\n"
+        f"<b>Последние транзакции:</b>\n{ledger_text}"
+    )
 
     await message.answer(
-        f"✅ Промокод <code>{html.escape(name.upper())}</code> "
-        f"на {reward} ⭐ ({uses} активаций) успешно создан."
+        text,
+        reply_markup=admin_reward_details_menu(reward_id, user['user_id'])
     )
 
 
-@router.message(Command("addstar"))
-async def add_star_handler(message: Message, command: CommandObject) -> None:
-    """/addstar <id|@username> <AMOUNT:int>"""
-    if not command.args or len(command.args.split()) != 2:
-        await message.answer(
-            "Ошибка. Используй: `/addstar <ID или @username> <количество>`"
-        )
-        return
+@router.callback_query(F.data.startswith("admin_reward_"))
+async def reward_action_handler(callback: CallbackQuery, bot: Bot):
+    parts = callback.data.split("_")
+    action = parts[2]
+    reward_id = int(parts[3])
+    admin_id = callback.from_user.id
 
-    user_arg, amount_str = command.args.split()
-    try:
-        user_id = await get_user_id(user_arg)
-        if not user_id:
-            await message.answer("Пользователь не найден в базе данных.")
-            return
-        amount = int(amount_str)
-    except ValueError:
-        await message.answer("Количество звёзд должно быть числом.")
-        return
-    except Exception:
-        logger.exception("Failed to parse args in add_star")
-        await message.answer("Ошибка в аргументах.")
-        return
+    details = await db.get_reward_full_details(reward_id)
+    if not details:
+        return await callback.answer("Заявка не найдена.", show_alert=True)
+    
+    user_id = details['reward']['user_id']
+    username = details['reward']['username']
+    
+    success = False
+    notify_text = ""
 
-    try:
-        await db.add_stars(user_id, amount)
-    except Exception:
-        logger.exception("add_stars failed")
-        await message.answer("Не удалось начислить звёзды из-за ошибки БД.")
-        return
+    if action == "approve":
+        success = await db.approve_reward(reward_id, admin_id)
+        notify_text = f"✅ Ваша заявка #{reward_id} была одобрена администратором. Ожидайте выдачи."
+    elif action == "reject":
+        success = await db.reject_reward(reward_id, admin_id, "Отклонено администратором")
+        notify_text = f"❌ Ваша заявка #{reward_id} была отклонена. Звёзды возвращены на ваш баланс."
+    elif action == "fulfill":
+        success = await db.fulfill_reward(reward_id, admin_id)
+        notify_text = f"🎉 Ваша заявка #{reward_id} выполнена! Подарок отправлен."
 
-    await message.answer(f"✅ Пользователю `{user_id}` успешно начислено {amount} ⭐.")
-
-
-@router.message(Command("addref"))
-async def add_ref_handler(message: Message, command: CommandObject) -> None:
-    """/addref <id|@username> <AMOUNT:int> - ВРЕМЕННО ОТКЛЮЧЕНО"""
-    await message.answer(
-        "Эта команда временно отключена, так как `add_refs` небезопасна."
-    )
+    if success:
+        await callback.answer(f"Статус заявки #{reward_id} изменен на '{action}'.", show_alert=True)
+        try:
+            await bot.send_message(user_id, notify_text)
+        except Exception as e:
+            await callback.message.answer(f"Не удалось уведомить пользователя @{username}: {e}")
+        await admin_rewards_handler(callback, FSMContext(storage=router.fsm.storage, key=callback.message.chat.id, bot=bot, data={})) # Обновляем список
+    else:
+        await callback.answer("Не удалось изменить статус. Возможно, он уже был изменен.", show_alert=True)
 
 
-@router.message(Command("activepromo"))
-async def active_promo_handler(message: Message) -> None:
-    """/activepromo — список активных промокодов."""
-    try:
-        promos = await db.get_active_promos()
-    except Exception:
-        logger.exception("get_active_promos failed")
-        await message.answer("Не удалось получить список промокодов.")
-        return
-
+@router.callback_query(F.data == "admin_promos")
+async def admin_promos_handler(callback: CallbackQuery):
+    promos = await db.get_active_promos()
+    text = "🎟️ Активные промокоды:\n\n"
     if not promos:
-        await message.answer("Активных промокодов нет.")
+        text += "Нет активных промокодов."
+    else:
+        for code, reward, left, total in promos:
+            text += f"`{code}` — {reward} ⭐ (осталось {left}/{total})\n"
+    
+    await callback.message.edit_text(text, reply_markup=admin_promos_menu())
+
+
+@router.callback_query(F.data == "admin_promo_create")
+async def admin_promo_create_start(callback: CallbackQuery, state: FSMContext):
+    await callback.message.edit_text("Введите название нового промокода (например, `NEWYEAR2024`):")
+    await state.set_state(Promo.waiting_for_name)
+
+
+@router.message(Promo.waiting_for_name)
+async def process_promo_name(message: Message, state: FSMContext):
+    await state.update_data(promo_name=message.text.strip().upper())
+    await message.answer("Отлично. Теперь введите количество звёзд, которое он даёт (например, `10`):")
+    await state.set_state(Promo.waiting_for_reward)
+
+
+@router.message(Promo.waiting_for_reward)
+async def process_promo_reward(message: Message, state: FSMContext):
+    try:
+        reward = int(message.text)
+        if reward <= 0: raise ValueError
+        await state.update_data(promo_reward=reward)
+        await message.answer("Хорошо. Теперь введите общее количество активаций (например, `100`):")
+        await state.set_state(Promo.waiting_for_uses)
+    except ValueError:
+        await message.answer("Неверное число. Введите целое положительное число.")
+
+
+@router.message(Promo.waiting_for_uses)
+async def process_promo_uses(message: Message, state: FSMContext):
+    try:
+        uses = int(message.text)
+        if uses <= 0: raise ValueError
+        data = await state.get_data()
+        name = data['promo_name']
+        reward = data['promo_reward']
+        
+        await db.add_promo_code(name, reward, uses)
+        await message.answer(f"✅ Промокод `{name}` на {reward} ⭐ ({uses} активаций) успешно создан!")
+        await state.clear()
+    except ValueError:
+        await message.answer("Неверное число. Введите целое положительное число.")
+
+
+@router.callback_query(F.data == "admin_manage")
+async def admin_manage_handler(callback: CallbackQuery):
+    await callback.message.edit_text("Выберите действие:", reply_markup=admin_manage_menu())
+
+
+@router.callback_query(F.data.in_({"admin_grant", "admin_debit"}))
+async def manage_balance_start(callback: CallbackQuery, state: FSMContext):
+    is_debit = callback.data == "admin_debit"
+    await state.update_data(is_debit=is_debit)
+    action_word = "списания" if is_debit else "начисления"
+    await callback.message.edit_text(f"Введите ID или @username пользователя для {action_word}:")
+    await state.set_state(ManageBalance.waiting_for_user)
+
+
+@router.message(ManageBalance.waiting_for_user)
+async def process_manage_user(message: Message, state: FSMContext):
+    user_input = message.text.strip()
+    user_id = None
+    if user_input.isdigit():
+        user_id = int(user_input)
+    elif user_input.startswith('@'):
+        user_id = await db.get_user_by_username(user_input[1:])
+    
+    if not user_id:
+        await message.answer("Пользователь не найден. Попробуйте еще раз.")
+        return
+    
+    await state.update_data(target_user_id=user_id)
+    await message.answer("Теперь введите сумму (целое положительное число):")
+    await state.set_state(ManageBalance.waiting_for_amount)
+
+
+@router.message(ManageBalance.waiting_for_amount)
+async def process_manage_amount(message: Message, state: FSMContext):
+    try:
+        amount = int(message.text)
+        if amount <= 0: raise ValueError
+    except ValueError:
+        await message.answer("Неверная сумма. Введите целое положительное число.")
         return
 
-    lines = ["🎟️ <b>Активные промокоды:</b>", ""]
-    for code, reward, uses_left, total_uses in promos:
-        lines.append(
-            f"<code>{html.escape(str(code))}</code> — <b>{reward} ⭐</b> "
-            f"(осталось {uses_left}/{total_uses})"
-        )
-    await message.answer("\n".join(lines))
+    data = await state.get_data()
+    user_id = data['target_user_id']
+    is_debit = data['is_debit']
+    admin_id = message.from_user.id
+
+    if is_debit:
+        success = await db.spend_balance(user_id, amount, "admin_debit", ref_id=str(admin_id))
+        if success:
+            await message.answer(f"✅ У пользователя `{user_id}` списано {amount} ⭐.")
+        else:
+            await message.answer(f"❌ Не удалось списать. Недостаточно средств.")
+    else:
+        await db.add_balance_unrestricted(user_id, amount, "admin_grant", ref_id=str(admin_id))
+        await message.answer(f"✅ Пользователю `{user_id}` начислено {amount} ⭐.")
+    
+    await state.clear()
