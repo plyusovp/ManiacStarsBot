@@ -190,7 +190,7 @@ def admin_manage_menu() -> InlineKeyboardMarkup:
         ],
         [
             InlineKeyboardButton(
-                text="🔄 Пересчитать баланс", callback_data="admin_recalc"
+                text="🔄 Сбросить FSM", callback_data="admin_reset_fsm"
             )
         ],
         [InlineKeyboardButton(text="⬅️ Назад", callback_data="admin_panel")],

@@ -58,7 +58,6 @@ async def process_coinflip_round(
         "user_id": user_id,
         "stake": stake,
         "level": level,
-        "chance": game_rules["chance"],
         "is_win": is_win,
         "prize": prize,
         "round_id": idem_key,
@@ -75,6 +74,8 @@ async def process_coinflip_round(
 async def coinflip_menu_handler(callback: CallbackQuery, state: FSMContext) -> None:
     """Отображает меню выбора уровня сложности для Coinflip."""
     await clean_junk_message(callback, state)
+    # ИСПРАВЛЕНИЕ: Очищаем состояние от предыдущих игр при входе в меню
+    await state.clear()
     balance = await db.get_user_balance(callback.from_user.id)
     text = LEXICON["coinflip_menu"].format(balance=balance)
     await callback.message.edit_caption(
@@ -90,6 +91,7 @@ async def coinflip_level_selected_handler(
     level = callback.data.split(":")[1]
     level_name = COINFLIP_LEVELS.get(level, {}).get("name", "Неизвестный")
 
+    # Здесь мы не используем FSM state, а просто храним данные в FSM data
     await state.update_data(coinflip_level=level)
 
     balance = await db.get_user_balance(callback.from_user.id)
@@ -114,6 +116,8 @@ async def coinflip_stake_selected_handler(
     user_data = await state.get_data()
     level = user_data.get("coinflip_level")
     if not level:
+        # Если уровень не выбран (например, после перезапуска бота), отправляем в меню
+        await coinflip_menu_handler(callback, state)
         return await callback.answer(
             "Ошибка: сначала выберите уровень сложности.", show_alert=True
         )
@@ -159,8 +163,12 @@ async def coinflip_stake_selected_handler(
         final_text = LEXICON["coinflip_loss"].format(
             stake=stake, new_balance=new_balance
         )
-
+    
     # После игры снова показываем меню выбора ставки
+    # Данные о выбранном уровне (`coinflip_level`) остаются в `state`,
+    # что позволяет пользователю играть несколько раундов подряд без
+    # необходимости снова выбирать уровень. Состояние очистится при
+    # выходе в главное меню или выборе другой игры.
     await callback.message.edit_caption(
         caption=final_text, reply_markup=coinflip_stake_keyboard()
     )
@@ -171,6 +179,8 @@ async def coinflip_stake_selected_handler(
 async def back_to_games_handler(callback: CallbackQuery, state: FSMContext) -> None:
     """Возвращает в главное игровое меню (предполагается, что оно в menu_handler)."""
     # Этот импорт здесь, чтобы избежать циклических зависимостей
-    from handlers.menu_handler import games_handler
-
-    await games_handler(callback, state)
+    from handlers.menu_handler import entertainment_handler
+    
+    # ИСПРАВЛЕНИЕ: Очищаем состояние при выходе из игры
+    await state.clear()
+    await entertainment_handler(callback, state)

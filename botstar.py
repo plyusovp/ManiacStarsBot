@@ -5,6 +5,7 @@ import logging
 from aiogram import Bot, Dispatcher
 from aiogram.client.default import DefaultBotProperties
 from aiogram.enums import ParseMode
+from aiogram.fsm.storage.base import StorageKey
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 
 from config import settings
@@ -21,6 +22,7 @@ from middlewares.middlewares import LastSeenMiddleware
 
 # Включаем логирование
 logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
 
 
 async def cleanup_active_games():
@@ -63,6 +65,27 @@ async def send_bonus_reminders(bot: Bot):
     print(f"Уведомления о бонусе отправлены. Успешно: {sent_count}.")
 
 
+# --- НОВАЯ ФУНКЦИЯ: Диагностика "зависших" состояний FSM ---
+async def diagnose_stuck_states(dp: Dispatcher, bot: Bot):
+    """Проверяет и логирует пользователей, находящихся в каком-либо состоянии FSM."""
+    all_users = await db.get_all_users()
+    if not all_users:
+        return
+
+    stuck_users_count = 0
+    for user_id in all_users:
+        storage_key = StorageKey(bot_id=bot.id, chat_id=user_id, user_id=user_id)
+        state = await dp.fsm.storage.get_state(key=storage_key)
+        if state is not None:
+            stuck_users_count += 1
+            logger.warning(f"FSM DIAGNOSTICS: User {user_id} is in state '{state}'")
+
+    if stuck_users_count > 0:
+        logger.warning(
+            f"FSM DIAGNOSTICS: Total users in FSM state: {stuck_users_count}"
+        )
+
+
 async def main():
     # Инициализация базы данных
     await db.init_db()
@@ -84,8 +107,12 @@ async def main():
     scheduler = AsyncIOScheduler(timezone="Europe/Moscow")
     scheduler.add_job(send_bonus_reminders, "interval", hours=2, args=(bot,))
     scheduler.add_job(db.cleanup_old_idempotency_keys, "interval", days=1)
+    # --- НОВОЕ: Добавляем задачу диагностики FSM ---
+    scheduler.add_job(
+        diagnose_stuck_states, "interval", minutes=15, args=(dp, bot)
+    )
     scheduler.start()
-    print("Планировщик уведомлений и очистки ключей запущен.")
+    print("Планировщик уведомлений, очистки ключей и диагностики FSM запущен.")
 
     # --- ГЛАВНОЕ: Подключаем все роутеры из папки handlers ---
     dp.include_router(admin_handlers.router)
