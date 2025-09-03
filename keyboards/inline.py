@@ -61,11 +61,17 @@ def withdraw_menu() -> InlineKeyboardMarkup:
         ],
         [
             InlineKeyboardButton(text="🎁 Подарок 9 - 90 ⭐", callback_data="gift_90"),
-            InlineKeyboardButton(text="🎁 Подарок 10 - 100 ⭐", callback_data="gift_100"),
+            InlineKeyboardButton(
+                text="🎁 Подарок 10 - 100 ⭐", callback_data="gift_100"
+            ),
         ],
         [
-            InlineKeyboardButton(text="🎁 Подарок 11 - 150 ⭐", callback_data="gift_150"),
-            InlineKeyboardButton(text="🎁 Подарок 12 - 200 ⭐", callback_data="gift_200"),
+            InlineKeyboardButton(
+                text="🎁 Подарок 11 - 150 ⭐", callback_data="gift_150"
+            ),
+            InlineKeyboardButton(
+                text="🎁 Подарок 12 - 200 ⭐", callback_data="gift_200"
+            ),
         ],
         [InlineKeyboardButton(text="⬅️ Назад в меню", callback_data="back_to_main")],
     ]
@@ -74,8 +80,11 @@ def withdraw_menu() -> InlineKeyboardMarkup:
 
 # --- Остальные клавиатуры (без изменений, но привожу для полноты) ---
 
+
 def back_to_main_menu_keyboard() -> InlineKeyboardMarkup:
-    buttons = [[InlineKeyboardButton(text="⬅️ Назад в меню", callback_data="back_to_main")]]
+    buttons = [
+        [InlineKeyboardButton(text="⬅️ Назад в меню", callback_data="back_to_main")]
+    ]
     return InlineKeyboardMarkup(inline_keyboard=buttons)
 
 
@@ -87,15 +96,33 @@ def earn_menu_keyboard() -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup(inline_keyboard=buttons)
 
 
+# --- АДМИН-ПАНЕЛЬ ---
 def admin_main_menu() -> InlineKeyboardMarkup:
     buttons = [
         [InlineKeyboardButton(text="📬 Рассылка", callback_data="admin_broadcast")],
-        [InlineKeyboardButton(text="🎁 Заявки на вывод", callback_data="admin_rewards")],
+        [
+            InlineKeyboardButton(
+                text="🎁 Заявки на вывод", callback_data="admin_rewards"
+            )
+        ],
         [
             InlineKeyboardButton(text="🎟 Промокоды", callback_data="admin_promos"),
             InlineKeyboardButton(text="📊 Статистика", callback_data="admin_stats"),
         ],
-        [InlineKeyboardButton(text="⚙️ Управление", callback_data="admin_manage")],
+        [
+            InlineKeyboardButton(
+                text="👤 Инфо о юзере", callback_data="admin_user_info"
+            ),
+            InlineKeyboardButton(text="⚙️ Управление", callback_data="admin_manage"),
+        ],
+    ]
+    return InlineKeyboardMarkup(inline_keyboard=buttons)
+
+
+def admin_user_info_menu() -> InlineKeyboardMarkup:
+    """Кнопки для возврата из меню информации о пользователе."""
+    buttons = [
+        [InlineKeyboardButton(text="⬅️ Назад в админку", callback_data="admin_panel")]
     ]
     return InlineKeyboardMarkup(inline_keyboard=buttons)
 
@@ -103,13 +130,17 @@ def admin_main_menu() -> InlineKeyboardMarkup:
 def admin_rewards_menu(page: int, total_pages: int) -> InlineKeyboardMarkup:
     nav_buttons = []
     if page > 1:
-        nav_buttons.append(InlineKeyboardButton(text="⬅️", callback_data=f"admin_rewards_page_{page-1}"))
+        nav_buttons.append(
+            InlineKeyboardButton(text="⬅️", callback_data=f"admin_rewards_page_{page-1}")
+        )
     if page < total_pages:
-        nav_buttons.append(InlineKeyboardButton(text="➡️", callback_data=f"admin_rewards_page_{page+1}"))
+        nav_buttons.append(
+            InlineKeyboardButton(text="➡️", callback_data=f"admin_rewards_page_{page+1}")
+        )
 
     buttons = [
         nav_buttons,
-        [InlineKeyboardButton(text="⬅️ Назад", callback_data="admin_panel")]
+        [InlineKeyboardButton(text="⬅️ Назад", callback_data="admin_panel")],
     ]
     return InlineKeyboardMarkup(inline_keyboard=buttons)
 
@@ -117,26 +148,36 @@ def admin_rewards_menu(page: int, total_pages: int) -> InlineKeyboardMarkup:
 def admin_reward_details_menu(reward_id: int, user_id: int) -> InlineKeyboardMarkup:
     buttons = [
         [
-            InlineKeyboardButton(text="✅ Одобрить", callback_data=f"admin_reward_approve_{reward_id}"),
-            InlineKeyboardButton(text="❌ Отклонить", callback_data=f"admin_reward_reject_{reward_id}")
+            InlineKeyboardButton(
+                text="✅ Одобрить", callback_data=f"admin_reward_approve_{reward_id}"
+            ),
+            InlineKeyboardButton(
+                text="❌ Отклонить", callback_data=f"admin_reward_reject_{reward_id}"
+            ),
         ],
         [
-             InlineKeyboardButton(text="🎉 Выполнено", callback_data=f"admin_reward_fulfill_{reward_id}")
+            InlineKeyboardButton(
+                text="🎉 Выполнено", callback_data=f"admin_reward_fulfill_{reward_id}"
+            )
         ],
         [
-            InlineKeyboardButton(text="👤 Инфо о юзере", callback_data=f"admin_user_info_{user_id}")
+            InlineKeyboardButton(
+                text="👤 Инфо о юзере", callback_data=f"admin_user_info_{user_id}"
+            )
         ],
-        [
-            InlineKeyboardButton(text="⬅️ К списку", callback_data="admin_rewards")
-        ]
+        [InlineKeyboardButton(text="⬅️ К списку", callback_data="admin_rewards")],
     ]
     return InlineKeyboardMarkup(inline_keyboard=buttons)
 
 
 def admin_promos_menu() -> InlineKeyboardMarkup:
     buttons = [
-        [InlineKeyboardButton(text="➕ Создать промокод", callback_data="admin_promo_create")],
-        [InlineKeyboardButton(text="⬅️ Назад", callback_data="admin_panel")]
+        [
+            InlineKeyboardButton(
+                text="➕ Создать промокод", callback_data="admin_promo_create"
+            )
+        ],
+        [InlineKeyboardButton(text="⬅️ Назад", callback_data="admin_panel")],
     ]
     return InlineKeyboardMarkup(inline_keyboard=buttons)
 
@@ -145,14 +186,14 @@ def admin_manage_menu() -> InlineKeyboardMarkup:
     buttons = [
         [
             InlineKeyboardButton(text="💰 Начислить", callback_data="admin_grant"),
-            InlineKeyboardButton(text="💸 Списать", callback_data="admin_debit")
+            InlineKeyboardButton(text="💸 Списать", callback_data="admin_debit"),
         ],
         [
-            InlineKeyboardButton(text="🔄 Пересчитать баланс", callback_data="admin_recalc")
+            InlineKeyboardButton(
+                text="🔄 Пересчитать баланс", callback_data="admin_recalc"
+            )
         ],
-        [
-            InlineKeyboardButton(text="⬅️ Назад", callback_data="admin_panel")
-        ]
+        [InlineKeyboardButton(text="⬅️ Назад", callback_data="admin_panel")],
     ]
     return InlineKeyboardMarkup(inline_keyboard=buttons)
 
@@ -176,7 +217,11 @@ def duel_stake_keyboard() -> InlineKeyboardMarkup:
 
 def duel_searching_keyboard() -> InlineKeyboardMarkup:
     buttons = [
-        [InlineKeyboardButton(text="❌ Отменить поиск", callback_data="duel_cancel_search")]
+        [
+            InlineKeyboardButton(
+                text="❌ Отменить поиск", callback_data="duel_cancel_search"
+            )
+        ]
     ]
     return InlineKeyboardMarkup(inline_keyboard=buttons)
 
@@ -244,16 +289,26 @@ def duel_boost_choice_keyboard(
                 callback_data=f"duel_boost_choice:{match_id}:{original_value}",
             )
         )
-    return InlineKeyboardMarkup(
-        inline_keyboard=[
-            buttons,
-            [
-                InlineKeyboardButton(
-                    text="❌ Отмена", callback_data=f"duel_cancel_action:{match_id}"
-                )
-            ],
+
+    # Группируем кнопки, чтобы избежать проблем с лимитом Telegram
+    grouped_buttons = []
+    row = []
+    for button in buttons:
+        row.append(button)
+        if len(row) >= 5:  # Максимум 5 кнопок в ряду
+            grouped_buttons.append(row)
+            row = []
+    if row:
+        grouped_buttons.append(row)
+
+    grouped_buttons.append(
+        [
+            InlineKeyboardButton(
+                text="❌ Отмена", callback_data=f"duel_cancel_action:{match_id}"
+            )
         ]
     )
+    return InlineKeyboardMarkup(inline_keyboard=grouped_buttons)
 
 
 def duel_surrender_confirm_keyboard(match_id: int) -> InlineKeyboardMarkup:
@@ -330,15 +385,16 @@ def timer_searching_keyboard() -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup(inline_keyboard=buttons)
 
 
-def timer_game_keyboard(match_id: int, stop_second: int) -> InlineKeyboardMarkup:
+# --- ИЗМЕНЕНО: Клавиатура для новой игры "Таймер" ---
+def timer_game_keyboard(match_id: int) -> InlineKeyboardMarkup:
+    """Клавиатура с одной кнопкой 'СТОП' для игры."""
     buttons = [
         [
             InlineKeyboardButton(
-                text=f"Остановить на {i}",
-                callback_data=f"timer_stop:{match_id}:{i}",
+                text="🔴 СТОП",
+                callback_data=f"timer_stop:{match_id}",
             )
         ]
-        for i in range(10)
     ]
     return InlineKeyboardMarkup(inline_keyboard=buttons)
 
@@ -382,9 +438,7 @@ def achievements_keyboard(
 
 
 def back_to_achievements_keyboard() -> InlineKeyboardMarkup:
-    buttons = [
-        [InlineKeyboardButton(text="⬅️ К списку", callback_data="achievements")]
-    ]
+    buttons = [[InlineKeyboardButton(text="⬅️ К списку", callback_data="achievements")]]
     return InlineKeyboardMarkup(inline_keyboard=buttons)
 
 
@@ -393,10 +447,15 @@ def coinflip_level_keyboard() -> InlineKeyboardMarkup:
     buttons = []
     for level_id, level_data in COINFLIP_LEVELS.items():
         text = f"{level_data['name']} (x{level_data['prize_mult']:.1f}, {level_data['chance']}%)"
-        buttons.append([InlineKeyboardButton(text=text, callback_data=f"cf_level:{level_id}")])
-    
-    buttons.append([InlineKeyboardButton(text="⬅️ Назад", callback_data="entertainment")])
+        buttons.append(
+            [InlineKeyboardButton(text=text, callback_data=f"cf_level:{level_id}")]
+        )
+
+    buttons.append(
+        [InlineKeyboardButton(text="⬅️ Назад", callback_data="entertainment")]
+    )
     return InlineKeyboardMarkup(inline_keyboard=buttons)
+
 
 def coinflip_stake_keyboard() -> InlineKeyboardMarkup:
     """Генерирует кнопки выбора ставки для Coinflip."""
@@ -410,11 +469,22 @@ def coinflip_stake_keyboard() -> InlineKeyboardMarkup:
             InlineKeyboardButton(text="10 ⭐", callback_data="cf_stake:10"),
             InlineKeyboardButton(text="25 ⭐", callback_data="cf_stake:25"),
         ],
-        [InlineKeyboardButton(text="⬅️ Выбрать другой уровень", callback_data="game_coinflip")]
+        [
+            InlineKeyboardButton(
+                text="⬅️ Выбрать другой уровень", callback_data="game_coinflip"
+            )
+        ],
     ]
     return InlineKeyboardMarkup(inline_keyboard=buttons)
 
+
 def back_to_games_keyboard() -> InlineKeyboardMarkup:
     """Кнопка для возврата в игровое меню."""
-    buttons = [[InlineKeyboardButton(text="⬅️ Назад к развлечениям", callback_data="entertainment")]]
+    buttons = [
+        [
+            InlineKeyboardButton(
+                text="⬅️ Назад к развлечениям", callback_data="entertainment"
+            )
+        ]
+    ]
     return InlineKeyboardMarkup(inline_keyboard=buttons)

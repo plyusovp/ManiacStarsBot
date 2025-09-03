@@ -35,12 +35,10 @@ ROUND_TIMEOUT_SEC = 30
 REVEAL_DELAY_SEC = 3
 TIMEOUT_CHOICE = -1  # Специальное значение для таймаута
 
-# Глобальные хранилища состояния
 duel_queue: dict[int, dict] = {}
 active_duels: dict[int, "DuelMatch"] = {}
 rematch_offers: dict[int, dict] = {}
 
-# --- НОВОЕ: Глобальный лок для предотвращения гонок состояний ---
 MATCHMAKING_LOCK = asyncio.Lock()
 
 
@@ -69,14 +67,12 @@ class DuelMatch:
     p2_replace_left: int = 1
     bonus_pool: int = 0
     current_round_special: Optional[str] = None
-    # --- ИЗМЕНЕНО: Храним задачи таймеров для их отмены ---
     p1_timer_task: Optional[asyncio.Task] = None
     p2_timer_task: Optional[asyncio.Task] = None
-    is_resolving: bool = False  # Флаг, чтобы избежать двойного разрешения раунда
+    is_resolving: bool = False
     lock: asyncio.Lock = field(default_factory=asyncio.Lock)
 
     def cancel_timers(self) -> None:
-        """Безопасно отменяет все активные таймеры для этого матча."""
         for task in (self.p1_timer_task, self.p2_timer_task):
             if task and not task.done():
                 task.cancel()
@@ -85,10 +81,7 @@ class DuelMatch:
 
 
 # --- Вспомогательные функции (Сервисы) ---
-
-
 async def cleanup_match(match_id: int, reason: str):
-    """Централизованная функция для очистки состояния матча."""
     async with MATCHMAKING_LOCK:
         if match_id in active_duels:
             match = active_duels.pop(match_id)
@@ -139,12 +132,10 @@ def show_card(x: int) -> str:
 
 
 async def on_player_timeout(bot: Bot, match: DuelMatch, player_role: str) -> None:
-    """Обработчик таймаута игрока."""
     async with match.lock:
         if match.is_resolving:
             return
 
-        # Устанавливаем выбор по таймауту только если игрок еще не сделал ход
         if player_role == "p1" and match.p1_choice is None:
             match.p1_choice = TIMEOUT_CHOICE
             timed_out_id, other_id = match.p1_id, match.p2_id
@@ -152,7 +143,7 @@ async def on_player_timeout(bot: Bot, match: DuelMatch, player_role: str) -> Non
             match.p2_choice = TIMEOUT_CHOICE
             timed_out_id, other_id = match.p2_id, match.p1_id
         else:
-            return  # Игрок уже сделал ход, таймаут неактуален
+            return
 
     try:
         await bot.send_message(timed_out_id, LEXICON["duel_timeout_you"])
@@ -160,20 +151,17 @@ async def on_player_timeout(bot: Bot, match: DuelMatch, player_role: str) -> Non
     except Exception:
         logger.warning("Не удалось уведомить о таймауте")
 
-    # Если оба игрока сделали ход (один из них по таймауту), разрешаем раунд
     if match.p1_choice is not None and match.p2_choice is not None:
         await resolve_round(bot, match)
 
 
 def start_turn_timer(bot: Bot, match: DuelMatch, role: str) -> None:
-    """Создает и сохраняет задачу таймаута для игрока."""
-
     async def _timer_task():
         try:
             await asyncio.sleep(ROUND_TIMEOUT_SEC)
             await on_player_timeout(bot, match, role)
         except asyncio.CancelledError:
-            pass  # Это нормальное завершение при отмене таймера
+            pass
         except Exception as e:
             logger.exception(
                 f"Ошибка в таймере для match={match.match_id}, role={role}: {e}"
@@ -187,7 +175,6 @@ def start_turn_timer(bot: Bot, match: DuelMatch, role: str) -> None:
 
 
 async def refresh_round_ui(bot: Bot, match: DuelMatch) -> None:
-    """Обновляет интерфейс для обоих игроков."""
     async with match.lock:
         special_text = (
             LEXICON.get(f"duel_{match.current_round_special}_active", "")
@@ -218,14 +205,14 @@ async def refresh_round_ui(bot: Bot, match: DuelMatch) -> None:
 
 
 async def send_round_interface(bot: Bot, match: DuelMatch) -> None:
-    """Начинает новый раунд, сбрасывает состояния и запускает таймеры."""
     async with match.lock:
         match.cancel_timers()
         match.p1_choice, match.p2_choice = None, None
+        match.is_resolving = False
+        # --- ИЗМЕНЕНИЕ: Сбрасываем бусты и замены в начале каждого раунда ---
         match.p1_boosts_left, match.p2_boosts_left = 1, 1
         match.p1_replace_left, match.p2_replace_left = 1, 1
         match.current_round_special = roll_special_card()
-        match.is_resolving = False
         round_no = match.current_round
 
     try:
@@ -239,7 +226,6 @@ async def send_round_interface(bot: Bot, match: DuelMatch) -> None:
 
 
 async def resolve_round(bot: Bot, match: DuelMatch) -> None:
-    """Разрешает исход раунда, когда оба игрока сделали ход."""
     async with match.lock:
         if match.is_resolving:
             return
@@ -282,8 +268,6 @@ async def resolve_round(bot: Bot, match: DuelMatch) -> None:
 
         is_over = match.p1_wins >= 2 or match.p2_wins >= 2 or len(match.p1_hand) == 0
 
-    # --- Логика отображения и сохранения вынесена из-под лока ---
-
     if round_winner == "void":
         await db.save_duel_round(
             match.match_id, round_no, p1_card, p2_card, "void", "black_hole"
@@ -322,7 +306,7 @@ async def resolve_round(bot: Bot, match: DuelMatch) -> None:
             ),
         )
         p2_reveal = LEXICON["duel_reveal"].format(
-            p1_card=show_card(p2_card),
+            p1_card=show_card(p2_card),  # Для второго игрока карты меняются местами
             p2_card=show_card(p1_card),
             result=p2_result_text,
             comet_text=(
@@ -331,7 +315,6 @@ async def resolve_round(bot: Bot, match: DuelMatch) -> None:
                 else ""
             ),
         )
-
         await db.save_duel_round(
             match.match_id, round_no, p1_card, p2_card, round_winner, special
         )
@@ -353,89 +336,101 @@ async def resolve_round(bot: Bot, match: DuelMatch) -> None:
 async def resolve_match(
     bot: Bot, match: DuelMatch, surrendered_player_id: Optional[int] = None
 ) -> None:
-    """Завершает матч, распределяет награды и вызывает очистку."""
-    async with match.lock:
-        if match.is_resolving:  # Предотвращаем двойное завершение
-            return
-        match.is_resolving = True
+    # --- ИСПРАВЛЕНИЕ: Используем `try-finally` для гарантированной очистки ---
+    try:
+        async with match.lock:
+            if match.is_resolving:
+                return
+            match.is_resolving = True
+            logger.info(f"Resolving duel {match.match_id}...")
 
-        winner_id, loser_id, is_draw = None, None, False
+            winner_id, loser_id, is_draw = None, None, False
+            if surrendered_player_id:
+                winner_id = (
+                    match.p2_id if surrendered_player_id == match.p1_id else match.p1_id
+                )
+                loser_id = surrendered_player_id
+            elif match.p1_wins > match.p2_wins:
+                winner_id, loser_id = match.p1_id, match.p2_id
+            elif match.p2_wins > match.p1_wins:
+                winner_id, loser_id = match.p2_id, match.p1_id
+            else:
+                is_draw = True
+                # В случае ничьей, для рассылки сообщений присвоим ID
+                winner_id, loser_id = match.p1_id, match.p2_id
 
-        if surrendered_player_id:
-            winner_id = (
-                match.p2_id if surrendered_player_id == match.p1_id else match.p1_id
+            p1_id, p2_id, p1_msg, p2_msg = (
+                match.p1_id,
+                match.p2_id,
+                match.p1_message_id,
+                match.p2_message_id,
             )
-            loser_id = surrendered_player_id
-        elif match.p1_wins > match.p2_wins:
-            winner_id, loser_id = match.p1_id, match.p2_id
-        elif match.p2_wins > match.p1_wins:
-            winner_id, loser_id = match.p2_id, match.p1_id
+            score_text = f"{match.p1_wins}:{match.p2_wins}"
+            bank = match.stake * 2
+            rake = int(bank * (settings.DUEL_RAKE_PERCENT / 100))
+            prize = bank - rake + match.bonus_pool
+
+        # --- Взаимодействие с БД и Telegram API вне лока ---
+        await db.finish_duel_atomic(
+            match.match_id, winner_id, loser_id, prize, is_draw, match.stake
+        )
+
+        if not is_draw:
+            winner_text = LEXICON["duel_win"].format(
+                score=score_text,
+                prize=prize,
+                bank=bank,
+                rake=rake,
+                bonus=match.bonus_pool,
+            )
+            loser_text = LEXICON["duel_loss"].format(score=score_text)
+            if surrendered_player_id:
+                winner_text = LEXICON["duel_win_surrender"].format(prize=prize)
+                loser_text = LEXICON["duel_loss_surrender"].format(stake=match.stake)
+
+            winner_msg_id = p1_msg if winner_id == p1_id else p2_msg
+            loser_msg_id = p2_msg if loser_id == p2_id else p1_msg
+
+            logger.info(
+                f"Duel {match.match_id} ended. Winner: {winner_id}, Loser: {loser_id}. Sending messages."
+            )
+            await asyncio.gather(
+                edit_caption_safe(
+                    bot,
+                    winner_id,
+                    winner_msg_id,
+                    winner_text,
+                    duel_finish_keyboard(match.match_id, loser_id),
+                ),
+                edit_caption_safe(
+                    bot,
+                    loser_id,
+                    loser_msg_id,
+                    loser_text,
+                    duel_finish_keyboard(match.match_id, winner_id),
+                ),
+            )
         else:
-            is_draw = True
-            winner_id, loser_id = match.p1_id, match.p2_id
-
-        p1_id, p2_id, p1_msg, p2_msg = (
-            match.p1_id,
-            match.p2_id,
-            match.p1_message_id,
-            match.p2_message_id,
-        )
-        score_text = f"{match.p1_wins}:{match.p2_wins}"
-        bank = match.stake * 2
-        rake = int(bank * (settings.DUEL_RAKE_PERCENT / 100))
-        prize = bank - rake + match.bonus_pool
-
-    # --- Взаимодействие с БД и Telegram API вне лока ---
-
-    await db.finish_duel_atomic(
-        match.match_id, winner_id, loser_id, prize, is_draw, match.stake
-    )
-
-    if not is_draw:
-        winner_text = LEXICON["duel_win"].format(
-            score=score_text, prize=prize, bank=bank, rake=rake, bonus=match.bonus_pool
-        )
-        loser_text = LEXICON["duel_loss"].format(score=score_text)
-        if surrendered_player_id:
-            winner_text = LEXICON["duel_win_surrender"].format(prize=prize)
-            loser_text = LEXICON["duel_loss_surrender"].format(stake=match.stake)
-
-        await asyncio.gather(
-            edit_caption_safe(
-                bot,
-                winner_id,
-                p1_msg if winner_id == p1_id else p2_msg,
-                winner_text,
-                duel_finish_keyboard(match.match_id, loser_id),
-            ),
-            edit_caption_safe(
-                bot,
-                loser_id,
-                p1_msg if loser_id == p1_id else p2_msg,
-                loser_text,
-                duel_finish_keyboard(match.match_id, winner_id),
-            ),
-        )
-    else:
-        draw_text = LEXICON["duel_draw"].format(score=score_text)
-        await asyncio.gather(
-            edit_caption_safe(
-                bot,
-                p1_id,
-                p1_msg,
-                draw_text,
-                duel_finish_keyboard(match.match_id, p2_id),
-            ),
-            edit_caption_safe(
-                bot,
-                p2_id,
-                p2_msg,
-                draw_text,
-                duel_finish_keyboard(match.match_id, p1_id),
-            ),
-        )
-
-    await cleanup_match(match.match_id, "match_resolved")
+            draw_text = LEXICON["duel_draw"].format(score=score_text)
+            logger.info(f"Duel {match.match_id} ended in a draw. Sending messages.")
+            await asyncio.gather(
+                edit_caption_safe(
+                    bot,
+                    p1_id,
+                    p1_msg,
+                    draw_text,
+                    duel_finish_keyboard(match.match_id, p2_id),
+                ),
+                edit_caption_safe(
+                    bot,
+                    p2_id,
+                    p2_msg,
+                    draw_text,
+                    duel_finish_keyboard(match.match_id, p1_id),
+                ),
+            )
+    finally:
+        await cleanup_match(match.match_id, "match_resolved")
 
 
 async def start_match(
@@ -447,11 +442,9 @@ async def start_match(
     p1_msg_id: int,
     p2_msg_id: int,
 ) -> None:
-    """Создает объект матча и запускает обратный отсчет."""
     match = DuelMatch(
         match_id, p1_id, p2_id, stake, p1_message_id=p1_msg_id, p2_message_id=p2_msg_id
     )
-
     async with MATCHMAKING_LOCK:
         active_duels[match_id] = match
 
@@ -472,7 +465,7 @@ async def start_match(
     )
 
     for i in range(5, 0, -1):
-        if match_id not in active_duels:  # Проверяем, не был ли матч отменен
+        if match_id not in active_duels:
             return
         countdown_text = base_text + LEXICON["duel_countdown"].format(seconds=i)
         await asyncio.gather(
@@ -487,8 +480,6 @@ async def start_match(
 
 
 # --- Хендлеры ---
-
-
 @router.callback_query(F.data == "game_duel")
 async def duel_menu_handler(callback: CallbackQuery, state: FSMContext) -> None:
     await clean_junk_message(callback, state)
@@ -536,6 +527,13 @@ async def find_duel_handler(callback: CallbackQuery, bot: Bot) -> None:
     stake = int(parts[1])
     user_id = callback.from_user.id
 
+    # --- ИЗМЕНЕНИЕ: Проверка баланса перед поиском ---
+    balance = await db.get_user_balance(user_id)
+    if balance < stake:
+        return await callback.answer(
+            f"Недостаточно средств для ставки в {stake} ⭐.", show_alert=True
+        )
+
     async with MATCHMAKING_LOCK:
         if user_id in [data["user_id"] for data in duel_queue.values()]:
             return await callback.answer(
@@ -549,7 +547,6 @@ async def find_duel_handler(callback: CallbackQuery, bot: Bot) -> None:
                 opponent_data["user_id"],
                 opponent_data["msg_id"],
             )
-            # Выходим из-под лока, чтобы создать матч
         else:
             duel_queue[stake] = {
                 "user_id": user_id,
@@ -564,7 +561,6 @@ async def find_duel_handler(callback: CallbackQuery, bot: Bot) -> None:
             )
             return
 
-    # Если нашли оппонента, создаем матч
     match_id = await db.create_duel_atomic(
         opponent_id, user_id, stake, idem_key=callback.id
     )
@@ -658,7 +654,6 @@ async def duel_play_handler(callback: CallbackQuery, bot: Bot) -> None:
         if card_to_find is None:
             return await callback.answer("У вас нет такой карты!")
 
-        # Отменяем таймер игрока, т.к. он сделал ход
         timer = getattr(match, timer_attr)
         if timer and not timer.done():
             timer.cancel()
@@ -680,9 +675,6 @@ async def duel_play_handler(callback: CallbackQuery, bot: Bot) -> None:
         await resolve_round(bot, match)
 
 
-# ... (остальные хендлеры duel_handlers.py без изменений: duel_replace, duel_boost, surrender и т.д.)
-# Важно: в них нужно использовать `active_duels.get(match_id)` для безопасного доступа к матчу.
-# Пример для duel_surrender_confirm_handler:
 @router.callback_query(F.data.startswith("duel_surrender_confirm:"))
 async def duel_surrender_confirm_handler(callback: CallbackQuery, bot: Bot) -> None:
     parts = parse_cb_data(callback.data, "duel_surrender_confirm:", 2)
@@ -714,28 +706,20 @@ async def duel_replace_handler(callback: CallbackQuery, bot: Bot) -> None:
         is_p1 = user_id == match.p1_id
         if not is_p1 and user_id != match.p2_id:
             return await callback.answer("Это не ваш матч.", show_alert=True)
-
-        already_played = (
-            (match.p1_choice is not None) if is_p1 else (match.p2_choice is not None)
-        )
-        if already_played:
+        if (match.p1_choice is not None) if is_p1 else (match.p2_choice is not None):
             return await callback.answer(
                 "Ход уже сделан — заменить карту нельзя.", show_alert=True
             )
-
         replaces_left = match.p1_replace_left if is_p1 else match.p2_replace_left
         if replaces_left < 1:
             return await callback.answer(
                 "Ты уже заменял карту в этом раунде.", show_alert=True
             )
-
         player_hand = match.p1_hand if is_p1 else match.p2_hand
         if not player_hand:
             return await callback.answer("Не из чего менять.", show_alert=True)
-
         current_vals = [c[1] if isinstance(c, tuple) else c for c in player_hand]
-        available_pool = [c for c in range(1, 11) if c not in current_vals]
-        if not available_pool:
+        if not [c for c in range(1, 11) if c not in current_vals]:
             return await callback.answer(
                 "Сейчас заменить нельзя — нет доступных чисел.", show_alert=True
             )
@@ -751,15 +735,12 @@ async def duel_replace_handler(callback: CallbackQuery, bot: Bot) -> None:
     async with match.lock:
         card_to_replace = random.choice(player_hand)
         player_hand.remove(card_to_replace)
-
         current_vals_after_removal = [
             c[1] if isinstance(c, tuple) else c for c in player_hand
         ]
         pool = [c for c in range(1, 11) if c not in current_vals_after_removal]
-
         new_card = random.choice(pool)
         player_hand.append(new_card)
-
         if is_p1:
             match.p1_replace_left = 0
         else:
@@ -780,7 +761,6 @@ async def duel_boost_handler(callback: CallbackQuery, bot: Bot) -> None:
     if not parts:
         return await callback.answer("Ошибка данных.")
     match_id = int(parts[1])
-
     user_id = callback.from_user.id
     match = active_duels.get(match_id)
     if not match:
@@ -790,21 +770,14 @@ async def duel_boost_handler(callback: CallbackQuery, bot: Bot) -> None:
         is_p1 = user_id == match.p1_id
         if not is_p1 and user_id != match.p2_id:
             return await callback.answer("Это не ваш матч.", show_alert=True)
-
-        already_played = (
-            (match.p1_choice is not None) if is_p1 else (match.p2_choice is not None)
-        )
-        if already_played:
+        if (match.p1_choice is not None) if is_p1 else (match.p2_choice is not None):
             return await callback.answer(
                 "Ход уже сделан — усиливать нельзя.", show_alert=True
             )
-
-        boosts_left = match.p1_boosts_left if is_p1 else match.p2_boosts_left
-        if boosts_left < 1:
+        if (match.p1_boosts_left if is_p1 else match.p2_boosts_left) < 1:
             return await callback.answer(
                 "У тебя не осталось усилений в этом раунде.", show_alert=True
             )
-
         player_hand = match.p1_hand if is_p1 else match.p2_hand
 
     await edit_caption_safe(
@@ -823,7 +796,6 @@ async def duel_boost_choice_handler(callback: CallbackQuery, bot: Bot) -> None:
         return await callback.answer("Ошибка данных.")
     _, match_id_str, card_str = parts
     match_id, card_to_boost_original = int(match_id_str), int(card_str)
-
     user_id = callback.from_user.id
     match = active_duels.get(match_id)
     if not match:
@@ -833,17 +805,11 @@ async def duel_boost_choice_handler(callback: CallbackQuery, bot: Bot) -> None:
         is_p1 = user_id == match.p1_id
         if not is_p1 and user_id != match.p2_id:
             return await callback.answer("Это не ваш матч.", show_alert=True)
-
-        already_played = (
-            (match.p1_choice is not None) if is_p1 else (match.p2_choice is not None)
-        )
-        if already_played:
+        if (match.p1_choice is not None) if is_p1 else (match.p2_choice is not None):
             return await callback.answer(
                 "Ход уже сделан — усиливать нельзя.", show_alert=True
             )
-
-        boosts_left = match.p1_boosts_left if is_p1 else match.p2_boosts_left
-        if boosts_left < 1:
+        if (match.p1_boosts_left if is_p1 else match.p2_boosts_left) < 1:
             return await callback.answer(
                 "У тебя не осталось усилений в этом раунде.", show_alert=True
             )
@@ -856,8 +822,7 @@ async def duel_boost_choice_handler(callback: CallbackQuery, bot: Bot) -> None:
             "Недостаточно звёзд для усиления (нужно 1 ⭐).", show_alert=True
         )
 
-    boosted_value = 0
-    card_found = False
+    boosted_value, card_found = 0, False
     async with match.lock:
         player_hand = match.p1_hand if is_p1 else match.p2_hand
         for i, card in enumerate(player_hand):
@@ -868,13 +833,11 @@ async def duel_boost_choice_handler(callback: CallbackQuery, bot: Bot) -> None:
                 player_hand[i] = (boosted_value, original_value)
                 card_found = True
                 break
-
         if not card_found:
             await db.add_balance_unrestricted(
                 user_id, 1, "duel_boost_refund", ref_id=f"duel:{match_id}"
             )
             return await callback.answer("Ошибка: карта для усиления не найдена.")
-
         if is_p1:
             match.p1_boosts_left -= 1
         else:
@@ -919,7 +882,6 @@ async def duel_leave_active_handler(
 ) -> None:
     user_id = callback.from_user.id
     match_id = await db.get_active_duel_id(user_id)
-
     if not match_id:
         await callback.answer("Не найдено активных игр.", show_alert=True)
         return await duel_menu_handler(callback, state)
@@ -928,7 +890,6 @@ async def duel_leave_active_handler(
     if match:
         await resolve_match(bot, match, surrendered_player_id=user_id)
     else:
-        # Если матча нет в памяти, но есть в БД - это "зависшая" игра
         logger.warning(
             f"Принудительное завершение зависшей дуэли {match_id} для пользователя {user_id}"
         )
@@ -949,7 +910,6 @@ async def duel_rematch_handler(callback: CallbackQuery, bot: Bot) -> None:
     _, old_match_id, opponent_id = map(int, parts)
     user_id = callback.from_user.id
 
-    # Проверяем, что реванш не для активной игры
     if old_match_id in active_duels:
         return await callback.answer(
             "Нельзя начать реванш, пока предыдущая игра не завершена.", show_alert=True
@@ -964,7 +924,6 @@ async def duel_rematch_handler(callback: CallbackQuery, bot: Bot) -> None:
         return await callback.answer(
             "Не удалось найти данные для реванша.", show_alert=True
         )
-
     stake = details["stake"]
 
     async with MATCHMAKING_LOCK:
@@ -972,12 +931,10 @@ async def duel_rematch_handler(callback: CallbackQuery, bot: Bot) -> None:
             old_match_id in rematch_offers
             and rematch_offers[old_match_id]["user_id"] != user_id
         ):
-            # Оппонент уже предложил реванш, принимаем
             offer = rematch_offers.pop(old_match_id)
             p1_id, p2_id = offer["user_id"], user_id
             opponent_msg_id = offer["msg_id"]
         else:
-            # Предлагаем реванш
             rematch_offers[old_match_id] = {
                 "user_id": user_id,
                 "msg_id": callback.message.message_id,
@@ -998,7 +955,6 @@ async def duel_rematch_handler(callback: CallbackQuery, bot: Bot) -> None:
                 logger.exception("Не удалось отправить предложение о реванше")
             return
 
-    # Если дошли сюда, значит реванш принят
     new_match_id = await db.create_duel_atomic(
         p1_id, p2_id, stake, idem_key=f"rematch-{old_match_id}-{p1_id}-{p2_id}"
     )

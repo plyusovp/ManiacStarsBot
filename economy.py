@@ -1,5 +1,4 @@
 # economy.py
-from config import settings
 
 # --- ОБЩИЕ ПРАВИЛА ЭКОНОМИКИ ---
 NEW_USER_QUARANTINE_HOURS = 24

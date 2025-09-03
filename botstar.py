@@ -1,7 +1,6 @@
 # botstar.py
 import asyncio
 import logging
-import os
 
 from aiogram import Bot, Dispatcher
 from aiogram.client.default import DefaultBotProperties
@@ -10,8 +9,14 @@ from apscheduler.schedulers.asyncio import AsyncIOScheduler
 
 from config import settings
 from database import db
-from handlers import (admin_handlers, duel_handlers, game_handlers,
-                      menu_handler, timer_handlers, user_handlers)
+from handlers import (
+    admin_handlers,
+    duel_handlers,
+    game_handlers,
+    menu_handler,
+    timer_handlers,
+    user_handlers,
+)
 from middlewares.middlewares import LastSeenMiddleware
 
 # Включаем логирование
@@ -26,7 +31,7 @@ async def cleanup_active_games():
         for match_id in active_duels:
             await db.interrupt_duel(match_id)
         print("Очистка дуэлей завершена.")
-    
+
     active_timers = await db.get_all_active_timers()
     if active_timers:
         print(f"Обнаружено {len(active_timers)} незавершённых таймеров. Очистка...")
@@ -41,7 +46,9 @@ async def send_bonus_reminders(bot: Bot):
     if not users_to_notify:
         return
 
-    print(f"Начинаю рассылку уведомлений о бонусе для {len(users_to_notify)} пользователей...")
+    print(
+        f"Начинаю рассылку уведомлений о бонусе для {len(users_to_notify)} пользователей..."
+    )
     sent_count = 0
     for user_id in users_to_notify:
         try:
@@ -61,7 +68,10 @@ async def main():
     await db.init_db()
 
     # Создание объектов Бота и Диспетчера
-    bot = Bot(token=settings.BOT_TOKEN, default=DefaultBotProperties(parse_mode=ParseMode.HTML))
+    bot = Bot(
+        token=settings.BOT_TOKEN,
+        default=DefaultBotProperties(parse_mode=ParseMode.HTML),
+    )
     dp = Dispatcher()
 
     # Регистрация middleware для отслеживания активности
@@ -83,7 +93,9 @@ async def main():
     dp.include_router(timer_handlers.router)
     dp.include_router(game_handlers.router)
     dp.include_router(menu_handler.router)
-    dp.include_router(user_handlers.router) # Этот роутер отвечает за кнопку "Профиль" и /start
+    dp.include_router(
+        user_handlers.router
+    )  # Этот роутер отвечает за кнопку "Профиль" и /start
 
     # Запуск бота
     await bot.delete_webhook(drop_pending_updates=True)

@@ -1,19 +1,21 @@
 # config.py
 from typing import List
+
 from pydantic import field_validator
 from pydantic_settings import BaseSettings
+
 
 class Settings(BaseSettings):
     # Секретные данные, которые читаются из .env
     BOT_TOKEN: str
-    
+
     ADMIN_IDS: List[int]
-    
-    @field_validator("ADMIN_IDS", mode='before')
+
+    @field_validator("ADMIN_IDS", mode="before")
     @classmethod
     def split_admin_ids(cls, v: str) -> List[int]:
         if isinstance(v, str):
-            return [int(i.strip()) for i in v.split(',')]
+            return [int(i.strip()) for i in v.split(",")]
         return v
 
     CHANNEL_ID: int
@@ -39,9 +41,10 @@ class Settings(BaseSettings):
     PHOTO_PROMO: str = "https://i.postimg.cc/0r0ddy6Q/promo.jpg"
     PHOTO_EARN_STARS: str = "https://i.postimg.cc/tYRdrGPz/earn_stars.jpg"
     PHOTO_ACHIEVEMENTS: str = "https://i.postimg.cc/8JBWHZz3/achievements.jpg"
-    
+
     class Config:
         env_file = ".env"
         env_file_encoding = "utf-8"
+
 
 settings = Settings()

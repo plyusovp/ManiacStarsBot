@@ -6,9 +6,12 @@ from aiogram.types import CallbackQuery, InputMediaPhoto
 from config import settings
 from database import db
 from handlers.utils import clean_junk_message
-from keyboards.inline import (achievements_keyboard,
-                              back_to_achievements_keyboard,
-                              entertainment_menu_keyboard, main_menu_keyboard)
+from keyboards.inline import (
+    achievements_keyboard,
+    back_to_achievements_keyboard,
+    entertainment_menu_keyboard,
+    main_menu_keyboard,
+)
 from lexicon.texts import LEXICON
 
 router = Router()
@@ -18,11 +21,8 @@ async def show_main_menu(bot: Bot, chat_id: int, user_id: int, message_id: int =
     """Отображает или обновляет главное меню."""
     balance = await db.get_user_balance(user_id)
     text = LEXICON["main_menu"].format(balance=balance)
-    media = InputMediaPhoto(
-        media=settings.PHOTO_MAIN_MENU,
-        caption=text
-    )
-    
+    media = InputMediaPhoto(media=settings.PHOTO_MAIN_MENU, caption=text)
+
     if message_id:
         try:
             await bot.edit_message_media(
@@ -53,8 +53,7 @@ async def entertainment_handler(callback: CallbackQuery, state: FSMContext):
     await clean_junk_message(callback, state)
     await callback.message.edit_media(
         media=InputMediaPhoto(
-            media=settings.PHOTO_MAIN_MENU, 
-            caption=LEXICON["entertainment_menu"]
+            media=settings.PHOTO_MAIN_MENU, caption=LEXICON["entertainment_menu"]
         ),
         reply_markup=entertainment_menu_keyboard(),
     )
@@ -70,7 +69,7 @@ async def achievements_handler(callback: CallbackQuery, bot: Bot, state: FSMCont
 
     all_achs = await db.get_all_achievements()
     user_achs = await db.get_user_achievements(user_id)
-    
+
     total_pages = (len(all_achs) + limit - 1) // limit
     start_index = (page - 1) * limit
     end_index = start_index + limit
@@ -78,11 +77,10 @@ async def achievements_handler(callback: CallbackQuery, bot: Bot, state: FSMCont
 
     text = f"📜 Ваши достижения ({len(user_achs)}/{len(all_achs)})"
     await callback.message.edit_media(
-        media=InputMediaPhoto(
-            media=settings.PHOTO_ACHIEVEMENTS, 
-            caption=text
+        media=InputMediaPhoto(media=settings.PHOTO_ACHIEVEMENTS, caption=text),
+        reply_markup=achievements_keyboard(
+            current_page_achs, user_achs, page, total_pages
         ),
-        reply_markup=achievements_keyboard(current_page_achs, user_achs, page, total_pages),
     )
 
 
@@ -95,14 +93,16 @@ async def achievements_page_handler(callback: CallbackQuery, bot: Bot):
 
     all_achs = await db.get_all_achievements()
     user_achs = await db.get_user_achievements(user_id)
-    
+
     total_pages = (len(all_achs) + limit - 1) // limit
     start_index = (page - 1) * limit
     end_index = start_index + limit
     current_page_achs = all_achs[start_index:end_index]
 
     await callback.message.edit_reply_markup(
-        reply_markup=achievements_keyboard(current_page_achs, user_achs, page, total_pages)
+        reply_markup=achievements_keyboard(
+            current_page_achs, user_achs, page, total_pages
+        )
     )
 
 
@@ -126,7 +126,5 @@ async def achievement_info_handler(callback: CallbackQuery):
     )
 
     await callback.message.edit_caption(
-        caption=text,
-        reply_markup=back_to_achievements_keyboard()
+        caption=text, reply_markup=back_to_achievements_keyboard()
     )
-
