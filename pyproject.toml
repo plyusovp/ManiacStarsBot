@@ -1,0 +1,26 @@
+[tool.black]
+line-length = 88
+target-version = ['py311']
+
+[tool.ruff]
+line-length = 88
+
+[tool.isort]
+profile = "black"
+
+[tool.bandit]
+skips = ["B101"]
+
+# Новая секция для настройки mypy
+[tool.mypy]
+python_version = "3.11"
+# Говорим mypy игнорировать ошибки импорта для
+# библиотек, у которых нет type stubs для твоей системы.
+[[tool.mypy.overrides]]
+module = [
+    "aiosqlite.*",
+    "cachetools.*",
+    "apscheduler.*",
+    "pydantic_settings.*"
+]
+ignore_missing_imports = true

@@ -1,18 +1,19 @@
 # economy.py
+from typing import Any, Dict
 
-# --- ОБЩИЕ ПРАВИЛА ЭКОНОМИКИ ---
-NEW_USER_QUARANTINE_HOURS = 24
-WITHDRAW_COOLDOWN_HOURS = 12
-BIG_EARN_THRESHOLD = 50
+# --- GENERAL ECONOMIC RULES ---
+NEW_USER_QUARANTINE_HOURS: int = 24
+WITHDRAW_COOLDOWN_HOURS: int = 12
+BIG_EARN_THRESHOLD: int = 50
 
-# --- ПРАВИЛА ДЛЯ НАЧИСЛЕНИЙ (add_balance_with_checks) ---
-# Ключи: источник (reason)
-# Значения: словарь с лимитами
-# daily_cap: макс. сумма в день
-# rpm: макс. операций в минуту
-# rph: макс. операций в час
-# unlimited: True, если лимитов нет
-EARN_RULES = {
+# --- RULES FOR EARNINGS (add_balance_with_checks) ---
+# Keys: source (reason)
+# Values: dictionary with limits
+# daily_cap: max amount per day
+# rpm: max operations per minute
+# rph: max operations per hour
+# unlimited: True if there are no limits
+EARN_RULES: Dict[str, Dict[str, Any]] = {
     "referral_bonus": {"daily_cap": 50},
     "promo_activation": {"unlimited": True},
     "daily_bonus": {"daily_cap": 10},
@@ -29,34 +30,38 @@ EARN_RULES = {
     "reward_revert": {"unlimited": True},
 }
 
-# --- МАТЕМАТИКА ИГРЫ COINFLIP (ОРЁЛ И РЕШКА) ---
+# --- COINFLIP GAME MATHEMATICS ---
 # RTP = (chance / 100) * prize_mult * (1 - rake)
-# Rake (комиссия) применяется к выигрышу, а не к ставке.
-COINFLIP_RAKE_PERCENT = 7
+# Rake (commission) is applied to the winnings, not the stake.
+COINFLIP_RAKE_PERCENT: int = 7
 
-COINFLIP_LEVELS = {
+COINFLIP_LEVELS: Dict[str, Dict[str, Any]] = {
     "easy": {
         "name": "Лёгкий",
-        "chance": 48,  # %
+        "win_chance": 48,
         "prize_mult": 2.0,
+        "stakes": [10, 20, 30, 40, 50],
         "rtp": (48 / 100) * 2.0 * (1 - COINFLIP_RAKE_PERCENT / 100),
     },
     "medium": {
         "name": "Средний",
-        "chance": 35,  # %
+        "win_chance": 35,
         "prize_mult": 2.5,
+        "stakes": [25, 50, 75, 100, 150],
         "rtp": (35 / 100) * 2.5 * (1 - COINFLIP_RAKE_PERCENT / 100),
     },
     "hard": {
         "name": "Сложный",
-        "chance": 20,  # %
+        "win_chance": 20,
         "prize_mult": 4.0,
+        "stakes": [50, 100, 150, 200, 250],
         "rtp": (20 / 100) * 4.0 * (1 - COINFLIP_RAKE_PERCENT / 100),
     },
     "insane": {
         "name": "Безумный",
-        "chance": 10,  # %
+        "win_chance": 10,
         "prize_mult": 8.0,
+        "stakes": [100, 200, 300, 400, 500],
         "rtp": (10 / 100) * 8.0 * (1 - COINFLIP_RAKE_PERCENT / 100),
     },
 }

@@ -1,159 +1,177 @@
 # handlers/game_handlers.py
 import asyncio
 import logging
-import random
+import secrets
 import uuid
+from typing import Any
 
 from aiogram import Bot, F, Router
 from aiogram.fsm.context import FSMContext
 from aiogram.types import CallbackQuery
 
+from config import COINFLIP_LEVELS
 from database import db
-from economy import COINFLIP_LEVELS, COINFLIP_RAKE_PERCENT
-from handlers.utils import clean_junk_message
+from economy import COINFLIP_RAKE_PERCENT
+from handlers.utils import clean_junk_message, safe_edit_caption
+from keyboards.factories import CoinflipCallback, GameCallback
 from keyboards.inline import coinflip_level_keyboard, coinflip_stake_keyboard
 from lexicon.texts import LEXICON
 
 router = Router()
-logger = logging.getLogger(__name__)
-
-# --- Вспомогательные функции ---
 
 
 async def process_coinflip_round(
-    user_id: int, stake: int, level: str, idem_key: str
-) -> dict:
+    user_id: int, stake: int, level: str, idem_key: str, trace_id: str
+) -> dict[str, Any]:
     """
     Обрабатывает один раунд игры Coinflip.
     Возвращает словарь с результатом.
     """
+    extra = {"user_id": user_id, "trace_id": trace_id, "idem_key": idem_key}
     game_rules = COINFLIP_LEVELS.get(level)
     if not game_rules:
+        logging.error(f"Invalid coinflip level provided: {level}", extra=extra)
         return {"success": False, "reason": "invalid_level"}
 
-    # 1. Списываем ставку
     spent_successfully = await db.spend_balance(
         user_id, stake, "coinflip_stake", ref_id=f"cf:{level}", idem_key=idem_key
     )
     if not spent_successfully:
         return {"success": False, "reason": "insufficient_funds"}
 
-    # 2. Генерируем исход (один random на раунд)
-    is_win = random.randint(1, 100) <= game_rules["chance"]
+    is_win = secrets.randbelow(100) + 1 <= game_rules["win_chance"]
 
-    # 3. Рассчитываем выигрыш и начисляем, если победа
     prize = 0
     if is_win:
         gross_prize = int(stake * game_rules["prize_mult"])
         rake = int(gross_prize * (COINFLIP_RAKE_PERCENT / 100))
         prize = gross_prize - rake
-
-        await db.add_balance_with_checks(
+        result = await db.add_balance_with_checks(
             user_id, prize, "coinflip_win", ref_id=f"cf:{level}"
         )
+        if not result.get("success"):
+            logging.error(
+                f"Failed to credit coinflip win. Reason: {result.get('reason')}",
+                extra=extra,
+            )
+            await db.add_balance_unrestricted(
+                user_id, stake, "coinflip_win_fail_refund"
+            )
 
-    # 4. Логируем исход
-    log_info = {
-        "game": "coinflip",
-        "user_id": user_id,
-        "stake": stake,
-        "level": level,
-        "is_win": is_win,
-        "prize": prize,
-        "round_id": idem_key,
-    }
-    logger.info(f"Coinflip result: {log_info}")
-
+    log_extra = {**extra, "stake": stake, "level": level, "win": is_win, "prize": prize}
+    logging.info("Coinflip result processed", extra=log_extra)
     return {"success": True, "is_win": is_win, "prize": prize}
 
 
-# --- Хендлеры ---
-
-
-@router.callback_query(F.data == "game_coinflip")
-async def coinflip_menu_handler(callback: CallbackQuery, state: FSMContext) -> None:
+@router.callback_query(
+    GameCallback.filter(F.name == "coinflip" and F.action == "start")
+)
+async def coinflip_menu_handler(
+    callback: CallbackQuery, state: FSMContext, bot: Bot
+) -> None:
     """Отображает меню выбора уровня сложности для Coinflip."""
-    await clean_junk_message(callback, state)
-    # ИСПРАВЛЕНИЕ: Очищаем состояние от предыдущих игр при входе в меню
+    await clean_junk_message(state, bot)
     await state.clear()
     balance = await db.get_user_balance(callback.from_user.id)
     text = LEXICON["coinflip_menu"].format(balance=balance)
-    await callback.message.edit_caption(
-        caption=text, reply_markup=coinflip_level_keyboard()
-    )
+    if callback.message:
+        await safe_edit_caption(
+            bot,
+            caption=text,
+            chat_id=callback.message.chat.id,
+            message_id=callback.message.message_id,
+            reply_markup=coinflip_level_keyboard(),
+        )
+    await callback.answer()
 
 
-@router.callback_query(F.data.startswith("cf_level:"))
+@router.callback_query(CoinflipCallback.filter(F.action == "select_level"))
 async def coinflip_level_selected_handler(
-    callback: CallbackQuery, state: FSMContext
+    callback: CallbackQuery,
+    callback_data: CoinflipCallback,
+    state: FSMContext,
+    bot: Bot,
 ) -> None:
     """Отображает меню выбора ставки после выбора уровня."""
-    level = callback.data.split(":")[1]
+    level = str(callback_data.value)
     level_name = COINFLIP_LEVELS.get(level, {}).get("name", "Неизвестный")
-
-    # Здесь мы не используем FSM state, а просто храним данные в FSM data
     await state.update_data(coinflip_level=level)
-
     balance = await db.get_user_balance(callback.from_user.id)
     text = LEXICON["coinflip_stake_select"].format(
         level_name=level_name, balance=balance
     )
-    await callback.message.edit_caption(
-        caption=text, reply_markup=coinflip_stake_keyboard()
-    )
+    if callback.message:
+        await safe_edit_caption(
+            bot,
+            caption=text,
+            chat_id=callback.message.chat.id,
+            message_id=callback.message.message_id,
+            reply_markup=coinflip_stake_keyboard(level),
+        )
+    await callback.answer()
 
 
-@router.callback_query(F.data.startswith("cf_stake:"))
+@router.callback_query(CoinflipCallback.filter(F.action == "select_stake"))
 async def coinflip_stake_selected_handler(
-    callback: CallbackQuery, bot: Bot, state: FSMContext
+    callback: CallbackQuery,
+    callback_data: CoinflipCallback,
+    bot: Bot,
+    state: FSMContext,
+    data: dict,
 ) -> None:
     """Обрабатывает игру после выбора ставки."""
-    try:
-        stake = int(callback.data.split(":")[1])
-    except (ValueError, IndexError):
-        return await callback.answer("Ошибка: неверный формат ставки.", show_alert=True)
-
+    if not isinstance(callback_data.value, int):
+        return
+    stake = callback_data.value
     user_data = await state.get_data()
     level = user_data.get("coinflip_level")
-    if not level:
-        # Если уровень не выбран (например, после перезапуска бота), отправляем в меню
-        await coinflip_menu_handler(callback, state)
-        return await callback.answer(
-            "Ошибка: сначала выберите уровень сложности.", show_alert=True
-        )
-
+    trace_id = data.get("trace_id", "unknown")
     user_id = callback.from_user.id
+    extra = {"user_id": user_id, "trace_id": trace_id}
+
+    if not level:
+        logging.warning("Coinflip level not found in FSM state", extra=extra)
+        await callback.answer("Ошибка: сначала выберите уровень.", show_alert=True)
+        await coinflip_menu_handler(callback, state, bot)
+        return
+
     balance = await db.get_user_balance(user_id)
     if balance < stake:
-        return await callback.answer(
+        await callback.answer(
             "У вас недостаточно звёзд для этой ставки.", show_alert=True
         )
+        return
 
-    # Генерируем уникальный ключ для этой попытки игры
     idem_key = f"cf-{user_id}-{uuid.uuid4()}"
-
-    # Анимация "броска монеты"
     level_name = COINFLIP_LEVELS[level]["name"]
     initial_text = LEXICON["coinflip_process"].format(
         level_name=level_name, stake=stake
     )
-    await callback.message.edit_caption(caption=initial_text)
+    if callback.message:
+        await safe_edit_caption(
+            bot,
+            caption=initial_text,
+            chat_id=callback.message.chat.id,
+            message_id=callback.message.message_id,
+        )
     await asyncio.sleep(1.5)
 
-    # Обработка раунда
-    result = await process_coinflip_round(user_id, stake, level, idem_key)
+    result = await process_coinflip_round(user_id, stake, level, idem_key, trace_id)
 
     if not result.get("success"):
         error_reason = result.get("reason", "unknown_error")
-        # В случае ошибки, возвращаемся в меню выбора ставки
-        # (средства не списались, можно пробовать снова)
+        logging.error(f"Coinflip round failed. Reason: {error_reason}", extra=extra)
         final_text = f"Произошла ошибка: {error_reason}. Попробуйте еще раз."
-        await callback.message.edit_caption(
-            caption=final_text, reply_markup=coinflip_stake_keyboard()
-        )
+        if callback.message:
+            await safe_edit_caption(
+                bot,
+                caption=final_text,
+                chat_id=callback.message.chat.id,
+                message_id=callback.message.message_id,
+                reply_markup=coinflip_stake_keyboard(level),
+            )
         return
 
-    # Отображение результата
     new_balance = await db.get_user_balance(user_id)
     if result["is_win"]:
         final_text = LEXICON["coinflip_win"].format(
@@ -163,24 +181,12 @@ async def coinflip_stake_selected_handler(
         final_text = LEXICON["coinflip_loss"].format(
             stake=stake, new_balance=new_balance
         )
-    
-    # После игры снова показываем меню выбора ставки
-    # Данные о выбранном уровне (`coinflip_level`) остаются в `state`,
-    # что позволяет пользователю играть несколько раундов подряд без
-    # необходимости снова выбирать уровень. Состояние очистится при
-    # выходе в главное меню или выборе другой игры.
-    await callback.message.edit_caption(
-        caption=final_text, reply_markup=coinflip_stake_keyboard()
-    )
+    if callback.message:
+        await safe_edit_caption(
+            bot,
+            caption=final_text,
+            chat_id=callback.message.chat.id,
+            message_id=callback.message.message_id,
+            reply_markup=coinflip_stake_keyboard(level),
+        )
     await callback.answer()
-
-
-@router.callback_query(F.data == "back_to_games")
-async def back_to_games_handler(callback: CallbackQuery, state: FSMContext) -> None:
-    """Возвращает в главное игровое меню (предполагается, что оно в menu_handler)."""
-    # Этот импорт здесь, чтобы избежать циклических зависимостей
-    from handlers.menu_handler import entertainment_handler
-    
-    # ИСПРАВЛЕНИЕ: Очищаем состояние при выходе из игры
-    await state.clear()
-    await entertainment_handler(callback, state)

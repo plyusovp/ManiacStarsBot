@@ -1,80 +1,145 @@
-# handlers/utils.py
-import base64
 import hashlib
 import hmac
-import json
-import time
-from typing import Dict, Optional
+import logging
+from contextlib import suppress
+from typing import Any, Optional, Union
 
+from aiogram import Bot
 from aiogram.exceptions import TelegramBadRequest
 from aiogram.fsm.context import FSMContext
-from aiogram.types import CallbackQuery
+from aiogram.types import InlineKeyboardMarkup, InputMediaPhoto, Message
 
 from config import settings
+from database import db
+from lexicon.texts import LEXICON
+
+logger = logging.getLogger(__name__)
 
 
-# --- Существующая функция ---
-async def clean_junk_message(callback: CallbackQuery, state: FSMContext):
-    """Удаляет предыдущее 'мусорное' сообщение, если оно было."""
+async def safe_send_message(bot: Bot, user_id: int, text: str, **kwargs: Any) -> bool:
+    """Безопасно отправляет сообщение пользователю, обрабатывая возможные ошибки."""
+    try:
+        await bot.send_message(user_id, text, **kwargs)
+        return True
+    except TelegramBadRequest as e:
+        logger.warning(f"Failed to send message to {user_id}: {e}")
+    except Exception as e:
+        logger.error(f"An unexpected error occurred sending to {user_id}: {e}")
+    return False
+
+
+async def safe_edit_caption(
+    bot: Bot,
+    caption: str,
+    chat_id: int | str,
+    message_id: int,
+    reply_markup: Optional[InlineKeyboardMarkup] = None,
+    **kwargs: Any,
+) -> Union[Message, bool]:
+    """Безопасно изменяет подпись к медиа, обрабатывая ошибки."""
+    with suppress(TelegramBadRequest, Exception):
+        return await bot.edit_message_caption(
+            caption=caption,
+            chat_id=chat_id,
+            message_id=message_id,
+            reply_markup=reply_markup,
+            **kwargs,
+        )
+    return False
+
+
+async def safe_edit_media(
+    bot: Bot,
+    media: InputMediaPhoto,
+    chat_id: int,
+    message_id: int,
+    reply_markup: Optional[InlineKeyboardMarkup] = None,
+    **kwargs: Any,
+) -> Union[Message, bool]:
+    """Безопасно изменяет медиа в сообщении, обрабатывая ошибки."""
+    with suppress(TelegramBadRequest, Exception):
+        return await bot.edit_message_media(
+            media=media,
+            chat_id=chat_id,
+            message_id=message_id,
+            reply_markup=reply_markup,
+            **kwargs,
+        )
+    return False
+
+
+async def safe_delete(bot: Bot, chat_id: int, message_id: int) -> bool:
+    """Безопасно удаляет сообщение."""
+    with suppress(TelegramBadRequest, Exception):
+        return await bot.delete_message(chat_id, message_id)
+    return False
+
+
+async def get_user_info_text(user_id: int, for_admin: bool = False) -> str:
+    """Формирует текст с информацией о пользователе."""
+    user = await db.get_user(user_id)
+    if not user:
+        return "Пользователь не найден."
+
+    referrals_count = await db.get_referrals_count(user_id)
+
+    text = LEXICON["profile"].format(
+        user_id=user["user_id"],
+        full_name=user["full_name"],
+        balance=user["balance"],
+        referrals_count=referrals_count,
+        duel_wins=user["duel_wins"],
+        duel_losses=user["duel_losses"],
+        status_text="",  # Placeholder for now
+    )
+    if for_admin:
+        details = await db.get_user_full_details_for_admin(user_id)
+        trans_text = "\n\nПоследние 15 транзакций:\n"
+        if details and details.get("ledger"):
+            for t in details["ledger"]:
+                trans_text += f"`{t['created_at']}`: {t['amount']}⭐ ({t['reason']})\n"
+        else:
+            trans_text += "Транзакций не найдено.\n"
+        text += trans_text
+
+    return text
+
+
+def generate_referral_link(user_id: int) -> str:
+    """Генерирует и подписывает реферальный код."""
+    message = str(user_id).encode("utf-8")
+    signature = hmac.new(
+        settings.PAYLOAD_HMAC_SECRET.encode("utf-8"), message, hashlib.sha256
+    ).hexdigest()
+    ref_code = f"{user_id}-{signature}"
+    return f"https://t.me/{settings.BOT_USERNAME}?start={ref_code}"
+
+
+def validate_referral_code(ref_code: str) -> Union[int, None]:
+    """Проверяет подлинность реферального кода."""
+    try:
+        user_id_str, signature = ref_code.split("-")
+        user_id = int(user_id_str)
+        message = user_id_str.encode("utf-8")
+        expected_signature = hmac.new(
+            settings.PAYLOAD_HMAC_SECRET.encode("utf-8"), message, hashlib.sha256
+        ).hexdigest()
+        if hmac.compare_digest(expected_signature, signature):
+            return user_id
+    except (ValueError, TypeError) as e:
+        logger.warning(f"Invalid referral code format: {ref_code}, error: {e}")
+    return None
+
+
+async def clean_junk_message(state: FSMContext, bot: Bot):
+    """Удаляет 'мусорное' сообщение, ID которого хранится в FSM."""
     data = await state.get_data()
     junk_message_id = data.get("junk_message_id")
     if junk_message_id:
-        try:
-            await callback.bot.delete_message(callback.message.chat.id, junk_message_id)
-        except TelegramBadRequest:
-            pass
-        current_data = await state.get_data()
-        current_data.pop("junk_message_id", None)
-        await state.set_data(current_data)
-
-
-# --- НОВЫЕ ФУНКЦИИ БЕЗОПАСНОСТИ ---
-def generate_signed_payload(data: Dict) -> str:
-    """
-    Генерирует подписанный и закодированный payload.
-    :param data: Словарь с данными для подписи.
-    :return: Строка вида 'base64(json).hmac_signature'
-    """
-    data["ts"] = int(time.time())
-    json_payload = json.dumps(data, separators=(",", ":"), sort_keys=True)
-    encoded_payload = (
-        base64.urlsafe_b64encode(json_payload.encode()).rstrip(b"=").decode()
-    )
-
-    signature = hmac.new(
-        settings.PAYLOAD_HMAC_SECRET.encode(), encoded_payload.encode(), hashlib.sha256
-    ).hexdigest()
-
-    return f"{encoded_payload}.{signature}"
-
-
-def verify_signed_payload(payload: str, max_age_hours: int) -> Optional[Dict]:
-    """
-    Проверяет подпись и срок жизни payload.
-    :param payload: Подписанная строка.
-    :param max_age_hours: Максимальный срок жизни в часах.
-    :return: Словарь с данными, если проверка пройдена, иначе None.
-    """
-    try:
-        encoded_part, signature = payload.split(".", 1)
-
-        expected_signature = hmac.new(
-            settings.PAYLOAD_HMAC_SECRET.encode(), encoded_part.encode(), hashlib.sha256
-        ).hexdigest()
-
-        if not hmac.compare_digest(expected_signature, signature):
-            return None
-
-        decoded_payload = base64.urlsafe_b64decode(encoded_part + "==")
-        data = json.loads(decoded_payload)
-
-        payload_ts = data.get("ts")
-        if not isinstance(payload_ts, int):
-            return None
-
-        if time.time() - payload_ts > max_age_hours * 3600:
-            return None
-
-        return data
-    except (ValueError, TypeError, Exception):
-        return None
+        key = state.key
+        if key:
+            chat_id = key.chat_id
+            await safe_delete(bot, chat_id, junk_message_id)
+            current_data = await state.get_data()
+            current_data.pop("junk_message_id", None)
+            await state.set_data(current_data)

@@ -1,417 +1,372 @@
 # handlers/user_handlers.py
-import datetime
-import html
-import time
+import logging
 import uuid
 
 from aiogram import Bot, F, Router
 from aiogram.exceptions import TelegramBadRequest
-from aiogram.filters import CommandObject, CommandStart
+from aiogram.filters import Command, CommandObject, CommandStart
 from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import State, StatesGroup
 from aiogram.types import CallbackQuery, InputMediaPhoto, Message
 
 from config import settings
 from database import db
-from economy import (
-    NEW_USER_QUARANTINE_HOURS,
-    WITHDRAW_COOLDOWN_HOURS,
-)
-from handlers.menu_handler import show_main_menu
 from handlers.utils import (
     clean_junk_message,
-    generate_signed_payload,
-    verify_signed_payload,
+    generate_referral_link,
+    get_user_info_text,
+    safe_delete,
+    safe_edit_caption,
+    safe_send_message,
+    validate_referral_code,
 )
+from keyboards.factories import MenuCallback, UserCallback
 from keyboards.inline import (
-    back_to_main_menu_keyboard,
-    earn_menu_keyboard,
-    withdraw_menu,
+    gifts_keyboard,
+    main_menu_keyboard,
+    profile_keyboard,
+    promo_back_keyboard,
+    referral_keyboard,
+    top_users_keyboard,
 )
-from lexicon.texts import ECONOMY_ERROR_MESSAGES, LEXICON
+from lexicon.texts import LEXICON, LEXICON_ERRORS
 
 router = Router()
+logger = logging.getLogger(__name__)
 
 
-class PromoCode(StatesGroup):
-    waiting_for_code = State()
+# --- FSM States ---
+class UserState(StatesGroup):
+    enter_promo = State()
+    enter_withdrawal_amount = State()
+    confirm_withdrawal = State()
 
 
-async def check_subscription(user_id: int, bot: Bot):
-    """Проверяет подписку пользователя на канал."""
-    try:
-        member = await bot.get_chat_member(chat_id=settings.CHANNEL_ID, user_id=user_id)
-        return member.status in ["member", "administrator", "creator"]
-    except Exception as e:
-        print(f"Ошибка проверки подписки: {e}")
-        return False
-
-
+# --- Command Handlers ---
 @router.message(CommandStart())
 async def start_handler(
-    message: Message, command: CommandObject, bot: Bot, state: FSMContext
+    message: Message, state: FSMContext, bot: Bot, command: CommandObject
 ):
+    # Этот обработчик теперь будет игнорироваться, если аргументы начинаются с 'reward_'
+    # благодаря более специфичному фильтру в admin_handlers.
+    if command.args and command.args.startswith("reward_"):
+        # Это команда для админа, этот хендлер не должен ее обрабатывать.
+        # Aiogram должен был уже отфильтровать это, но на всякий случай.
+        return
+
+    await state.clear()
     user_id = message.from_user.id
     username = message.from_user.username
     full_name = message.from_user.full_name
 
     referrer_id = None
     if command.args:
-        payload = verify_signed_payload(command.args, settings.REFERRAL_LINK_TTL_HOURS)
-        if payload and "ref" in payload and payload["ref"] != user_id:
-            referrer_id = int(payload["ref"])
+        ref_code = command.args
+        validated_id = validate_referral_code(ref_code)
+        if validated_id and validated_id != user_id:
+            referrer_id = validated_id
+            logger.info(f"User {user_id} joined with referrer {referrer_id}")
 
-    is_new = await db.add_user(user_id, username, full_name, referrer_id)
+    is_new_user = await db.add_user(user_id, username, full_name, referrer_id)
 
-    if is_new:
-        await db.grant_achievement(user_id, "first_steps", bot)
+    if is_new_user and referrer_id:
+        await db.add_balance_with_checks(
+            referrer_id, settings.REFERRAL_BONUS, "referral_bonus", ref_id=str(user_id)
+        )
+        await safe_send_message(
+            bot,
+            referrer_id,
+            f"По вашей ссылке зарегистрировался новый пользователь! Вам начислено {settings.REFERRAL_BONUS} ⭐.",
+        )
 
-        if referrer_id:
-            # --- ИСПРАВЛЕНО: Начисляем бонус и уведомляем реферера ---
-            result = await db.add_balance_with_checks(
-                referrer_id, 5, "referral_bonus", ref_id=str(user_id)
-            )
-            if result.get("success"):
-                try:
-                    await bot.send_message(
-                        referrer_id,
-                        "🎉 По вашей ссылке зарегистрировался новый пользователь! Вам начислено <b>+5 ⭐</b>.",
-                    )
-                    ref_count = await db.get_referrals_count(referrer_id)
-                    ach_map = {
-                        1: "first_referral",
-                        5: "friendly",
-                        15: "social",
-                        50: "legend",
-                    }
-                    if ref_count in ach_map:
-                        await db.grant_achievement(referrer_id, ach_map[ref_count], bot)
-                except Exception as e:
-                    print(f"Не удалось уведомить реферера {referrer_id}: {e}")
+    balance = await db.get_user_balance(user_id)
+    caption = LEXICON["main_menu"].format(balance=balance)
 
+    await message.answer_photo(
+        photo=settings.PHOTO_MAIN_MENU,
+        caption=caption,
+        reply_markup=main_menu_keyboard(),
+    )
+
+
+@router.message(Command("menu"))
+async def menu_handler(message: Message, state: FSMContext):
     await state.clear()
-    await show_main_menu(bot, chat_id=message.chat.id, user_id=user_id)
+    balance = await db.get_user_balance(message.from_user.id)
+    caption = LEXICON["main_menu"].format(balance=balance)
+    await message.answer_photo(
+        photo=settings.PHOTO_MAIN_MENU,
+        caption=caption,
+        reply_markup=main_menu_keyboard(),
+    )
 
 
-@router.message(F.text == "🏠 Меню")
-async def main_menu_handler(message: Message, bot: Bot, state: FSMContext):
-    await message.delete()
-    await show_main_menu(bot, chat_id=message.chat.id, user_id=message.from_user.id)
-
-
-@router.callback_query(F.data == "back_to_main")
-async def back_to_main_handler(callback: CallbackQuery, bot: Bot, state: FSMContext):
-    await clean_junk_message(callback, state)
-    await show_main_menu(
-        bot,
+# --- Callback Handlers (Main Menu Navigation) ---
+@router.callback_query(MenuCallback.filter(F.name == "main_menu"))
+async def back_to_main_menu_handler(
+    callback: CallbackQuery, state: FSMContext, bot: Bot
+):
+    await state.clear()
+    await clean_junk_message(state, bot)
+    balance = await db.get_user_balance(callback.from_user.id)
+    caption = LEXICON["main_menu"].format(balance=balance)
+    media = InputMediaPhoto(media=settings.PHOTO_MAIN_MENU, caption=caption)
+    await bot.edit_message_media(
+        media=media,
         chat_id=callback.message.chat.id,
-        user_id=callback.from_user.id,
         message_id=callback.message.message_id,
+        reply_markup=main_menu_keyboard(),
     )
 
 
-@router.callback_query(F.data == "profile")
-async def profile_handler(callback: CallbackQuery, bot: Bot, state: FSMContext):
-    await clean_junk_message(callback, state)
-    user_id = callback.from_user.id
-
-    await db.grant_achievement(user_id, "curious", bot)
-
-    # --- ИСПРАВЛЕНО: Добавлена проверка на случай, если пользователь не найден ---
-    info = await db.get_full_user_info(user_id)
-    if not info:
-        is_new = await db.add_user(
-            user_id, callback.from_user.username, callback.from_user.full_name
-        )
-        info = await db.get_full_user_info(user_id)
-        if not info:
-            return await callback.answer(
-                "Критическая ошибка: не удалось загрузить профиль.", show_alert=True
-            )
-
-    user_data = info["user_data"]
-    balance = user_data.get("balance", 0)
-    referrals_count = await db.get_referrals_count(user_id)
-    stats = await db.get_user_duel_stats(user_id)
-
-    status_text = ""
-    quarantine_status = ""
-    cooldown_status = ""
-
-    reg_ts = user_data.get("registration_date", 0)
-    if time.time() - reg_ts < NEW_USER_QUARANTINE_HOURS * 3600:
-        quarantine_status = "🔹 На вашем аккаунте действует карантин новичка (24ч). Вывод временно ограничен.\n"
-
-    last_big_earn_str = user_data.get("last_big_earn")
-    if last_big_earn_str:
-        last_big_earn_dt = datetime.datetime.fromisoformat(last_big_earn_str)
-        cooldown_end = last_big_earn_dt + datetime.timedelta(
-            hours=WITHDRAW_COOLDOWN_HOURS
-        )
-        if datetime.datetime.now() < cooldown_end:
-            remaining = cooldown_end - datetime.datetime.now()
-            hours, remainder = divmod(int(remaining.total_seconds()), 3600)
-            minutes, _ = divmod(remainder, 60)
-            cooldown_status = f"🔹 Ваш вывод на кулдауне после крупного выигрыша. Осталось: {hours}ч {minutes}м.\n"
-
-    if quarantine_status or cooldown_status:
-        status_text = LEXICON["profile_status"].format(
-            quarantine_status=quarantine_status, cooldown_status=cooldown_status
-        )
-
-    text = LEXICON["profile"].format(
-        full_name=html.escape(callback.from_user.full_name),
-        user_id=user_id,
-        referrals_count=referrals_count,
-        duel_wins=stats["wins"],
-        duel_losses=stats["losses"],
-        balance=balance,
-        status_text=status_text,
-    )
-    await callback.message.edit_media(
-        media=InputMediaPhoto(media=settings.PHOTO_PROFILE, caption=text),
-        reply_markup=back_to_main_menu_keyboard(),
+# --- Profile Section ---
+@router.callback_query(MenuCallback.filter(F.name == "profile"))
+async def profile_handler(callback: CallbackQuery, state: FSMContext, bot: Bot):
+    await clean_junk_message(state, bot)
+    profile_text = await get_user_info_text(callback.from_user.id)
+    media = InputMediaPhoto(media=settings.PHOTO_PROFILE, caption=profile_text)
+    await bot.edit_message_media(
+        media=media,
+        chat_id=callback.message.chat.id,
+        message_id=callback.message.message_id,
+        reply_markup=profile_keyboard(),
     )
 
 
-@router.callback_query(F.data == "earn")
-async def earn_handler(callback: CallbackQuery, bot: Bot, state: FSMContext):
-    await clean_junk_message(callback, state)
-    bot_info = await bot.get_me()
-    user_id = callback.from_user.id
-
-    payload_data = {"ref": user_id}
-    signed_payload = generate_signed_payload(payload_data)
-    ref_link = f"https://t.me/{bot_info.username}?start={signed_payload}"
-
-    invited_count = await db.get_referrals_count(user_id)
-
-    text = LEXICON["earn_menu"].format(ref_link=ref_link, invited_count=invited_count)
-    await callback.message.edit_media(
-        media=InputMediaPhoto(media=settings.PHOTO_EARN_STARS, caption=text),
-        reply_markup=earn_menu_keyboard(),
+# --- Referral Section ---
+@router.callback_query(MenuCallback.filter(F.name == "referrals"))
+async def referral_handler(callback: CallbackQuery, state: FSMContext, bot: Bot):
+    await clean_junk_message(state, bot)
+    referral_link = generate_referral_link(callback.from_user.id)
+    referrals_count = await db.get_referrals_count(callback.from_user.id)
+    text = LEXICON["referral_menu"].format(
+        ref_link=referral_link,
+        invited_count=referrals_count,
+        ref_bonus=settings.REFERRAL_BONUS,
+    )
+    media = InputMediaPhoto(media=settings.PHOTO_EARN_STARS, caption=text)
+    await bot.edit_message_media(
+        media=media,
+        chat_id=callback.message.chat.id,
+        message_id=callback.message.message_id,
+        reply_markup=referral_keyboard(),
     )
 
 
-# --- НОВОЕ: Обработчик кнопки ежедневного бонуса ---
-@router.callback_query(F.data == "daily_bonus")
-async def daily_bonus_handler(callback: CallbackQuery, bot: Bot):
-    user_id = callback.from_user.id
-    result = await db.get_daily_bonus(user_id)
-
-    if result["status"] == "success":
-        await db.grant_achievement(user_id, "bonus_hunter", bot)
-        await callback.answer(
-            f"✅ Вам начислено {result['reward']} ⭐ за ежедневный бонус!",
-            show_alert=True,
-        )
-    elif result["status"] == "wait":
-        seconds = result["seconds_left"]
-        hours = seconds // 3600
-        minutes = (seconds % 3600) // 60
-        await callback.answer(
-            f"Вы уже получали бонус. Следующий через {hours}ч {minutes}м.",
-            show_alert=True,
-        )
-    else:
-        await callback.answer(
-            "Произошла ошибка при получении бонуса. Попробуйте позже.", show_alert=True
-        )
-
-
-@router.callback_query(F.data == "top")
-async def top_handler(callback: CallbackQuery, bot: Bot, state: FSMContext):
-    await clean_junk_message(callback, state)
-    top_users = await db.get_top_referrers(5)
-
+# --- Top Users Section ---
+@router.callback_query(MenuCallback.filter(F.name == "top_users"))
+async def top_users_handler(callback: CallbackQuery, state: FSMContext, bot: Bot):
+    await clean_junk_message(state, bot)
+    top_users = await db.get_top_referrers()
     top_users_text = ""
-    if not top_users:
-        top_users_text = "Пока никто никого не пригласил."
+    if top_users:
+        for i, user in enumerate(top_users, 1):
+            top_users_text += f"{i}. {user['full_name']} — {user['ref_count']} 🙋‍♂️\n"
     else:
-        for i, (user_id, ref_count) in enumerate(top_users, start=1):
-            try:
-                user = await bot.get_chat(user_id)
-                username = html.escape(
-                    f"@{user.username}" if user.username else user.full_name
-                )
-                top_users_text += f"{i}. {username} — {ref_count} приглашений\n"
-            except Exception:
-                top_users_text += f"{i}. Пользователь <code>{user_id}</code> — {ref_count} приглашений\n"
+        top_users_text = "Пока никто не пригласил друзей."
 
     text = LEXICON["top_menu"].format(top_users_text=top_users_text)
-    await callback.message.edit_media(
-        media=InputMediaPhoto(media=settings.PHOTO_TOP, caption=text),
-        reply_markup=back_to_main_menu_keyboard(),
+    media = InputMediaPhoto(media=settings.PHOTO_TOP, caption=text)
+    await bot.edit_message_media(
+        media=media,
+        chat_id=callback.message.chat.id,
+        message_id=callback.message.message_id,
+        reply_markup=top_users_keyboard(),
     )
 
 
-@router.callback_query(F.data == "withdraw")
-async def withdraw_handler(callback: CallbackQuery, bot: Bot, state: FSMContext):
-    await clean_junk_message(callback, state)
-    balance = await db.get_user_balance(callback.from_user.id)
-    referrals_count = await db.get_referrals_count(callback.from_user.id)
-
-    text = LEXICON["withdraw_menu"].format(
-        balance=balance, referrals_count=referrals_count
+# --- Promo Code Section ---
+@router.callback_query(UserCallback.filter(F.action == "enter_promo"))
+async def enter_promo_start_handler(
+    callback: CallbackQuery, state: FSMContext, bot: Bot
+):
+    await state.set_state(UserState.enter_promo)
+    media = InputMediaPhoto(
+        media=settings.PHOTO_PROMO, caption="✏️ Введите ваш промокод:"
     )
-    await callback.message.edit_media(
-        media=InputMediaPhoto(media=settings.PHOTO_WITHDRAW, caption=text),
-        reply_markup=withdraw_menu(),
+    await bot.edit_message_media(
+        media=media,
+        chat_id=callback.message.chat.id,
+        message_id=callback.message.message_id,
+        reply_markup=promo_back_keyboard(),
     )
 
 
-@router.callback_query(F.data.startswith("gift_"))
-async def withdraw_gift_handler(callback: CallbackQuery, bot: Bot, state: FSMContext):
-    await clean_junk_message(callback, state)
+@router.message(UserState.enter_promo)
+async def process_promo_handler(message: Message, state: FSMContext, bot: Bot):
+    promo_code = message.text.upper()
+    user_id = message.from_user.id
+    await safe_delete(bot, message.chat.id, message.message_id)
+
+    idem_key = f"promo-{user_id}-{promo_code}"
+    result = await db.activate_promo(user_id, promo_code, idem_key)
+
+    if isinstance(result, int):
+        await message.answer(
+            f"✅ Промокод `{promo_code}` успешно активирован! Вам начислено {result} ⭐."
+        )
+    elif result == "already_activated":
+        await message.answer("❌ Вы уже активировали этот промокод.")
+    elif result == "not_found":
+        await message.answer(
+            "❌ Такого промокода не существует или у него закончились активации."
+        )
+    else:
+        await message.answer(f"❌ Не удалось активировать промокод. Ошибка: {result}")
+
+    await state.clear()
+    await menu_handler(message, state)
+
+
+# --- Gifts/Withdrawal Section ---
+@router.callback_query(MenuCallback.filter(F.name == "gifts"))
+async def gifts_handler(callback: CallbackQuery, state: FSMContext, bot: Bot):
+    await clean_junk_message(state, bot)
     user_id = callback.from_user.id
-    is_admin = user_id in settings.ADMIN_IDS
+    balance = await db.get_user_balance(user_id)
+    referrals = await db.get_referrals_count(user_id)
 
-    if not settings.REWARDS_ENABLED and not is_admin:
-        return await callback.answer(
-            ECONOMY_ERROR_MESSAGES["rewards_disabled"], show_alert=True
-        )
-
-    # --- ИСПРАВЛЕНО: Добавлена проверка на случай, если пользователь не найден ---
-    user_info = await db.get_full_user_info(user_id)
-    if not user_info:
-        is_new = await db.add_user(
-            user_id, callback.from_user.username, callback.from_user.full_name
-        )
-        user_info = await db.get_full_user_info(user_id)
-        if not user_info:
-            return await callback.answer(
-                "Критическая ошибка: не удалось получить данные пользователя.",
-                show_alert=True,
-            )
-
-    user_data = user_info["user_data"]
-
-    # --- ИСПРАВЛЕНО: Админы обходят лимиты на вывод ---
-    if not is_admin:
-        reg_ts = user_data.get("registration_date", 0)
-        if time.time() - reg_ts < NEW_USER_QUARANTINE_HOURS * 3600:
-            return await callback.answer(
-                ECONOMY_ERROR_MESSAGES["user_in_quarantine"], show_alert=True
-            )
-
-        last_big_earn_str = user_data.get("last_big_earn")
-        if last_big_earn_str:
-            last_big_earn_dt = datetime.datetime.fromisoformat(last_big_earn_str)
-            cooldown_end = last_big_earn_dt + datetime.timedelta(
-                hours=WITHDRAW_COOLDOWN_HOURS
-            )
-            if datetime.datetime.now() < cooldown_end:
-                remaining = cooldown_end - datetime.datetime.now()
-                hours, rem = divmod(int(remaining.total_seconds()), 3600)
-                minutes, _ = divmod(rem, 60)
-                return await callback.answer(
-                    ECONOMY_ERROR_MESSAGES["withdraw_cooldown"].format(
-                        hours=hours, minutes=minutes
-                    ),
-                    show_alert=True,
-                )
-
-        if not await check_subscription(user_id, bot):
-            return await callback.answer(
-                "Для вывода необходимо быть подписанным на наш канал!", show_alert=True
-            )
-
-        referrals_count = await db.get_referrals_count(user_id)
-        if referrals_count < 5:
-            return await callback.answer(
-                f"Для вывода нужно пригласить минимум 5 друзей (у вас {referrals_count}).",
-                show_alert=True,
-            )
-
+    error_text = ""
+    can_withdraw = True
     try:
-        cost = int(callback.data.split("_")[1])
-        item_id = callback.data
-    except (ValueError, IndexError):
-        return await callback.answer("Ошибка в данных о подарке.", show_alert=True)
+        member = await bot.get_chat_member(settings.CHANNEL_ID, user_id)
+        if member.status not in ["member", "administrator", "creator"]:
+            error_text = LEXICON_ERRORS["error_not_subscribed"]
+            can_withdraw = False
+    except TelegramBadRequest:
+        error_text = "Не удалось проверить подписку."
+        can_withdraw = False
 
-    result = await db.create_reward_request(
-        user_id, item_id, cost, idem_key=callback.id
-    )
-    if not result.get("success"):
-        reason = result.get("reason", "unknown_error")
-        error_message = ECONOMY_ERROR_MESSAGES.get(
-            reason, ECONOMY_ERROR_MESSAGES["unknown_error"]
+    if can_withdraw and referrals < settings.MIN_REFERRALS_FOR_WITHDRAW:
+        error_text = LEXICON_ERRORS["error_not_enough_referrals"].format(
+            min_refs=settings.MIN_REFERRALS_FOR_WITHDRAW
         )
-        return await callback.answer(error_message, show_alert=True)
+        can_withdraw = False
 
-    if result.get("already_exists"):
-        return await callback.answer("Ваша заявка уже принята!", show_alert=True)
-
-    for admin_id in settings.ADMIN_IDS:
-        try:
-            admin_text = (
-                f"❗️ Новая заявка на вывод #{result['reward_id']}!\n"
-                f"Пользователь: @{callback.from_user.username or 'скрыт'} (ID: `{user_id}`)\n"
-                f"Требуется модерация. Используйте /reward_{result['reward_id']} для просмотра."
-            )
-            await bot.send_message(admin_id, admin_text)
-        except Exception as e:
-            print(f"Не удалось отправить уведомление админу {admin_id}: {e}")
-
-    reply = await callback.message.answer(
-        "✅ Ваша заявка принята! Ожидайте, с вами свяжутся. 😍"
+    text = LEXICON["gifts_menu"].format(
+        balance=balance,
+        min_refs=settings.MIN_REFERRALS_FOR_WITHDRAW,
+        referrals_count=referrals,
+        error_text=error_text,
     )
-    await state.update_data(junk_message_id=reply.message_id)
+    media = InputMediaPhoto(media=settings.PHOTO_WITHDRAW, caption=text)
+
+    await bot.edit_message_media(
+        media=media,
+        chat_id=callback.message.chat.id,
+        message_id=callback.message.message_id,
+        reply_markup=gifts_keyboard(can_withdraw),
+    )
+
+
+@router.callback_query(UserCallback.filter(F.action == "withdraw"))
+async def withdraw_start_handler(callback: CallbackQuery, state: FSMContext, bot: Bot):
+    await state.set_state(UserState.enter_withdrawal_amount)
+    # Сохраняем ID оригинального сообщения, чтобы потом его отредактировать
+    await state.update_data(original_message_id=callback.message.message_id)
+    await safe_edit_caption(
+        bot=bot,
+        caption="💰 Введите сумму, которую хотите вывести:",
+        chat_id=callback.message.chat.id,
+        message_id=callback.message.message_id,
+        reply_markup=promo_back_keyboard(),
+    )
     await callback.answer()
 
 
-@router.callback_query(F.data == "promo_code")
-async def promo_code_start(callback: CallbackQuery, state: FSMContext):
-    await clean_junk_message(callback, state)
-    await callback.message.edit_media(
-        media=InputMediaPhoto(
-            media=settings.PHOTO_PROMO, caption=LEXICON["promo_prompt"]
-        ),
-        reply_markup=back_to_main_menu_keyboard(),
+@router.message(UserState.enter_withdrawal_amount)
+async def process_withdrawal_amount_handler(
+    message: Message, state: FSMContext, bot: Bot
+):
+    data = await state.get_data()
+    original_message_id = data.get("original_message_id")
+    await safe_delete(bot, message.chat.id, message.message_id)
+
+    if not original_message_id:
+        await state.clear()
+        return await menu_handler(message, state)
+
+    try:
+        amount = int(message.text)
+        balance = await db.get_user_balance(message.from_user.id)
+        if amount <= 0:
+            raise ValueError("Сумма должна быть положительной.")
+        if amount > balance:
+            await message.answer("❌ На вашем балансе недостаточно средств.")
+            await state.clear()
+            return await menu_handler(message, state)
+        if amount < settings.MIN_WITHDRAWAL_AMOUNT:
+            await message.answer(
+                f"❌ Минимальная сумма для вывода: {settings.MIN_WITHDRAWAL_AMOUNT} ⭐."
+            )
+            await state.clear()
+            return await menu_handler(message, state)
+
+        await state.update_data(withdrawal_amount=amount)
+        await state.set_state(UserState.confirm_withdrawal)
+
+        await safe_edit_caption(
+            bot,
+            f"Вы уверены, что хотите подать заявку на вывод {amount} ⭐?",
+            message.chat.id,
+            original_message_id,
+            reply_markup=gifts_keyboard(can_withdraw=True, confirm_mode=True),
+        )
+
+    except (ValueError, TypeError):
+        await message.answer("❌ Неверный формат. Введите целое число.")
+        await state.clear()
+        return await menu_handler(message, state)
+
+
+@router.callback_query(
+    UserState.confirm_withdrawal, UserCallback.filter(F.action == "confirm_withdraw")
+)
+async def process_withdrawal_confirm_handler(
+    callback: CallbackQuery, state: FSMContext, bot: Bot
+):
+    data = await state.get_data()
+    amount = data.get("withdrawal_amount")
+    user_id = callback.from_user.id
+
+    if not amount:
+        await state.clear()
+        return await back_to_main_menu_handler(callback, state, bot)
+
+    balance = await db.get_user_balance(user_id)
+    if amount > balance:
+        await callback.answer("Недостаточно средств!", show_alert=True)
+        await state.clear()
+        return await gifts_handler(callback, state, bot)
+
+    idem_key = f"reward-{user_id}-{uuid.uuid4()}"
+    result = await db.create_reward_request(
+        user_id, f"withdraw_{amount}", amount, idem_key
     )
-    await state.set_state(PromoCode.waiting_for_code)
-
-
-@router.message(PromoCode.waiting_for_code)
-async def process_promo_code(message: Message, state: FSMContext, bot: Bot):
-    user_id = message.from_user.id
-    code = message.text.strip().upper()
-
-    # --- ИСПРАВЛЕНО: Используем уникальный ключ для идемпотентности ---
-    idem_key = f"promo-{user_id}-{uuid.uuid4()}"
 
     await state.clear()
-    await message.delete()  # Удаляем сообщение с кодом от пользователя
 
-    # Пытаемся удалить сообщение-приглашение
-    try:
-        if message.reply_to_message:  # Если это ответ на сообщение
-            await bot.delete_message(
-                message.chat.id, message.reply_to_message.message_id
-            )
-        else:  # Иначе пытаемся угадать ID
-            await bot.delete_message(message.chat.id, message.message_id - 1)
-    except TelegramBadRequest:
-        pass
+    if result["success"]:
+        reward_id = result["reward_id"]
+        admin_text = (
+            f"❗️ Новая заявка на вывод!\n"
+            f"ID заявки: `{reward_id}`\n"
+            f"Пользователь: [{callback.from_user.full_name}](tg://user?id={user_id}) (`{user_id}`)\n"
+            f"Сумма: {amount} ⭐"
+        )
+        for admin_id in settings.ADMIN_IDS:
+            await safe_send_message(bot, admin_id, admin_text, parse_mode="Markdown")
 
-    result = await db.activate_promo(user_id, code, idem_key=idem_key)
-
-    response_text = ""
-    if isinstance(result, int):
-        response_text = f"✅ Промокод успешно активирован! Вам начислено {result} ⭐"
-        await db.grant_achievement(user_id, "code_breaker", bot)
-        full_info = await db.get_full_user_info(user_id)
-        if full_info and len(full_info["activated_codes"]) >= 3:
-            await db.grant_achievement(user_id, "promo_master", bot)
-    elif result in ECONOMY_ERROR_MESSAGES:
-        response_text = f"❌ {ECONOMY_ERROR_MESSAGES[result]}"
-    elif result == "not_found":
-        response_text = "❌ Такого промокода не существует или его срок действия истёк."
-    elif result == "already_activated":
-        response_text = "❌ Вы уже активировали этот промокод."
+        await safe_edit_caption(
+            bot=bot,
+            caption=LEXICON["withdrawal_success"].format(amount=amount),
+            chat_id=callback.message.chat.id,
+            message_id=callback.message.message_id,
+            reply_markup=main_menu_keyboard(back_only=True),
+        )
     else:
-        response_text = f"❌ {ECONOMY_ERROR_MESSAGES['unknown_error']}"
-
-    # Отвечаем на активацию и сразу показываем главное меню
-    await message.answer(response_text)
-    await show_main_menu(bot, chat_id=message.chat.id, user_id=user_id)
+        await callback.answer(
+            f"Ошибка создания заявки: {result.get('reason', 'unknown')}",
+            show_alert=True,
+        )
+        await back_to_main_menu_handler(callback, state, bot)

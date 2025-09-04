@@ -1,40 +1,55 @@
 # config.py
-from typing import List
+from typing import Any, Dict, List
 
 from pydantic import field_validator
-from pydantic_settings import BaseSettings
+from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
 class Settings(BaseSettings):
-    # Секретные данные, которые читаются из .env
+    # --- Секреты ---
     BOT_TOKEN: str
-
     ADMIN_IDS: List[int]
+    CHANNEL_ID: int
+    PAYLOAD_HMAC_SECRET: str
+    BOT_USERNAME: str
 
     @field_validator("ADMIN_IDS", mode="before")
     @classmethod
     def split_admin_ids(cls, v: str) -> List[int]:
         if isinstance(v, str):
-            return [int(i.strip()) for i in v.split(",")]
+            # Убираем скобки и пробелы, затем разделяем по запятой
+            cleaned_v = v.strip("[] ")
+            if cleaned_v:
+                return [int(i.strip()) for i in cleaned_v.split(",")]
+            return []
         return v
 
-    CHANNEL_ID: int
+    # --- Настройки экономики и игр ---
     DUEL_RAKE_PERCENT: int
-    PAYLOAD_HMAC_SECRET: str
+    DUEL_BOOST_COST: int = 10
+    DUEL_REROLL_COST: int = 15
+    REFERRAL_BONUS: int = 5
+    MIN_REFERRALS_FOR_WITHDRAW: int = 5
 
-    # Ссылки для кнопок в меню
+    # --- Настройки вывода ---
+    REWARDS_ENABLED: bool = True
+    MIN_WITHDRAWAL_AMOUNT: int = 100
+    MAX_REWARDS_PER_DAY: int = 3
+    MAX_REWARDS_STARS_PER_DAY: int = 500
+
+    # --- Технические настройки ---
+    REFERRAL_LINK_TTL_HOURS: int = 720  # 30 дней
+    THROTTLING_RATE_LIMIT: float = 0.7  # Секунд между апдейтами от одного юзера
+    ADMIN_PAGE_SIZE: int = 5
+
+    # --- Ссылки ---
     URL_CHANNEL: str
     URL_WITHDRAWALS: str
     URL_SUPPORT: str
 
-    # НАСТРОЙКИ ЭКОНОМИКИ ПОДАРКОВ
-    REWARDS_ENABLED: bool = True
-    MAX_REWARDS_PER_DAY: int = 3
-    MAX_REWARDS_STARS_PER_DAY: int = 500
-
-    # Публичные данные, которые остаются в коде
-    REFERRAL_LINK_TTL_HOURS: int = 720
+    # --- Медиа ---
     PHOTO_MAIN_MENU: str = "https://i.postimg.cc/0MJDw9T8/main_menu.jpg"
+    PHOTO_GAMES_MENU: str = "https://i.postimg.cc/5yL6Vz3F/games.jpg"
     PHOTO_WITHDRAW: str = "https://i.postimg.cc/kVLt9kBL/withdraw.jpg"
     PHOTO_PROFILE: str = "https://i.postimg.cc/9zdq5gVN/profile.jpg"
     PHOTO_TOP: str = "https://i.postimg.cc/Z9vCfVVH/top.jpg"
@@ -42,9 +57,32 @@ class Settings(BaseSettings):
     PHOTO_EARN_STARS: str = "https://i.postimg.cc/tYRdrGPz/earn_stars.jpg"
     PHOTO_ACHIEVEMENTS: str = "https://i.postimg.cc/8JBWHZz3/achievements.jpg"
 
-    class Config:
-        env_file = ".env"
-        env_file_encoding = "utf-8"
+    model_config = SettingsConfigDict(
+        env_file=".env", env_file_encoding="utf-8", extra="ignore"
+    )
 
 
 settings = Settings()
+
+DUEL_STAKES = [10, 25, 50, 100, 250]
+TIMER_STAKES = [10, 25, 50, 100]
+COINFLIP_LEVELS: Dict[str, Dict[str, Any]] = {
+    "easy": {
+        "name": "Легкий",
+        "win_chance": 75,
+        "multiplier": 1.2,
+        "stakes": [10, 20, 30, 40, 50],
+    },
+    "medium": {
+        "name": "Средний",
+        "win_chance": 50,
+        "multiplier": 2.0,
+        "stakes": [25, 50, 75, 100, 150],
+    },
+    "hard": {
+        "name": "Сложный",
+        "win_chance": 25,
+        "multiplier": 3.5,
+        "stakes": [50, 100, 150, 200, 250],
+    },
+}
