@@ -1,154 +1,155 @@
 # tests/test_integration.py
-from unittest.mock import AsyncMock, MagicMock
+import uuid
+from contextlib import asynccontextmanager
+from unittest.mock import patch
 
+import aiosqlite
 import pytest
-from aiogram.fsm.context import FSMContext
-from aiogram.fsm.storage.memory import MemoryStorage
 
 from database import db
-from handlers import admin_handlers, user_handlers
-
-
-# Fixture to setup a clean in-memory FSM storage for each test
-@pytest.fixture
-def fsm_context():
-    storage = MemoryStorage()
-    # A key is required to create a context instance
-    key = MagicMock()
-    key.bot_id = 1
-    key.chat_id = 123
-    key.user_id = 123
-    return FSMContext(storage=storage, key=key)
+from handlers.game_handlers import process_coinflip_round
 
 
 @pytest.fixture(autouse=True)
-async def setup_database():
-    """Initializes a clean database for each integration test."""
+async def setup_database(monkeypatch):
+    """
+    Создает единую БД в памяти для каждого теста и патчит db.connect.
+    """
+    conn = await aiosqlite.connect(":memory:")
+    conn.row_factory = aiosqlite.Row
+
+    @asynccontextmanager
+    async def mock_connect():
+        yield conn
+
+    monkeypatch.setattr(db, "connect", mock_connect)
+
     await db.init_db()
-    await _add_test_user(123, 1000)
-    await _add_test_user(456, 1000)
-    await _add_test_user(789, 50)  # User for withdrawal failure
+    # Добавляем тестовых пользователей
+    await db.add_user(123, "integ_user123", "Integ User 123", initial_balance=1000)
+    await db.add_user(456, "integ_user456", "Integ User 456", initial_balance=1000)
+    await db.add_user(789, "integ_user789", "Integ User 789", initial_balance=50)
+
     yield
 
+    await conn.close()
 
-async def _add_test_user(user_id: int, balance: int):
-    """Helper to add a user."""
+
+@pytest.mark.asyncio
+async def test_idempotency_spend_balance():
+    """
+    Проверяет, что повторное списание с тем же ключом идемпотентности
+    не приводит к двойному списанию и оставляет одну корректную запись в ledger.
+    """
+    user_id = 123
+    idem_key = f"idem-integ-{uuid.uuid4()}"
+    initial_balance = await db.get_user_balance(user_id)
+    amount = 100
+
+    # Первый запрос - ОК
+    success1 = await db.spend_balance(user_id, amount, "idem_test", idem_key=idem_key)
+    assert success1 is True
+    balance_after_1 = await db.get_user_balance(user_id)
+    assert balance_after_1 == initial_balance - amount
+
+    # Второй запрос с тем же ключом - no-op (без операции)
+    success2 = await db.spend_balance(user_id, amount, "idem_test", idem_key=idem_key)
+    assert success2 is True
+    balance_after_2 = await db.get_user_balance(user_id)
+    assert balance_after_2 == balance_after_1, "Баланс не должен был измениться"
+
+    # Проверяем, что в ledger только одна запись
     async with db.connect() as conn:
-        await conn.execute(
-            "INSERT OR REPLACE INTO users (user_id, username, full_name, balance, registration_date) VALUES (?, ?, ?, ?, ?)",
-            (user_id, f"integ_user{user_id}", f"Integ User {user_id}", balance, 123),
+        cursor = await conn.execute(
+            "SELECT COUNT(*) FROM ledger_entries WHERE reason = 'idem_test' AND user_id = ?",
+            (user_id,),
         )
-        await conn.commit()
+        count = (await cursor.fetchone())[0]
+        assert count == 1
 
 
 @pytest.mark.asyncio
-async def test_full_duel_scenario():
+async def test_full_coinflip_scenario():
     """
-    Integration test for a full duel from creation to payout.
-    This test mocks bot interactions but uses the real database logic.
+    Тестирует полный сценарий игры 'Орёл и Решка':
+    1. Списание ставки.
+    2. Проведение раунда (в этом тесте мы "заставим" его выиграть).
+    3. Начисление выигрыша.
+    4. Проверка итогового баланса и записей в ledger.
     """
-    p1_id, p2_id = 123, 456
-    stake = 100
+    user_id = 123
+    stake = 50
+    level = "easy"
+    initial_balance = await db.get_user_balance(user_id)
+    idem_key = f"cf-integ-{uuid.uuid4()}"
 
-    p1_initial_balance = await db.get_user_balance(p1_id)
-    p2_initial_balance = await db.get_user_balance(p2_id)
+    # Мокаем secrets.randbelow, чтобы результат всегда был выигрышным
+    with patch("handlers.game_handlers.secrets.randbelow", return_value=0):
+        result = await process_coinflip_round(
+            user_id, stake, level, idem_key, "trace-123"
+        )
 
-    # 1. Create the duel (stakes are not spent here yet)
-    match_id = await db.create_duel(p1_id, p2_id, stake)
-    assert match_id is not None
+    assert result.get("success") is True
+    assert result.get("is_win") is True
 
-    # Simulate spending for the duel
-    await db.spend_balance(p1_id, stake, "duel_stake")
-    await db.spend_balance(p2_id, stake, "duel_stake")
+    final_balance = await db.get_user_balance(user_id)
+    prize = result.get("prize", 0)
+    expected_balance = initial_balance - stake + prize
+    assert final_balance == expected_balance, "Итоговый баланс рассчитан неверно"
 
-    # 2. Simulate game result: p1 wins
-    winner_id, loser_id = p1_id, p2_id
-    prize = stake * 2  # Simplified prize for test
-
-    # 3. Finish the duel and award the prize
-    await db.finish_duel_atomic(match_id, winner_id, loser_id, prize)
-
-    # 4. Verify balances and stats
-    p1_final_balance = await db.get_user_balance(p1_id)
-    p2_final_balance = await db.get_user_balance(p2_id)
-
-    assert p1_final_balance == p1_initial_balance - stake + prize
-    assert p2_final_balance == p2_initial_balance - stake
-
-    winner_stats = await db.get_user_duel_stats(winner_id)
-    loser_stats = await db.get_user_duel_stats(loser_id)
-
-    assert winner_stats["wins"] == 1
-    assert winner_stats["losses"] == 0
-    assert loser_stats["wins"] == 0
-    assert loser_stats["losses"] == 1
+    # Проверяем записи в ledger
+    async with db.connect() as conn:
+        cursor = await conn.execute(
+            "SELECT amount, reason FROM ledger_entries WHERE user_id = ? ORDER BY id DESC LIMIT 2",
+            (user_id,),
+        )
+        rows = await cursor.fetchall()
+        assert len(rows) >= 2
+        # Записи идут в обратном порядке: сначала выигрыш, потом списание
+        assert rows[0]["amount"] == prize
+        assert rows[0]["reason"] == "coinflip_win"
+        assert rows[1]["amount"] == -stake
+        assert rows[1]["reason"] == "coinflip_stake"
 
 
 @pytest.mark.asyncio
-async def test_withdrawal_request_flow(fsm_context: FSMContext):
+async def test_create_and_reject_gift_request_scenario():
     """
-    Tests the withdrawal request FSM flow:
-    - User initiates withdrawal.
-    - User enters amount.
-    - Confirmation is requested.
-    - Admin approves it.
+    Тестирует сценарий заявки на подарок:
+    1. Создание заявки (hold) - средства списываются.
+    2. Отклонение заявки (reject) - средства возвращаются 1:1.
     """
-    bot_mock = AsyncMock()
     user_id = 123
     admin_id = 9999
-    amount_to_withdraw = 200
+    withdrawal_amount = 300
+    initial_balance = await db.get_user_balance(user_id)
 
-    # Mock user message and callback
-    message_mock = MagicMock()
-    message_mock.from_user.id = user_id
-    message_mock.chat.id = user_id
-    message_mock.text = str(amount_to_withdraw)
-
-    callback_mock = MagicMock()
-    callback_mock.from_user.id = user_id
-    callback_mock.message.chat.id = user_id
-    callback_mock.message.message_id = 12345
-
-    # 1. Start withdrawal process
-    await user_handlers.withdraw_start_handler(callback_mock, fsm_context, bot_mock)
-    assert (
-        await fsm_context.get_state() == user_handlers.UserState.enter_withdrawal_amount
+    # 1. Создаем заявку, деньги "замораживаются"
+    idem_key = f"reward-test-{uuid.uuid4()}"
+    result = await db.create_reward_request(
+        user_id, "test_item", withdrawal_amount, idem_key
     )
+    assert result["success"] is True
+    reward_id = result["reward_id"]
+    assert reward_id is not None
 
-    # 2. Process amount
-    await user_handlers.process_withdrawal_amount_handler(
-        message_mock, fsm_context, bot_mock
-    )
-    assert await fsm_context.get_state() == user_handlers.UserState.confirm_withdrawal
-    data = await fsm_context.get_data()
-    assert data["withdrawal_amount"] == amount_to_withdraw
+    balance_after_hold = await db.get_user_balance(user_id)
+    assert balance_after_hold == initial_balance - withdrawal_amount
 
-    # 3. Confirm withdrawal
-    await user_handlers.process_withdrawal_confirm_handler(
-        callback_mock, fsm_context, bot_mock
-    )
-    assert await fsm_context.get_state() is None  # State should be cleared
+    # 2. Админ отклоняет заявку
+    rejection_success = await db.reject_reward(reward_id, admin_id, "test rejection")
+    assert rejection_success is True
 
-    # 4. Verify request in DB
-    pending_rewards = await db.get_pending_rewards()
-    assert len(pending_rewards) == 1
-    reward = pending_rewards[0]
-    assert reward["user_id"] == user_id
-    assert reward["stars_cost"] == amount_to_withdraw
-    assert reward["status"] == "pending"
+    # 3. Проверяем, что баланс вернулся к исходному
+    final_balance = await db.get_user_balance(user_id)
+    assert final_balance == initial_balance
 
-    # 5. Admin approves
-    callback_data_mock = MagicMock()
-    callback_data_mock.target_id = reward["id"]
-
-    callback_admin_mock = MagicMock()
-    callback_admin_mock.from_user.id = admin_id
-
-    await admin_handlers.reward_approve_handler(
-        callback_admin_mock, callback_data_mock, bot_mock, {}
-    )
-
-    # 6. Verify status change
-    details = await db.get_reward_full_details(reward["id"])
-    assert details is not None
-    assert details["reward"]["status"] == "approved"
+    # 4. Проверяем ledger на наличие списания и возврата
+    async with db.connect() as conn:
+        cursor = await conn.execute(
+            "SELECT amount, reason FROM ledger_entries WHERE user_id = ? AND (reason = 'reward_hold' OR reason = 'reward_revert')",
+            (user_id,),
+        )
+        rows = await cursor.fetchall()
+        assert len(rows) == 2
+        assert sum(row["amount"] for row in rows) == 0

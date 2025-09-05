@@ -1,7 +1,7 @@
 # database/db.py
 import datetime
 import logging
-import random
+import secrets  # Используем secrets для более криптографически стойких случайных чисел
 import time
 from contextlib import asynccontextmanager
 from typing import Any, AsyncGenerator, Dict, List, Optional, Union
@@ -106,7 +106,7 @@ async def init_db() -> None:
             """
         CREATE TABLE IF NOT EXISTS rewards (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
-            user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+            user_id INTEGER NOT NULL REFERENCES users(user_id) ON DELETE CASCADE,
             item_id TEXT NOT NULL,
             stars_cost INTEGER NOT NULL,
             status TEXT NOT NULL DEFAULT 'pending',
@@ -272,15 +272,10 @@ async def init_db() -> None:
                 "ALTER TABLE users ADD COLUMN created_at DATETIME DEFAULT CURRENT_TIMESTAMP"
             )
 
-        # Migration to change stop_second from INTEGER to REAL
         cursor = await db.execute("PRAGMA table_info(timer_matches)")
         columns_info = {row[1]: row[2] for row in await cursor.fetchall()}
         if columns_info.get("stop_second") == "INTEGER":
             logging.info("Migrating timer_matches.stop_second to REAL...")
-            # This is a complex migration in SQLite, usually requires recreating the table.
-            # For this context, we assume a fresh DB or manual migration.
-            # A simple ALTER COLUMN is not enough. We'll just alter it for schema compatibility.
-            # Real applications would need a more robust migration script.
             await db.execute("ALTER TABLE timer_matches RENAME TO _timer_matches_old;")
             await db.execute(
                 """
@@ -347,14 +342,7 @@ async def check_idempotency_key(
 ) -> bool:
     """
     Checks the idempotency key.
-
-    Args:
-        db: The database connection.
-        key: The idempotency key to check.
-        user_id: The ID of the user performing the action.
-
-    Returns:
-        True if the key is new, False if it's a duplicate.
+    Returns: True if the key is new, False if it's a duplicate.
     """
     try:
         await db.execute(
@@ -388,21 +376,24 @@ async def _change_balance(
     ref_id: Optional[str] = None,
 ) -> bool:
     """Internal function to change balance and write to ledger. Must be called within a transaction."""
-    if amount == 0:
-        return True  # Nothing to do
+    if amount == 0 and reason != "initial_balance":
+        return True
 
     if amount < 0:
         cursor = await db.execute(
             "UPDATE users SET balance = balance + ? WHERE user_id = ? AND balance >= ?",
             (amount, user_id, -amount),
         )
-        if cursor.rowcount == 0:
-            return False
     else:
-        await db.execute(
+        cursor = await db.execute(
             "UPDATE users SET balance = balance + ? WHERE user_id = ?",
             (amount, user_id),
         )
+
+    if cursor.rowcount == 0:
+        # This handles both insufficient funds and non-existent user
+        return False
+
     await db.execute(
         "INSERT INTO ledger_entries (user_id, amount, reason, ref_id) VALUES (?, ?, ?, ?)",
         (user_id, amount, reason, ref_id),
@@ -413,19 +404,8 @@ async def _change_balance(
 async def add_balance_unrestricted(
     user_id: int, amount: int, reason: str, ref_id: Optional[str] = None
 ) -> bool:
-    """
-    Adds funds without limit checks (for refunds, admin commands).
-
-    Args:
-        user_id: The user's ID.
-        amount: The amount to add (must be positive).
-        reason: The reason for the transaction.
-        ref_id: An optional reference ID.
-
-    Returns:
-        True if successful, False otherwise.
-    """
-    if amount <= 0:
+    """Adds funds without limit checks (for refunds, admin commands)."""
+    if amount < 0:  # Allow 0 for initial ledger entry
         return False
     async with connect() as db:
         await db.execute("BEGIN IMMEDIATE;")
@@ -444,26 +424,16 @@ async def spend_balance(
     ref_id: Optional[str] = None,
     idem_key: Optional[str] = None,
 ) -> bool:
-    """
-    Spends a user's funds within a transaction.
-
-    Args:
-        user_id: The user's ID.
-        amount: The amount to spend (must be positive).
-        reason: The reason for the transaction.
-        ref_id: An optional reference ID.
-        idem_key: An optional idempotency key.
-
-    Returns:
-        True if successful, False if funds are insufficient or an error occurs.
-    """
+    """Spends a user's funds within a transaction."""
     if amount <= 0:
         return False
     async with connect() as db:
         await db.execute("BEGIN IMMEDIATE;")
         try:
             if idem_key and not await check_idempotency_key(db, idem_key, user_id):
-                await db.commit()  # The operation was already done
+                # If key exists, it means the operation was already successful.
+                # We rollback this empty transaction and return True.
+                await db.rollback()
                 return True
 
             success = await _change_balance(db, user_id, -amount, reason, ref_id)
@@ -480,10 +450,6 @@ async def spend_balance(
                 extra={"user_id": user_id},
             )
             raise
-
-
-# Other functions would be annotated similarly...
-# For brevity, only a few key functions are fully annotated here.
 
 
 async def add_balance_with_checks(
@@ -509,8 +475,23 @@ async def add_balance_with_checks(
         try:
             await db.execute("BEGIN IMMEDIATE;")
 
-            # ... (rest of the logic remains the same)
-            await _change_balance(db, user_id, amount, source, ref_id)
+            # Check for user existence before proceeding with limit checks
+            cursor = await db.execute(
+                "SELECT 1 FROM users WHERE user_id = ?", (user_id,)
+            )
+            if await cursor.fetchone() is None:
+                logging.error(
+                    f"Attempted to change balance for non-existent user {user_id}"
+                )
+                await db.rollback()
+                return {"success": False, "reason": "user_not_found"}
+
+            # Here you would add logic for daily caps and rate limits based on `rules`
+
+            if not await _change_balance(db, user_id, amount, source, ref_id):
+                await db.rollback()
+                return {"success": False, "reason": "update_failed"}
+
             await db.commit()
             return {"success": True}
         except Exception:
@@ -526,17 +507,57 @@ async def add_balance_with_checks(
 async def create_reward_request(
     user_id: int, item_id: str, stars_cost: int, idem_key: str
 ) -> Dict[str, Union[bool, str, int, None]]:
-    """Creates a gift request, holding the stars."""
-    # ... (function body)
+    """Creates a gift request, holding the stars, in a single transaction."""
+    if stars_cost <= 0:
+        return {"success": False, "reason": "invalid_amount"}
+
     async with connect() as db:
-        # A simplified version for now
-        await spend_balance(user_id, stars_cost, "reward_hold", idem_key=idem_key)
-        cursor = await db.execute(
-            "INSERT INTO rewards (user_id, item_id, stars_cost) VALUES (?, ?, ?)",
-            (user_id, item_id, stars_cost),
-        )
-        await db.commit()
-        return {"success": True, "reward_id": cursor.lastrowid}
+        await db.execute("BEGIN IMMEDIATE;")
+        try:
+            # Idempotency check first
+            cursor = await db.execute(
+                "SELECT key FROM idempotency WHERE key = ?", (idem_key,)
+            )
+            if await cursor.fetchone():
+                await db.commit()
+                return {"success": True, "reward_id": None}
+
+            # Now, check the balance and hold funds
+            success = await _change_balance(
+                db, user_id, -stars_cost, "reward_hold", ref_id=idem_key
+            )
+            if not success:
+                await db.rollback()
+                return {"success": False, "reason": "insufficient_funds"}
+
+            # Log idempotency key
+            await db.execute(
+                "INSERT INTO idempotency (key, user_id) VALUES (?, ?)",
+                (idem_key, user_id),
+            )
+
+            # Create reward record
+            cursor = await db.execute(
+                "INSERT INTO rewards (user_id, item_id, stars_cost) VALUES (?, ?, ?)",
+                (user_id, item_id, stars_cost),
+            )
+            reward_id = cursor.lastrowid
+            await db.commit()
+            return {"success": True, "reward_id": reward_id}
+        except aiosqlite.IntegrityError as e:
+            await db.rollback()
+            if "idempotency.key" in str(e):
+                return {"success": True, "reward_id": None}
+            logging.error("Integrity error in create_reward_request", exc_info=True)
+            return {"success": False, "reason": "transaction_failed"}
+        except Exception:
+            await db.rollback()
+            logging.error(
+                "Transaction failed in create_reward_request",
+                exc_info=True,
+                extra={"user_id": user_id, "idem_key": idem_key},
+            )
+            return {"success": False, "reason": "transaction_failed"}
 
 
 async def get_user(user_id: int) -> Optional[Dict[str, Any]]:
@@ -547,8 +568,6 @@ async def get_user(user_id: int) -> Optional[Dict[str, Any]]:
         return dict(row) if row else None
 
 
-# The remaining functions would also get type hints and docstrings.
-# This provides a representative sample of the changes.
 async def populate_achievements():
     """Заполняет таблицу достижений."""
     async with connect() as db:
@@ -604,34 +623,59 @@ async def populate_achievements():
         await db.commit()
 
 
-async def add_user(user_id, username, full_name, referrer_id=None):
-    async with connect() as db:
-        cursor = await db.execute(
-            "SELECT user_id FROM users WHERE user_id = ?", (user_id,)
-        )
-        if await cursor.fetchone() is None:
-            reg_time = int(time.time())
-            await db.execute("BEGIN IMMEDIATE;")
-            await db.execute(
-                "INSERT INTO users (user_id, username, full_name, invited_by, registration_date, last_seen, created_at) VALUES (?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)",
-                (user_id, username, full_name, referrer_id, reg_time, reg_time),
-            )
-            await _change_balance(db, user_id, 0, "initial_balance")
+async def add_user(
+    user_id, username, full_name, referrer_id=None, initial_balance=None
+):
+    """
+    Добавляет нового пользователя в базу данных.
+    Возвращает True, если пользователь новый, иначе False.
+    """
+    if initial_balance is None:
+        initial_balance = settings.INITIAL_BALANCE
 
-            if referrer_id:
-                await db.execute(
-                    "INSERT OR IGNORE INTO referrals (referrer_id, referred_id) VALUES (?, ?)",
-                    (referrer_id, user_id),
-                )
-            await db.commit()
-            return True
-        else:
-            await db.execute(
-                "UPDATE users SET username = ?, full_name = ? WHERE user_id = ?",
-                (username, full_name, user_id),
+    async with connect() as db:
+        await db.execute("BEGIN IMMEDIATE;")
+        try:
+            cursor = await db.execute(
+                "SELECT user_id FROM users WHERE user_id = ?", (user_id,)
             )
-            await db.commit()
-        return False
+            if await cursor.fetchone() is None:
+                reg_time = int(time.time())
+                await db.execute(
+                    "INSERT INTO users (user_id, username, full_name, invited_by, registration_date, last_seen, created_at, balance) VALUES (?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP, ?)",
+                    (
+                        user_id,
+                        username,
+                        full_name,
+                        referrer_id,
+                        reg_time,
+                        reg_time,
+                        initial_balance,
+                    ),
+                )
+                await db.execute(
+                    "INSERT INTO ledger_entries (user_id, amount, reason) VALUES (?, ?, ?)",
+                    (user_id, initial_balance, "initial_balance"),
+                )
+
+                if referrer_id:
+                    await db.execute(
+                        "INSERT OR IGNORE INTO referrals (referrer_id, referred_id) VALUES (?, ?)",
+                        (referrer_id, user_id),
+                    )
+                await db.commit()
+                return True
+            else:
+                await db.execute(
+                    "UPDATE users SET username = ?, full_name = ? WHERE user_id = ?",
+                    (username, full_name, user_id),
+                )
+                await db.commit()
+                return False
+        except Exception:
+            await db.rollback()
+            logging.error("Transaction failed in add_user", exc_info=True)
+            return False
 
 
 async def user_exists(user_id: int) -> bool:
@@ -659,6 +703,7 @@ async def get_user_balance(user_id):
         return result[0] if result else 0
 
 
+# ... (The rest of the file remains the same)
 async def get_referrals_count(user_id):
     async with connect() as db:
         cursor = await db.execute(
@@ -736,6 +781,9 @@ async def activate_promo(user_id, code, idem_key: str):
                 if await cursor.fetchone():
                     await db.commit()
                     return "already_activated"
+                # If key exists but promo not activated, it's a weird state, treat as error
+                await db.rollback()
+                return "error"
 
             cursor = await db.execute(
                 "SELECT reward FROM promocodes WHERE code=? AND uses_left > 0", (code,)
@@ -767,13 +815,8 @@ async def activate_promo(user_id, code, idem_key: str):
                 await db.rollback()
                 return "not_found"
 
-            result = await add_balance_with_checks(
-                user_id, reward, "promo_activation", ref_id=code
-            )
-            if not result.get("success"):
+            if not await _change_balance(db, user_id, reward, "promo_activation", code):
                 await db.rollback()
-                if isinstance(result.get("reason"), str):
-                    return result.get("reason")
                 return "unknown_error"
 
             await db.commit()
@@ -821,12 +864,10 @@ async def get_daily_bonus(user_id):
                     "seconds_left": 86400 - (current_time - last_bonus_time),
                 }
 
-            reward = random.randint(1, 5)  # nosec B311
-            result = await add_balance_with_checks(user_id, reward, "daily_bonus")
-
-            if not result.get("success"):
+            reward = secrets.SystemRandom().randint(1, 5)
+            if not await _change_balance(db, user_id, reward, "daily_bonus"):
                 await db.rollback()
-                return {"status": "error", "reason": result.get("reason")}
+                return {"status": "error", "reason": "update_failed"}
 
             await db.commit()
             return {"status": "success", "reward": reward}
@@ -866,7 +907,7 @@ async def grant_achievement(user_id, ach_id, bot: Bot) -> bool:
                 "INSERT INTO user_achievements (user_id, achievement_id, completion_date) VALUES (?, ?, ?)",
                 (user_id, ach_id, int(time.time())),
             )
-            await add_balance_with_checks(user_id, reward, "achievement_reward", ach_id)
+            await _change_balance(db, user_id, reward, "achievement_reward", ach_id)
             await db.commit()
 
             try:
@@ -953,9 +994,7 @@ async def finish_duel_atomic(
                     "UPDATE duel_matches SET state = 'draw' WHERE id = ?", (match_id,)
                 )
             else:
-                await add_balance_with_checks(
-                    winner_id, prize, "duel_win", str(match_id)
-                )
+                await _change_balance(db, winner_id, prize, "duel_win", str(match_id))
                 await db.execute(
                     "UPDATE users SET duel_wins = duel_wins + 1 WHERE user_id = ?",
                     (winner_id,),
@@ -998,7 +1037,7 @@ async def create_timer_match(
                 return None, None
 
             bank = stake * 2
-            stop_second = random.uniform(2.5, 7.0)  # nosec B311
+            stop_second = secrets.SystemRandom().uniform(2.5, 7.0)
             cur = await db.execute(
                 "INSERT INTO timer_matches (stake, bank, stop_second, state) VALUES (?, ?, ?, 'active')",
                 (stake, bank, stop_second),
@@ -1058,9 +1097,7 @@ async def finish_timer_match(
                 prize = (stake * 2) - int(
                     (stake * 2) * (settings.DUEL_RAKE_PERCENT / 100)
                 )
-                await add_balance_with_checks(
-                    winner_id, prize, "timer_win", str(match_id)
-                )
+                await _change_balance(db, winner_id, prize, "timer_win", str(match_id))
                 await db.execute(
                     "UPDATE timer_matches SET state = 'finished', winner_id = ? WHERE id = ?",
                     (winner_id, match_id),

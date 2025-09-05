@@ -24,3 +24,10 @@ module = [
     "pydantic_settings.*"
 ]
 ignore_missing_imports = true
+
+# Новая секция для настройки pytest
+[tool.pytest.ini_options]
+# Указываем pytest игнорировать эти папки
+norecursedirs = ["scripts", ".venv", "env"]
+# Указываем, какие файлы считать тестами
+python_files = "tests/test_*.py"

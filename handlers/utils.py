@@ -31,7 +31,7 @@ async def safe_send_message(bot: Bot, user_id: int, text: str, **kwargs: Any) ->
 async def safe_edit_caption(
     bot: Bot,
     caption: str,
-    chat_id: int | str,
+    chat_id: Union[int, str],
     message_id: int,
     reply_markup: Optional[InlineKeyboardMarkup] = None,
     **kwargs: Any,

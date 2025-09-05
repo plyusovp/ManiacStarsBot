@@ -9,9 +9,8 @@ from aiogram import Bot, F, Router
 from aiogram.fsm.context import FSMContext
 from aiogram.types import CallbackQuery
 
-from config import COINFLIP_LEVELS
 from database import db
-from economy import COINFLIP_RAKE_PERCENT
+from economy import COINFLIP_LEVELS, COINFLIP_RAKE_PERCENT
 from handlers.utils import clean_junk_message, safe_edit_caption
 from keyboards.factories import CoinflipCallback, GameCallback
 from keyboards.inline import coinflip_level_keyboard, coinflip_stake_keyboard
@@ -43,7 +42,7 @@ async def process_coinflip_round(
 
     prize = 0
     if is_win:
-        gross_prize = int(stake * game_rules["prize_mult"])
+        gross_prize = int(stake * game_rules["multiplier"])
         rake = int(gross_prize * (COINFLIP_RAKE_PERCENT / 100))
         prize = gross_prize - rake
         result = await db.add_balance_with_checks(

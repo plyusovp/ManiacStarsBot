@@ -12,3 +12,4 @@ isort==5.13.2
 mypy==1.10.0
 bandit==1.7.9
 pip-audit==2.7.3
+python-json-logger==2.0.7

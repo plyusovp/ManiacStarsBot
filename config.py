@@ -1,5 +1,5 @@
 # config.py
-from typing import Any, Dict, List
+from typing import List
 
 from pydantic import field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
@@ -25,6 +25,7 @@ class Settings(BaseSettings):
         return v
 
     # --- Настройки экономики и игр ---
+    INITIAL_BALANCE: int = 0
     DUEL_RAKE_PERCENT: int
     DUEL_BOOST_COST: int = 10
     DUEL_REROLL_COST: int = 15
@@ -66,23 +67,7 @@ settings = Settings()
 
 DUEL_STAKES = [10, 25, 50, 100, 250]
 TIMER_STAKES = [10, 25, 50, 100]
-COINFLIP_LEVELS: Dict[str, Dict[str, Any]] = {
-    "easy": {
-        "name": "Легкий",
-        "win_chance": 75,
-        "multiplier": 1.2,
-        "stakes": [10, 20, 30, 40, 50],
-    },
-    "medium": {
-        "name": "Средний",
-        "win_chance": 50,
-        "multiplier": 2.0,
-        "stakes": [25, 50, 75, 100, 150],
-    },
-    "hard": {
-        "name": "Сложный",
-        "win_chance": 25,
-        "multiplier": 3.5,
-        "stakes": [50, 100, 150, 200, 250],
-    },
-}
+
+# This is now defined in economy.py to avoid circular dependencies
+# and keep economic constants in one place.
+# COINFLIP_LEVELS will be imported from economy where needed.

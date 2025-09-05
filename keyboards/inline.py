@@ -4,7 +4,8 @@ from typing import Optional, Union
 from aiogram.types import InlineKeyboardButton, InlineKeyboardMarkup
 from aiogram.utils.keyboard import InlineKeyboardBuilder
 
-from config import COINFLIP_LEVELS, DUEL_STAKES, TIMER_STAKES, settings
+from config import DUEL_STAKES, TIMER_STAKES, settings
+from economy import COINFLIP_LEVELS  # Исправленный импорт
 from keyboards.factories import (
     AchievementCallback,
     AdminCallback,

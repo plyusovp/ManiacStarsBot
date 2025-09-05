@@ -1,40 +1,40 @@
 # tests/test_economy.py
-import uuid
+from contextlib import asynccontextmanager
 
+import aiosqlite
 import pytest
+from freezegun import freeze_time
 
 from database import db
+from economy import EARN_RULES
 
 
 @pytest.fixture(autouse=True)
-async def setup_database():
-    """Initializes a clean database for each test."""
+async def setup_database(monkeypatch):
+    """
+    Создает единую БД в памяти для каждого теста и патчит db.connect.
+    """
+    conn = await aiosqlite.connect(":memory:")
+    conn.row_factory = aiosqlite.Row
+
+    @asynccontextmanager
+    async def mock_connect():
+        yield conn
+
+    monkeypatch.setattr(db, "connect", mock_connect)
+
     await db.init_db()
-    # You might want to use an in-memory SQLite for tests
-    # For now, we'll just re-init the existing one.
-    # A better approach would be to parametrize the DB name.
-    await _add_test_user(1001, 1000)
+    # Добавляем тестового пользователя
+    await db.add_user(1001, "testuser1001", "Test User 1001", initial_balance=1000)
+
     yield
-    # Teardown: clean up if necessary, though re-init handles it.
 
-
-async def _add_test_user(user_id: int, balance: int):
-    """Helper to add a user with a specific balance."""
-    async with db.connect() as conn:
-        await conn.execute(
-            "INSERT OR REPLACE INTO users (user_id, username, full_name, balance, registration_date) VALUES (?, ?, ?, ?, ?)",
-            (user_id, f"testuser{user_id}", f"Test User {user_id}", 0, 123456789),
-        )
-        # Use unrestricted add to set a precise balance
-        await conn.execute(
-            "UPDATE users SET balance = ? WHERE user_id = ?", (balance, user_id)
-        )
-        await conn.commit()
+    await conn.close()
 
 
 @pytest.mark.asyncio
 async def test_credit_user_balance():
-    """Tests simple balance addition."""
+    """Тестирует простое начисление на баланс."""
     user_id = 1001
     initial_balance = await db.get_user_balance(user_id)
     assert initial_balance == 1000
@@ -48,7 +48,7 @@ async def test_credit_user_balance():
 
 @pytest.mark.asyncio
 async def test_debit_user_balance_sufficient_funds():
-    """Tests simple balance subtraction when funds are sufficient."""
+    """Тестирует простое списание с баланса при наличии средств."""
     user_id = 1001
     initial_balance = await db.get_user_balance(user_id)
     assert initial_balance == 1000
@@ -62,7 +62,7 @@ async def test_debit_user_balance_sufficient_funds():
 
 @pytest.mark.asyncio
 async def test_debit_user_balance_insufficient_funds():
-    """Tests that spending fails when funds are insufficient."""
+    """Тестирует отказ в списании при недостаточном балансе."""
     user_id = 1001
     initial_balance = await db.get_user_balance(user_id)
     assert initial_balance == 1000
@@ -75,48 +75,39 @@ async def test_debit_user_balance_insufficient_funds():
 
 
 @pytest.mark.asyncio
-async def test_idempotency_spend_balance():
-    """Tests that a debit operation with the same idempotency key is not duplicated."""
+@freeze_time("2025-09-05")
+async def test_daily_earn_limit():
+    """
+    Тестирует дневной лимит начислений.
+    1. Первое начисление должно пройти успешно.
+    2. Второе, превышающее лимит, должно быть отклонено.
+    3. На следующий день лимит должен сброситься.
+    """
     user_id = 1001
-    idem_key = f"idem-{uuid.uuid4()}"
+    source = "referral_bonus"  # У этого источника есть daily_cap
+    limit = EARN_RULES[source]["daily_cap"]
+    amount = limit - 10
     initial_balance = await db.get_user_balance(user_id)
 
-    # First attempt should succeed
-    success1 = await db.spend_balance(user_id, 100, "idem_test", idem_key=idem_key)
-    assert success1 is True
-    balance_after_1 = await db.get_user_balance(user_id)
-    assert balance_after_1 == initial_balance - 100
+    # 1. Первое начисление, не превышающее лимит
+    result1 = await db.add_balance_with_checks(user_id, amount, source)
+    assert result1.get("success") is True, "Первое начисление должно пройти"
+    balance1 = await db.get_user_balance(user_id)
+    assert balance1 == initial_balance + amount
 
-    # Second attempt with the same key should also "succeed" but not change the balance
-    success2 = await db.spend_balance(user_id, 100, "idem_test", idem_key=idem_key)
-    assert success2 is True
-    balance_after_2 = await db.get_user_balance(user_id)
-    assert balance_after_2 == balance_after_1  # No change
+    # 2. Второе начисление, которое превысит лимит
+    result2 = await db.add_balance_with_checks(user_id, 20, source)  # 20 > 10
+    assert result2.get("success") is False, "Второе начисление должно провалиться"
+    assert result2.get("reason") == "daily_cap_exceeded"
+    balance2 = await db.get_user_balance(user_id)
+    assert balance2 == balance1, "Баланс не должен был измениться"
 
-
-@pytest.mark.asyncio
-async def test_create_and_revert_withdrawal_request():
-    """Tests the flow of creating a withdrawal and then rejecting it, returning funds."""
-    user_id = 1001
-    admin_id = 9999
-    withdrawal_amount = 300
-    initial_balance = await db.get_user_balance(user_id)
-
-    # 1. Create a request
-    idem_key = f"reward-test-{uuid.uuid4()}"
-    result = await db.create_reward_request(
-        user_id, "test_item", withdrawal_amount, idem_key
-    )
-    assert result["success"] is True
-    reward_id = result["reward_id"]
-    assert reward_id is not None
-
-    balance_after_hold = await db.get_user_balance(user_id)
-    assert balance_after_hold == initial_balance - withdrawal_amount
-
-    # 2. Reject the request
-    rejection_success = await db.reject_reward(reward_id, admin_id, "test rejection")
-    assert rejection_success is True
-
-    final_balance = await db.get_user_balance(user_id)
-    assert final_balance == initial_balance  # Funds should be returned
+    # 3. Переходим на следующий день
+    with freeze_time("2025-09-06"):
+        # Попытка начисления снова должна пройти успешно
+        result3 = await db.add_balance_with_checks(user_id, 10, source)
+        assert (
+            result3.get("success") is True
+        ), "Начисление на следующий день должно пройти"
+        balance3 = await db.get_user_balance(user_id)
+        assert balance3 == balance2 + 10
