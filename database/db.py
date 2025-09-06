@@ -898,8 +898,9 @@ async def get_daily_bonus(user_id):
                 )
                 res = await cursor.fetchone()
                 last_bonus_time = res[0] if res else 0
-codex/fix-telegram-bot-issues-e65tr8
-                seconds_left = max(0, 86400 - (current_time - last_bonus_time))
+ codex/fix-telegram-bot-issues-udhhyp
+                elapsed = current_time - last_bonus_time
+                seconds_left = max(0, 86400 - elapsed)
                 return {"status": "wait", "seconds_left": seconds_left}
 
 
@@ -1228,10 +1229,9 @@ async def get_users_for_notification():
     async with connect() as db:
         day_ago = int(time.time()) - 86400
         cursor = await db.execute(
-codex/fix-telegram-bot-issues-e65tr8
+ codex/fix-telegram-bot-issues-udhhyp
             "SELECT user_id FROM users WHERE last_bonus_time < ?",
 
-   
             (day_ago,),
         )
         return [row[0] for row in await cursor.fetchall()]
