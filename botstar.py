@@ -19,6 +19,7 @@ from handlers import (
     timer_handlers,
     user_handlers,
 )
+from keyboards.reply import persistent_menu_keyboard
 from logger_config import setup_logging
 from middlewares.error_handler import ErrorHandler
 from middlewares.metrics import MetricsMiddleware
@@ -60,7 +61,8 @@ async def send_bonus_reminders(bot: Bot):
         with suppress(Exception):  # Safely ignore users who blocked the bot
             await bot.send_message(
                 user_id,
-                "⏰ Эй! Твой ежедневный бонус уже доступен. Не забудь забрать его 😉",
+                "⏰ Эй! Твой ежедневный бонус уже доступен. Забери его командой /bonus",
+                reply_markup=persistent_menu_keyboard(),
             )
             sent_count += 1
             await asyncio.sleep(0.1)  # Rate limit

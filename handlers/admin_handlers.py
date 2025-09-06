@@ -133,11 +133,13 @@ async def broadcast_confirm_handler(
     )
 
     if callback.message:
-        await callback.message.edit_text(
+        summary = (
             f"✅ Рассылка завершена!\n\n"
             f"Отправлено: {sent_count}\n"
-            f"Не удалось отправить: {failed_count}",
-            reply_markup=admin_back_keyboard(),
+            f"Не удалось отправить: {failed_count}"
+        )
+        await callback.message.edit_text(
+            summary, reply_markup=admin_back_keyboard()
         )
 
 
@@ -385,7 +387,18 @@ async def reward_fulfill_handler(
 # --- Stats Section ---
 @router.callback_query(AdminCallback.filter(F.action == "stats"), AdminFilter())
 async def stats_handler(callback: CallbackQuery, data: dict):
-    stats = await db.get_bot_statistics()
+    try:
+        stats = await db.get_bot_statistics()
+    except Exception:
+        logging.exception("Failed to load statistics")
+        if callback.message:
+            await callback.message.edit_text(
+                "Не удалось загрузить статистику.",
+                reply_markup=admin_back_keyboard(),
+            )
+        await callback.answer()
+        return
+
     extra = {"trace_id": data.get("trace_id"), "user_id": data.get("user_id")}
     logging.info("Admin requested stats", extra=extra)
 
