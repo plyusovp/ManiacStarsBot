@@ -69,6 +69,7 @@ async def admin_panel_callback_handler(
     with suppress(TelegramBadRequest):
         if callback.message:
             await callback.message.delete()
+    await callback.answer()
 
 
 # --- Broadcast Section ---
@@ -80,6 +81,7 @@ async def broadcast_start_handler(callback: CallbackQuery, state: FSMContext):
             "Введите сообщение для рассылки. Поддерживается HTML-разметка.",
             reply_markup=admin_back_keyboard(),
         )
+    await callback.answer()
 
 
 @router.message(AdminState.get_broadcast_message)
@@ -397,6 +399,7 @@ async def stats_handler(callback: CallbackQuery, data: dict):
     )
     if callback.message:
         await callback.message.edit_text(text, reply_markup=admin_back_keyboard())
+    await callback.answer()
 
 
 # --- Promo Section ---

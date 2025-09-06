@@ -207,7 +207,9 @@ async def resolve_timer_game(bot: Bot, match_id: int):
 # --- Callback Handlers ---
 
 
-@router.callback_query(GameCallback.filter(F.name == "timer" and F.action == "start"))
+@router.callback_query(
+    GameCallback.filter((F.name == "timer") & (F.action == "start"))
+)
 async def timer_menu_handler(callback: CallbackQuery, state: FSMContext, bot: Bot):
     """Displays the 'Star Timer' game menu."""
     await clean_junk_message(state, bot)

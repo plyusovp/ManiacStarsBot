@@ -101,6 +101,25 @@ async def menu_handler(message: Message, state: FSMContext):
     )
 
 
+@router.message(Command("bonus"))
+async def bonus_handler(message: Message):
+    """Обрабатывает команду /bonus для получения ежедневного бонуса."""
+    result = await db.get_daily_bonus(message.from_user.id)
+    status = result.get("status")
+    if status == "success":
+        reward = result.get("reward", 0)
+        await message.answer(f"🎁 Вы получили {reward} ⭐ дневного бонуса!")
+    elif status == "wait":
+        seconds = result.get("seconds_left", 0)
+        hours = seconds // 3600
+        minutes = (seconds % 3600) // 60
+        await message.answer(
+            f"⏳ Бонус будет доступен через {hours}ч {minutes}м."
+        )
+    else:
+        await message.answer("❌ Не удалось получить бонус. Попробуйте позже.")
+
+
 # --- Callback Handlers (Main Menu Navigation) ---
 @router.callback_query(MenuCallback.filter(F.name == "main_menu"))
 async def back_to_main_menu_handler(
