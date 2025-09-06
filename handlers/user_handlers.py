@@ -29,6 +29,7 @@ from keyboards.inline import (
     referral_keyboard,
     top_users_keyboard,
 )
+from keyboards.reply import persistent_menu_keyboard
 from lexicon.texts import LEXICON, LEXICON_ERRORS
 
 router = Router()
@@ -88,8 +89,13 @@ async def start_handler(
         reply_markup=main_menu_keyboard(),
     )
 
+    await message.answer(
+        "Выберите действие через кнопку ниже",
+        reply_markup=persistent_menu_keyboard(),
+    )
 
-@router.message(Command("menu"))
+
+@router.message(Command("menu") | F.text == "Меню")
 async def menu_handler(message: Message, state: FSMContext):
     await state.clear()
     balance = await db.get_user_balance(message.from_user.id)
@@ -98,6 +104,11 @@ async def menu_handler(message: Message, state: FSMContext):
         photo=settings.PHOTO_MAIN_MENU,
         caption=caption,
         reply_markup=main_menu_keyboard(),
+    )
+
+    await message.answer(
+        "Выберите действие через кнопку ниже",
+        reply_markup=persistent_menu_keyboard(),
     )
 
 
