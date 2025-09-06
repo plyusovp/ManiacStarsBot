@@ -1,7 +1,9 @@
 # database/db.py
+import asyncio
 import datetime
 import logging
 import secrets  # Используем secrets для более криптографически стойких случайных чисел
+import sqlite3
 import time
 from contextlib import asynccontextmanager
 from typing import Any, AsyncGenerator, Dict, List, Optional, Union
@@ -27,6 +29,19 @@ async def connect() -> AsyncGenerator[aiosqlite.Connection, None]:
         yield db_conn
     finally:
         await db_conn.close()
+
+
+async def _begin_transaction(db: aiosqlite.Connection) -> None:
+    """Starts a transaction, retrying if another one is in progress."""
+    while True:
+        try:
+            await db.execute("BEGIN IMMEDIATE;")
+            return
+        except sqlite3.OperationalError as e:
+            if "transaction" in str(e).lower():
+                await asyncio.sleep(0.001)
+            else:
+                raise
 
 
 async def init_db() -> None:
@@ -408,7 +423,7 @@ async def add_balance_unrestricted(
     if amount < 0:  # Allow 0 for initial ledger entry
         return False
     async with connect() as db:
-        await db.execute("BEGIN IMMEDIATE;")
+        await _begin_transaction(db)
         success = await _change_balance(db, user_id, amount, reason, ref_id)
         if success:
             await db.commit()
@@ -428,7 +443,7 @@ async def spend_balance(
     if amount <= 0:
         return False
     async with connect() as db:
-        await db.execute("BEGIN IMMEDIATE;")
+        await _begin_transaction(db)
         try:
             if idem_key and not await check_idempotency_key(db, idem_key, user_id):
                 # If key exists, it means the operation was already successful.
@@ -473,7 +488,7 @@ async def add_balance_with_checks(
 
     async with connect() as db:
         try:
-            await db.execute("BEGIN IMMEDIATE;")
+            await _begin_transaction(db)
 
             # Check for user existence before proceeding with limit checks
             cursor = await db.execute(
@@ -491,6 +506,29 @@ async def add_balance_with_checks(
             if not await _change_balance(db, user_id, amount, source, ref_id):
                 await db.rollback()
                 return {"success": False, "reason": "update_failed"}
+
+            # Update daily counters if needed
+            if "daily_cap" in rules:
+                today = datetime.date.today()
+                cursor = await db.execute(
+                    "SELECT amount FROM earn_counters_daily WHERE user_id = ? AND source = ? AND day = ?",
+                    (user_id, source, today),
+                )
+                row = await cursor.fetchone()
+                current_amount = row["amount"] if row else 0
+                if current_amount + amount > rules["daily_cap"]:
+                    await db.rollback()
+                    return {"success": False, "reason": "daily_cap_exceeded"}
+                if row:
+                    await db.execute(
+                        "UPDATE earn_counters_daily SET amount = amount + ?, ops = ops + 1 WHERE user_id = ? AND source = ? AND day = ?",
+                        (amount, user_id, source, today),
+                    )
+                else:
+                    await db.execute(
+                        "INSERT INTO earn_counters_daily (user_id, source, day, amount, ops) VALUES (?, ?, ?, ?, 1)",
+                        (user_id, source, today, amount),
+                    )
 
             await db.commit()
             return {"success": True}
@@ -512,7 +550,7 @@ async def create_reward_request(
         return {"success": False, "reason": "invalid_amount"}
 
     async with connect() as db:
-        await db.execute("BEGIN IMMEDIATE;")
+        await _begin_transaction(db)
         try:
             # Idempotency check first
             cursor = await db.execute(

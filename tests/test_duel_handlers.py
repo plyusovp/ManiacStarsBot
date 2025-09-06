@@ -5,6 +5,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import aiosqlite
 import pytest
+import pytest_asyncio
 from aiogram.fsm.storage.memory import MemoryStorage
 
 from database import db
@@ -22,7 +23,7 @@ BOT_ID = 123456
 # --- Фикстуры для настройки окружения ---
 
 
-@pytest.fixture(autouse=True)
+@pytest_asyncio.fixture(autouse=True)
 async def setup_database(monkeypatch):
     """
     Создает единую БД в памяти для каждого теста и патчит db.connect,
@@ -142,6 +143,7 @@ async def test_full_duel_lifecycle(mock_bot, memory_storage):
 
         # --- ACT 3: Раунд 1 (P2 (ID 102) побеждает) ---
         p1_play_callback = MagicMock()
+        p1_play_callback.answer = AsyncMock()
         p1_play_callback.from_user.id = P1_ID
         p1_play_callback_data = DuelCallback(action="play", match_id=match_id, value=9)
         await duel_handlers.play_card_handler(
@@ -149,6 +151,7 @@ async def test_full_duel_lifecycle(mock_bot, memory_storage):
         )
 
         p2_play_callback = MagicMock()
+        p2_play_callback.answer = AsyncMock()
         p2_play_callback.from_user.id = P2_ID
         p2_play_callback_data = DuelCallback(action="play", match_id=match_id, value=10)
         await duel_handlers.play_card_handler(

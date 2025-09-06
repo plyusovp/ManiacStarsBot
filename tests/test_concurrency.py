@@ -5,6 +5,7 @@ from contextlib import asynccontextmanager
 
 import aiosqlite
 import pytest
+import pytest_asyncio
 
 from database import db
 
@@ -14,7 +15,7 @@ CONCURRENT_REQUESTS = 200
 DEBIT_AMOUNT = 10
 
 
-@pytest.fixture(autouse=True)
+@pytest_asyncio.fixture(autouse=True)
 async def setup_database(monkeypatch):
     """
     Creates a single in-memory DB for the test and patches db.connect.
