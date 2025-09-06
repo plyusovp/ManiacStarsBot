@@ -572,4 +572,4 @@ async def duel_stuck_handler(callback: CallbackQuery, bot: Bot):
     if callback.message:
         await safe_delete(bot, callback.message.chat.id, callback.message.message_id)
 
-id
+марк пидарас
