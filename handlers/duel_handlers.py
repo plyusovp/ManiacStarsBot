@@ -245,7 +245,9 @@ async def start_duel_game(
 
 
 # --- Handlers ---
-@router.callback_query(GameCallback.filter(F.name == "duel" and F.action == "start"))
+@router.callback_query(
+    GameCallback.filter((F.name == "duel") & (F.action == "start"))
+)
 async def duel_menu_handler(callback: CallbackQuery, state: FSMContext, bot: Bot):
     """Shows the duel menu with stake options."""
     if not callback.message:
@@ -571,5 +573,3 @@ async def duel_stuck_handler(callback: CallbackQuery, bot: Bot):
     )
     if callback.message:
         await safe_delete(bot, callback.message.chat.id, callback.message.message_id)
-
-марк пидарас

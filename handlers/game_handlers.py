@@ -63,7 +63,7 @@ async def process_coinflip_round(
 
 
 @router.callback_query(
-    GameCallback.filter(F.name == "coinflip" and F.action == "start")
+    GameCallback.filter((F.name == "coinflip") & (F.action == "start"))
 )
 async def coinflip_menu_handler(
     callback: CallbackQuery, state: FSMContext, bot: Bot
