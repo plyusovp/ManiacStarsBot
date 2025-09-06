@@ -47,6 +47,7 @@ async def games_menu_handler(callback: CallbackQuery, state: FSMContext, bot: Bo
             message_id=callback.message.message_id,
             reply_markup=games_menu_keyboard(),
         )
+    await callback.answer()
 
 
 @router.callback_query(MenuCallback.filter(F.name == "achievements"))
