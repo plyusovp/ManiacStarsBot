@@ -1,5 +1,6 @@
 # handlers/menu_handler.py
 from aiogram import Bot, F, Router
+from aiogram.exceptions import TelegramBadRequest
 from aiogram.fsm.context import FSMContext
 from aiogram.types import CallbackQuery, InputMediaPhoto
 
@@ -36,17 +37,26 @@ async def show_main_menu(bot: Bot, chat_id: int, message_id: int):
 async def games_menu_handler(callback: CallbackQuery, state: FSMContext, bot: Bot):
     """Отображает меню 'Игры'."""
     await clean_junk_message(state, bot)
+    await state.clear()
     media = InputMediaPhoto(
         media=settings.PHOTO_GAMES_MENU, caption=LEXICON["games_menu"]
     )
     if callback.message:
-        await safe_edit_media(
-            bot=bot,
-            media=media,
-            chat_id=callback.message.chat.id,
-            message_id=callback.message.message_id,
-            reply_markup=games_menu_keyboard(),
-        )
+        try:
+            await bot.edit_message_media(
+                media=media,
+                chat_id=callback.message.chat.id,
+                message_id=callback.message.message_id,
+                reply_markup=games_menu_keyboard(),
+            )
+        except (TelegramBadRequest, Exception):
+            await bot.send_photo(
+                chat_id=callback.message.chat.id,
+                photo=settings.PHOTO_GAMES_MENU,
+                caption=LEXICON["games_menu"],
+                reply_markup=games_menu_keyboard(),
+            )
+    await callback.answer()
 
 
 @router.callback_query(MenuCallback.filter(F.name == "achievements"))
