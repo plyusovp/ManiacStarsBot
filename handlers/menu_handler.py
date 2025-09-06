@@ -42,6 +42,7 @@ async def games_menu_handler(callback: CallbackQuery, state: FSMContext, bot: Bo
         media=settings.PHOTO_GAMES_MENU, caption=LEXICON["games_menu"]
     )
     if callback.message:
+codex/fix-game-button-in-main-menu-o1m3vv
         try:
             await bot.edit_message_media(
                 media=media,
@@ -56,6 +57,7 @@ async def games_menu_handler(callback: CallbackQuery, state: FSMContext, bot: Bo
                 caption=LEXICON["games_menu"],
                 reply_markup=games_menu_keyboard(),
             )
+
     await callback.answer()
 
 
