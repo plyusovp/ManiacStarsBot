@@ -875,7 +875,7 @@ async def activate_promo(user_id, code, idem_key: str):
 async def get_daily_bonus(user_id):
     async with connect() as db:
         current_time = int(time.time())
-        time_limit = current_time - 90000
+        time_limit = current_time - 86400
 
         is_admin = user_id in settings.ADMIN_IDS
 
@@ -899,10 +899,10 @@ async def get_daily_bonus(user_id):
                 last_bonus_time = res[0] if res else 0
                 return {
                     "status": "wait",
-                    "seconds_left": 90000 - (current_time - last_bonus_time),
+                    "seconds_left": 86400 - (current_time - last_bonus_time),
                 }
 
-            reward = secrets.SystemRandom().randint(1, 5)
+            reward = 1
             if not await _change_balance(db, user_id, reward, "daily_bonus"):
                 await db.rollback()
                 return {"status": "error", "reason": "update_failed"}
@@ -1225,10 +1225,10 @@ async def get_active_promos():
 
 async def get_users_for_notification():
     async with connect() as db:
-        twenty_five_hours_ago = int(time.time()) - 90000
+        day_ago = int(time.time()) - 86400
         cursor = await db.execute(
             "SELECT user_id FROM users WHERE last_bonus_time > 0 AND last_bonus_time < ?",
-            (twenty_five_hours_ago,),
+            (day_ago,),
         )
         return [row[0] for row in await cursor.fetchall()]
 

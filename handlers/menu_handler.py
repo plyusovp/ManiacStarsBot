@@ -40,13 +40,19 @@ async def games_menu_handler(callback: CallbackQuery, state: FSMContext, bot: Bo
         media=settings.PHOTO_GAMES_MENU, caption=LEXICON["games_menu"]
     )
     if callback.message:
-        await safe_edit_media(
+        success = await safe_edit_media(
             bot=bot,
             media=media,
             chat_id=callback.message.chat.id,
             message_id=callback.message.message_id,
             reply_markup=games_menu_keyboard(),
         )
+        if not success:
+            await callback.message.answer_photo(
+                photo=settings.PHOTO_GAMES_MENU,
+                caption=LEXICON["games_menu"],
+                reply_markup=games_menu_keyboard(),
+            )
     await callback.answer()
 
 
