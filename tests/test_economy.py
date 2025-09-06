@@ -3,13 +3,14 @@ from contextlib import asynccontextmanager
 
 import aiosqlite
 import pytest
+import pytest_asyncio
 from freezegun import freeze_time
 
 from database import db
 from economy import EARN_RULES
 
 
-@pytest.fixture(autouse=True)
+@pytest_asyncio.fixture(autouse=True)
 async def setup_database(monkeypatch):
     """
     Создает единую БД в памяти для каждого теста и патчит db.connect.

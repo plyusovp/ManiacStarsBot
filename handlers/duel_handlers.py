@@ -303,11 +303,11 @@ async def find_duel_handler(
             asyncio.create_task(
                 start_duel_game(
                     bot,
-                    user_id,
                     opponent_id,
+                    user_id,
                     stake,
-                    callback.message.message_id,
                     opponent_msg_id,
+                    callback.message.message_id,
                     trace_id,
                 )
             )
