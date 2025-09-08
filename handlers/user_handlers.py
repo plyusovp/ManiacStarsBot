@@ -46,6 +46,11 @@ class UserState(StatesGroup):
 # --- Command Handlers ---
 @router.message(CommandStart())
 async def start_handler(
+# ВРЕМЕННЫЙ КОД ДЛЯ ПОЛУЧЕНИЯ FILE_ID
+if message.photo:
+    await message.answer(f"Вот ID этого фото: `{message.photo[-1].file_id}`")
+    return # Останавливаем выполнение, чтобы не показывать меню
+# КОНЕЦ ВРЕМЕНЕННОГО КОДА
     message: Message, state: FSMContext, bot: Bot, command: CommandObject
 ):
     # Этот обработчик теперь будет игнорироваться, если аргументы начинаются с 'reward_'
@@ -99,19 +104,32 @@ async def start_handler(
         reply_markup=persistent_menu_keyboard(),
     )
 
+<<<<<<< HEAD
 
 @router.message(or_f(Command("menu"), F.text == "Меню"))
+=======
+@router.message(Command("menu") | F.text == "Меню")
+>>>>>>> 0b9a916a6c4200646cec7d6bd3c2c0b20bcc8e05
 async def menu_handler(message: Message, state: FSMContext):
     await state.clear()
     if not message.from_user:
         return
     balance = await db.get_user_balance(message.from_user.id)
     caption = LEXICON["main_menu"].format(balance=balance)
-    await message.answer_photo(
-        photo=settings.PHOTO_MAIN_MENU,
-        caption=caption,
-        reply_markup=main_menu_keyboard(),
-    )
+
+    # --- НАЧАЛО ИЗМЕНЕНИЙ (ВРЕМЕННАЯ ДИАГНОСТИКА) ---
+
+    # Старый код выключаем, добавляя # в начале
+    # await message.answer_photo(
+    #     photo=settings.PHOTO_MAIN_MENU,
+    #     caption=caption,
+    #     reply_markup=main_menu_keyboard(),
+    # )
+
+    # А вместо него добавляем простой текст
+    await message.answer(caption, reply_markup=main_menu_keyboard())
+
+    # --- КОНЕЦ ИЗМЕНЕНИЙ ---
 
 
 @router.message(Command("bonus"))
