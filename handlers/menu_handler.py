@@ -1,7 +1,8 @@
 # handlers/menu_handler.py
 from aiogram import Bot, F, Router
 from aiogram.fsm.context import FSMContext
-from aiogram.types import CallbackQuery, InputMediaPhoto
+from aiogram.filters import Command
+from aiogram.types import CallbackQuery, InputMediaPhoto, Message
 
 from config import settings
 from database import db
@@ -16,6 +17,14 @@ from keyboards.inline import (
 from lexicon.texts import LEXICON
 
 router = Router()
+
+
+@router.message(Command("start") | F.text == "🏠 Меню")
+async def start_handler(message: Message, state: FSMContext, bot: Bot):
+    await clean_junk_message(state, bot)
+    await show_main_menu(
+        bot=bot, chat_id=message.chat.id, message_id=message.message_id
+    )
 
 
 async def show_main_menu(bot: Bot, chat_id: int, message_id: int):

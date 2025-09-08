@@ -873,37 +873,38 @@ async def activate_promo(user_id, code, idem_key: str):
 
 
 async def get_daily_bonus(user_id):
+    """Выдаёт ежедневный бонус, если прошло 24 часа."""
     async with connect() as db:
         current_time = int(time.time())
         time_limit = current_time - 86400
 
-        is_admin = user_id in settings.ADMIN_IDS
-
         try:
-            # Используем общий механизм транзакций, чтобы избежать конфликтов
             await _begin_transaction(db)
 
-            update_query = "UPDATE users SET last_bonus_time = ? WHERE user_id = ?"
-            params = [current_time, user_id]
-            if not is_admin:
-                update_query += " AND last_bonus_time < ?"
-                params.append(time_limit)
-
-            cursor = await db.execute(update_query, tuple(params))
-
+            # Проверяем, прошло ли 24 часа с последнего бонуса
+            cursor = await db.execute(
+                "SELECT last_bonus_time FROM users WHERE user_id = ?", (user_id,)
+            )
+            res = await cursor.fetchone()
+            last_bonus_time = res[0] if res else 0
+            
+            elapsed = current_time - last_bonus_time
+            if elapsed < 86400:
+                seconds_left = 86400 - elapsed
+                await db.rollback()
+                return {"status": "wait", "seconds_left": seconds_left}
+            
+            # Обновляем время последнего бонуса
+            cursor = await db.execute(
+                "UPDATE users SET last_bonus_time = ? WHERE user_id = ?",
+                (current_time, user_id),
+            )
+            
             if cursor.rowcount == 0:
                 await db.rollback()
-                cursor = await db.execute(
-                    "SELECT last_bonus_time FROM users WHERE user_id = ?", (user_id,)
-                )
-                res = await cursor.fetchone()
-                last_bonus_time = res[0] if res else 0
- codex/fix-telegram-bot-issues-udhhyp
-                elapsed = current_time - last_bonus_time
-                seconds_left = max(0, 86400 - elapsed)
-                return {"status": "wait", "seconds_left": seconds_left}
+                return {"status": "error", "reason": "user_not_found"}
 
-
+            # Выдаём награду
             reward = 1
             if not await _change_balance(db, user_id, reward, "daily_bonus"):
                 await db.rollback()
@@ -911,6 +912,7 @@ async def get_daily_bonus(user_id):
 
             await db.commit()
             return {"status": "success", "reward": reward}
+
         except Exception:
             await db.rollback()
             logging.error(
@@ -918,7 +920,7 @@ async def get_daily_bonus(user_id):
                 exc_info=True,
                 extra={"user_id": user_id},
             )
-            return {"status": "error"}
+            return {"status": "error", "reason": "transaction_failed"}
 
 
 async def grant_achievement(user_id, ach_id, bot: Bot) -> bool:
@@ -1229,13 +1231,10 @@ async def get_users_for_notification():
     async with connect() as db:
         day_ago = int(time.time()) - 86400
         cursor = await db.execute(
- codex/fix-telegram-bot-issues-udhhyp
             "SELECT user_id FROM users WHERE last_bonus_time < ?",
-
-            (day_ago,),
+            (day_ago,)
         )
         return [row[0] for row in await cursor.fetchall()]
-
 
 async def get_all_achievements():
     async with connect() as db:
