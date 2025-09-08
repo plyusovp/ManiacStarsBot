@@ -161,9 +161,5 @@ async def achievement_info_handler(
             chat_id=callback.message.chat.id,
             message_id=callback.message.message_id,
             reply_markup=back_to_achievements_keyboard(),
-<<<<<<< HEAD
         )
     await callback.answer()
-=======
-        )
->>>>>>> 0b9a916a6c4200646cec7d6bd3c2c0b20bcc8e05
