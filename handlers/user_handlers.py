@@ -46,13 +46,18 @@ class UserState(StatesGroup):
 # --- Command Handlers ---
 @router.message(CommandStart())
 async def start_handler(
-# ВРЕМЕННЫЙ КОД ДЛЯ ПОЛУЧЕНИЯ FILE_ID
-if message.photo:
-    await message.answer(f"Вот ID этого фото: `{message.photo[-1].file_id}`")
-    return # Останавливаем выполнение, чтобы не показывать меню
-# КОНЕЦ ВРЕМЕНЕННОГО КОДА
-    message: Message, state: FSMContext, bot: Bot, command: CommandObject
+    message: Message,
+    state: FSMContext,
+    bot: Bot,
+    command: CommandObject,
 ):
+    # ВРЕМЕННЫЙ КОД ДЛЯ ПОЛУЧЕНИЯ FILE_ID
+    if message.photo:
+        await message.answer(f"Вот ID этого фото: `{message.photo[-1].file_id}`")
+        # Останавливаем выполнение, чтобы не показывать меню
+        return
+    # КОНЕЦ ВРЕМЕНЕННОГО КОДА
+
     # Этот обработчик теперь будет игнорироваться, если аргументы начинаются с 'reward_'
     # благодаря более специфичному фильтру в admin_handlers.
     if command.args and command.args.startswith("reward_"):
@@ -104,12 +109,8 @@ if message.photo:
         reply_markup=persistent_menu_keyboard(),
     )
 
-<<<<<<< HEAD
 
 @router.message(or_f(Command("menu"), F.text == "Меню"))
-=======
-@router.message(Command("menu") | F.text == "Меню")
->>>>>>> 0b9a916a6c4200646cec7d6bd3c2c0b20bcc8e05
 async def menu_handler(message: Message, state: FSMContext):
     await state.clear()
     if not message.from_user:
