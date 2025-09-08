@@ -104,12 +104,8 @@ if message.photo:
         reply_markup=persistent_menu_keyboard(),
     )
 
-<<<<<<< HEAD
 
 @router.message(or_f(Command("menu"), F.text == "Меню"))
-=======
-@router.message(Command("menu") | F.text == "Меню")
->>>>>>> 0b9a916a6c4200646cec7d6bd3c2c0b20bcc8e05
 async def menu_handler(message: Message, state: FSMContext):
     await state.clear()
     if not message.from_user:

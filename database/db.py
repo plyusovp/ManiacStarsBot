@@ -875,22 +875,17 @@ async def activate_promo(user_id, code, idem_key: str):
 
 
 async def get_daily_bonus(user_id):
-<<<<<<< HEAD
     """
     Атомарно выдает ежедневный бонус.
     Сначала пытается обновить время бонуса с условием, что прошло >24ч.
     Если обновление успешно (rowcount=1), значит, бонус можно выдать.
     Если нет (rowcount=0), значит, бонус уже был взят.
     """
-=======
-    """Выдаёт ежедневный бонус, если прошло 24 часа."""
->>>>>>> 0b9a916a6c4200646cec7d6bd3c2c0b20bcc8e05
     async with connect() as db:
         current_time = int(time.time())
         # 24 часа в секундах
         time_limit = current_time - 86400
 
-<<<<<<< HEAD
         # Админы могут получать бонус без ограничений по времени для тестов
         is_admin = user_id in settings.ADMIN_IDS
 
@@ -923,36 +918,6 @@ async def get_daily_bonus(user_id):
 
             # Если обновление прошло успешно, начисляем бонус
             reward = 1  # Сумма ежедневного бонуса
-=======
-        try:
-            await _begin_transaction(db)
-
-            # Проверяем, прошло ли 24 часа с последнего бонуса
-            cursor = await db.execute(
-                "SELECT last_bonus_time FROM users WHERE user_id = ?", (user_id,)
-            )
-            res = await cursor.fetchone()
-            last_bonus_time = res[0] if res else 0
-
-            elapsed = current_time - last_bonus_time
-            if elapsed < 86400:
-                seconds_left = 86400 - elapsed
-                await db.rollback()
-                return {"status": "wait", "seconds_left": seconds_left}
-
-            # Обновляем время последнего бонуса
-            cursor = await db.execute(
-                "UPDATE users SET last_bonus_time = ? WHERE user_id = ?",
-                (current_time, user_id),
-            )
-
-            if cursor.rowcount == 0:
-                await db.rollback()
-                return {"status": "error", "reason": "user_not_found"}
-
-            # Выдаём награду
-            reward = 1
->>>>>>> 0b9a916a6c4200646cec7d6bd3c2c0b20bcc8e05
             if not await _change_balance(db, user_id, reward, "daily_bonus"):
                 # Если по какой-то причине баланс не начислился, откатываем все
                 await db.rollback()
@@ -1286,11 +1251,7 @@ async def get_users_for_notification() -> List[int]:
         day_ago = int(time.time()) - 86400  # 24 часа в секундах
         cursor = await db.execute(
             "SELECT user_id FROM users WHERE last_bonus_time < ?",
-<<<<<<< HEAD
             (day_ago,),
-=======
-            (day_ago,)
->>>>>>> 0b9a916a6c4200646cec7d6bd3c2c0b20bcc8e05
         )
         return [row[0] for row in await cursor.fetchall()]
 
