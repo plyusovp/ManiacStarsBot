@@ -5,7 +5,12 @@ from aiogram.types import CallbackQuery, InputMediaPhoto
 
 from config import settings
 from database import db
-from handlers.utils import clean_junk_message, safe_edit_caption, safe_edit_media
+from handlers.utils import (
+    clean_junk_message,
+    safe_delete,
+    safe_edit_caption,
+    safe_edit_media,
+)
 from keyboards.factories import AchievementCallback, MenuCallback
 from keyboards.inline import (
     achievements_keyboard,
@@ -47,7 +52,11 @@ async def games_menu_handler(callback: CallbackQuery, state: FSMContext, bot: Bo
             message_id=callback.message.message_id,
             reply_markup=games_menu_keyboard(),
         )
+        # Если редактирование не удалось, удаляем старое и отправляем новое сообщение
         if not success:
+            await safe_delete(
+                bot, callback.message.chat.id, callback.message.message_id
+            )
             await callback.message.answer_photo(
                 photo=settings.PHOTO_GAMES_MENU,
                 caption=LEXICON["games_menu"],
@@ -85,6 +94,7 @@ async def achievements_handler(callback: CallbackQuery, state: FSMContext, bot: 
                 current_page_achs, user_achs_set, page, total_pages
             ),
         )
+    await callback.answer()
 
 
 @router.callback_query(AchievementCallback.filter(F.action == "page"))
@@ -120,7 +130,7 @@ async def achievement_info_handler(
     """Показывает детальную информацию о достижении."""
     ach_id = callback_data.ach_id
     if not ach_id:
-        return
+        return await callback.answer()
     details = await db.get_achievement_details(ach_id)
     if not details:
         await callback.answer("Достижение не найдено.", show_alert=True)
@@ -143,3 +153,4 @@ async def achievement_info_handler(
             message_id=callback.message.message_id,
             reply_markup=back_to_achievements_keyboard(),
         )
+    await callback.answer()

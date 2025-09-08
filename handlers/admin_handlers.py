@@ -1,10 +1,8 @@
 # handlers/admin_handlers.py
 import asyncio
 import logging
-from contextlib import suppress
 
 from aiogram import Bot, F, Router
-from aiogram.exceptions import TelegramBadRequest
 from aiogram.filters import Command, CommandObject, CommandStart
 from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import State, StatesGroup
@@ -63,12 +61,10 @@ async def admin_panel_callback_handler(
     callback: CallbackQuery, state: FSMContext, bot: Bot
 ):
     await state.clear()
-    await callback.message.answer(
-        "Добро пожаловать в админ-панель!", reply_markup=admin_main_menu()
-    )
-    with suppress(TelegramBadRequest):
-        if callback.message:
-            await callback.message.delete()
+    if callback.message:
+        await callback.message.edit_text(
+            "Добро пожаловать в админ-панель!", reply_markup=admin_main_menu()
+        )
     await callback.answer()
 
 
@@ -106,7 +102,7 @@ async def broadcast_confirm_handler(
 
     if not text:
         if callback.message:
-            return await callback.message.edit_text(
+            await callback.message.edit_text(
                 "Ошибка: текст рассылки не найден. Попробуйте снова.",
                 reply_markup=admin_back_keyboard(),
             )
@@ -138,9 +134,7 @@ async def broadcast_confirm_handler(
             f"Отправлено: {sent_count}\n"
             f"Не удалось отправить: {failed_count}"
         )
-        await callback.message.edit_text(
-            summary, reply_markup=admin_back_keyboard()
-        )
+        await callback.message.edit_text(summary, reply_markup=admin_back_keyboard())
 
 
 # --- User Info Section ---
@@ -154,6 +148,7 @@ async def user_info_prompt_handler(callback: CallbackQuery, state: FSMContext):
             "Введите ID или username пользователя для получения информации:",
             reply_markup=admin_back_keyboard(),
         )
+    await callback.answer()
 
 
 @router.message(AdminState.get_user_id_for_info)
@@ -173,10 +168,11 @@ async def user_info_process_handler(message: Message, state: FSMContext, data: d
     )
 
     if not user_id or not await db.user_exists(user_id):
-        return await message.answer(
+        await message.answer(
             "Пользователь с таким ID или username не найден.",
             reply_markup=admin_back_keyboard(),
         )
+        return
 
     info_text = await get_user_info_text(user_id, for_admin=True)
     await message.answer(info_text, reply_markup=admin_user_info_menu())
@@ -191,6 +187,7 @@ async def user_info_callback_handler(
     if user_id and callback.message:
         info_text = await get_user_info_text(user_id, for_admin=True)
         await callback.message.edit_text(info_text, reply_markup=admin_user_info_menu())
+    await callback.answer()
 
 
 # --- Withdrawal Rewards Section ---
@@ -206,9 +203,11 @@ async def rewards_list_handler(
     ) or 1
 
     if not rewards and callback.message:
-        return await callback.message.edit_text(
+        await callback.message.edit_text(
             "Нет активных заявок на вывод.", reply_markup=admin_back_keyboard()
         )
+        await callback.answer()
+        return
 
     bot_info = await bot.get_me()
     bot_username = bot_info.username
@@ -229,6 +228,7 @@ async def rewards_list_handler(
             reply_markup=admin_rewards_menu(page, total_pages),
             disable_web_page_preview=True,
         )
+    await callback.answer()
 
 
 @router.message(CommandStart(F.args.startswith("reward_")), AdminFilter())
@@ -242,7 +242,8 @@ async def reward_details_handler(
         reward_id = int(command.args.split("_")[1])
         details = await db.get_reward_full_details(reward_id)
         if not details:
-            return await message.answer("Заявка не найдена.")
+            await message.answer("Заявка не найдена.")
+            return
 
         reward = details["reward"]
         text = (
@@ -387,32 +388,31 @@ async def reward_fulfill_handler(
 # --- Stats Section ---
 @router.callback_query(AdminCallback.filter(F.action == "stats"), AdminFilter())
 async def stats_handler(callback: CallbackQuery, data: dict):
-    try:
-        stats = await db.get_bot_statistics()
-    except Exception:
-        logging.exception("Failed to load statistics")
-        if callback.message:
-            await callback.message.edit_text(
-                "Не удалось загрузить статистику.",
-                reply_markup=admin_back_keyboard(),
-            )
+    if not callback.message:
         await callback.answer()
         return
+    try:
+        stats = await db.get_bot_statistics()
+        extra = {"trace_id": data.get("trace_id"), "user_id": data.get("user_id")}
+        logging.info("Admin requested stats", extra=extra)
 
-    extra = {"trace_id": data.get("trace_id"), "user_id": data.get("user_id")}
-    logging.info("Admin requested stats", extra=extra)
-
-    text = (
-        f"📊 <b>Статистика бота:</b>\n\n"
-        f"👤 Всего пользователей: <b>{stats['total_users']}</b>\n"
-        f"☀️ Новых за 24ч: <b>{stats['new_today']}</b>\n"
-        f"📅 Новых за неделю: <b>{stats['new_week']}</b>\n"
-        f"👀 Активных за 24ч: <b>{stats['active_day']}</b>\n"
-        f"💰 Общий банк звезд: <b>{stats['total_balance']}</b> ⭐"
-    )
-    if callback.message:
+        text = (
+            f"📊 <b>Статистика бота:</b>\n\n"
+            f"👤 Всего пользователей: <b>{stats['total_users']}</b>\n"
+            f"☀️ Новых за 24ч: <b>{stats['new_today']}</b>\n"
+            f"📅 Новых за неделю: <b>{stats['new_week']}</b>\n"
+            f"👀 Активных за 24ч: <b>{stats['active_day']}</b>\n"
+            f"💰 Общий банк звезд: <b>{stats['total_balance']}</b> ⭐"
+        )
         await callback.message.edit_text(text, reply_markup=admin_back_keyboard())
-    await callback.answer()
+    except Exception:
+        logging.exception("Failed to load statistics")
+        await callback.message.edit_text(
+            "❌ Не удалось загрузить статистику. Проверьте логи.",
+            reply_markup=admin_back_keyboard(),
+        )
+    finally:
+        await callback.answer()
 
 
 # --- Promo Section ---
@@ -422,6 +422,7 @@ async def promos_menu_handler(callback: CallbackQuery):
         await callback.message.edit_text(
             "Раздел управления промокодами.", reply_markup=admin_promos_menu()
         )
+    await callback.answer()
 
 
 @router.callback_query(AdminCallback.filter(F.action == "promo_create"), AdminFilter())
@@ -432,6 +433,7 @@ async def promo_create_start_handler(callback: CallbackQuery, state: FSMContext)
             "Введите название нового промокода (ЗАГЛАВНЫМИ БУКВАМИ):",
             reply_markup=admin_back_keyboard(),
         )
+    await callback.answer()
 
 
 @router.message(AdminState.get_promo_name)
@@ -440,10 +442,11 @@ async def promo_name_handler(message: Message, state: FSMContext):
         return
     promo_name = message.text.upper()
     if await db.get_promocode(promo_name):
-        return await message.answer(
+        await message.answer(
             "Промокод с таким названием уже существует. Попробуйте другое.",
             reply_markup=admin_back_keyboard(),
         )
+        return
     await state.update_data(promo_name=promo_name)
     await state.set_state(AdminState.get_promo_reward)
     await message.answer("Введите сумму награды (целое число):")
@@ -511,6 +514,7 @@ async def promo_create_confirm_handler(
             f"✅ Промокод `{fsm_data['promo_name']}` успешно создан.",
             reply_markup=admin_back_keyboard(),
         )
+    await callback.answer()
 
 
 # --- Manage Section ---
@@ -520,6 +524,7 @@ async def manage_menu_handler(callback: CallbackQuery):
         await callback.message.edit_text(
             "Раздел управления пользователями.", reply_markup=admin_manage_menu()
         )
+    await callback.answer()
 
 
 # --- Grant ---
@@ -531,6 +536,7 @@ async def grant_start_handler(callback: CallbackQuery, state: FSMContext):
             "Введите ID пользователя для начисления:",
             reply_markup=admin_back_keyboard(),
         )
+    await callback.answer()
 
 
 @router.message(AdminState.get_user_id_for_grant)
@@ -540,7 +546,8 @@ async def grant_user_id_handler(message: Message, state: FSMContext):
             raise ValueError
         user_id = int(message.text)
         if not await db.user_exists(user_id):
-            return await message.answer("Пользователь не найден.")
+            await message.answer("Пользователь не найден.")
+            return
         await state.update_data(target_id=user_id)
         await state.set_state(AdminState.get_amount_for_grant)
         await message.answer("Введите сумму для начисления:")
@@ -595,6 +602,7 @@ async def grant_confirm_handler(
             f"✅ Успешно начислено {amount} ⭐ пользователю `{target_id}`.",
             reply_markup=admin_back_keyboard(),
         )
+    await callback.answer()
 
 
 # --- Debit ---
@@ -605,6 +613,7 @@ async def debit_start_handler(callback: CallbackQuery, state: FSMContext):
         await callback.message.edit_text(
             "Введите ID пользователя для списания:", reply_markup=admin_back_keyboard()
         )
+    await callback.answer()
 
 
 @router.message(AdminState.get_user_id_for_debit)
@@ -614,7 +623,8 @@ async def debit_user_id_handler(message: Message, state: FSMContext):
             raise ValueError
         user_id = int(message.text)
         if not await db.user_exists(user_id):
-            return await message.answer("Пользователь не найден.")
+            await message.answer("Пользователь не найден.")
+            return
         await state.update_data(target_id=user_id)
         await state.set_state(AdminState.get_amount_for_debit)
         await message.answer("Введите сумму для списания:")
@@ -633,9 +643,10 @@ async def debit_amount_handler(message: Message, state: FSMContext):
         data = await state.get_data()
         balance = await db.get_user_balance(data["target_id"])
         if amount > balance:
-            return await message.answer(
+            await message.answer(
                 f"Нельзя списать больше, чем есть у пользователя на балансе ({balance} ⭐)."
             )
+            return
 
         await state.update_data(amount=amount)
         await state.set_state(AdminState.confirm_debit)
@@ -675,6 +686,7 @@ async def debit_confirm_handler(
             f"✅ Успешно списано {amount} ⭐ у пользователя `{target_id}`.",
             reply_markup=admin_back_keyboard(),
         )
+    await callback.answer()
 
 
 # --- FSM Reset ---
@@ -686,6 +698,7 @@ async def reset_fsm_start_handler(callback: CallbackQuery, state: FSMContext):
             "Введите ID пользователя для сброса состояния (FSM):",
             reply_markup=admin_back_keyboard(),
         )
+    await callback.answer()
 
 
 @router.message(AdminState.get_user_id_for_fsm_reset)
@@ -695,7 +708,8 @@ async def reset_fsm_user_id_handler(message: Message, state: FSMContext):
             raise ValueError
         user_id = int(message.text)
         if not await db.user_exists(user_id):
-            return await message.answer("Пользователь не найден.")
+            await message.answer("Пользователь не найден.")
+            return
         await state.update_data(target_id=user_id)
         await state.set_state(AdminState.confirm_fsm_reset)
         await message.answer(
@@ -737,3 +751,4 @@ async def reset_fsm_confirm_handler(
             f"✅ Состояние для пользователя `{target_id}` успешно сброшено.",
             reply_markup=admin_back_keyboard(),
         )
+    await callback.answer()

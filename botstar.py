@@ -120,6 +120,15 @@ async def main():
     dp.include_router(menu_handler.router)
     dp.include_router(user_handlers.router)
 
+    # Установка постоянного меню (команды) для пользователей
+    await bot.set_my_commands(
+        [
+            {"command": "start", "description": "🚀 Перезапустить бота"},
+            {"command": "menu", "description": "🏠 Главное меню"},
+            {"command": "bonus", "description": "🎁 Ежедневный бонус"},
+        ]
+    )
+
     # Запуск бота
     await bot.delete_webhook(drop_pending_updates=True)
     logging.info("Бот запускается...")

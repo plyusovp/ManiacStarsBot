@@ -691,10 +691,11 @@ async def add_user(
                         initial_balance,
                     ),
                 )
-                await db.execute(
-                    "INSERT INTO ledger_entries (user_id, amount, reason) VALUES (?, ?, ?)",
-                    (user_id, initial_balance, "initial_balance"),
-                )
+                if initial_balance > 0:
+                    await db.execute(
+                        "INSERT INTO ledger_entries (user_id, amount, reason) VALUES (?, ?, ?)",
+                        (user_id, initial_balance, "initial_balance"),
+                    )
 
                 if referrer_id:
                     await db.execute(
@@ -785,7 +786,8 @@ async def get_top_referrers(limit=5):
         """,
             (limit,),
         )
-        return await cursor.fetchall()
+        rows = await cursor.fetchall()
+        return [dict(row) for row in rows]
 
 
 async def get_promocode(code: str) -> Optional[dict]:
@@ -873,42 +875,55 @@ async def activate_promo(user_id, code, idem_key: str):
 
 
 async def get_daily_bonus(user_id):
+    """
+    Атомарно выдает ежедневный бонус.
+    Сначала пытается обновить время бонуса с условием, что прошло >24ч.
+    Если обновление успешно (rowcount=1), значит, бонус можно выдать.
+    Если нет (rowcount=0), значит, бонус уже был взят.
+    """
     async with connect() as db:
         current_time = int(time.time())
+        # 24 часа в секундах
         time_limit = current_time - 86400
 
+        # Админы могут получать бонус без ограничений по времени для тестов
         is_admin = user_id in settings.ADMIN_IDS
 
         try:
-            # Используем общий механизм транзакций, чтобы избежать конфликтов
             await _begin_transaction(db)
 
+            # Формируем запрос на обновление
             update_query = "UPDATE users SET last_bonus_time = ? WHERE user_id = ?"
             params = [current_time, user_id]
+            # Добавляем условие по времени для обычных пользователей
             if not is_admin:
                 update_query += " AND last_bonus_time < ?"
                 params.append(time_limit)
 
             cursor = await db.execute(update_query, tuple(params))
 
+            # Если ни одна строка не была обновлена, значит, время еще не пришло
             if cursor.rowcount == 0:
-                await db.rollback()
+                await db.rollback()  # Откатываем пустую транзакцию
+                # Получаем последнее время бонуса, чтобы сказать пользователю, сколько ждать
                 cursor = await db.execute(
                     "SELECT last_bonus_time FROM users WHERE user_id = ?", (user_id,)
                 )
                 res = await cursor.fetchone()
-                last_bonus_time = res[0] if res else 0
- codex/fix-telegram-bot-issues-udhhyp
+                last_bonus_time = res["last_bonus_time"] if res else 0
+
                 elapsed = current_time - last_bonus_time
                 seconds_left = max(0, 86400 - elapsed)
                 return {"status": "wait", "seconds_left": seconds_left}
 
-
-            reward = 1
+            # Если обновление прошло успешно, начисляем бонус
+            reward = 1  # Сумма ежедневного бонуса
             if not await _change_balance(db, user_id, reward, "daily_bonus"):
+                # Если по какой-то причине баланс не начислился, откатываем все
                 await db.rollback()
                 return {"status": "error", "reason": "update_failed"}
 
+            # Все успешно, подтверждаем транзакцию
             await db.commit()
             return {"status": "success", "reward": reward}
         except Exception:
@@ -1159,7 +1174,7 @@ async def get_user_duel_stats(user_id: int):
         )
         stats = await cursor.fetchone()
         return (
-            {"wins": stats[0], "losses": stats[1]}
+            {"wins": stats["duel_wins"], "losses": stats["duel_losses"]}
             if stats
             else {"wins": 0, "losses": 0}
         )
@@ -1193,7 +1208,8 @@ async def interrupt_timer_match(match_id: int):
         await db.commit()
 
 
-async def get_all_users():
+async def get_all_users() -> List[int]:
+    """Возвращает список всех ID пользователей."""
     async with connect() as db:
         cursor = await db.execute("SELECT user_id FROM users")
         return [row[0] for row in await cursor.fetchall()]
@@ -1225,13 +1241,15 @@ async def get_active_promos():
         return await cursor.fetchall()
 
 
-async def get_users_for_notification():
+async def get_users_for_notification() -> List[int]:
+    """
+    Возвращает ID пользователей, которые не забирали
+    ежедневный бонус более 24 часов.
+    """
     async with connect() as db:
-        day_ago = int(time.time()) - 86400
+        day_ago = int(time.time()) - 86400  # 24 часа в секундах
         cursor = await db.execute(
- codex/fix-telegram-bot-issues-udhhyp
             "SELECT user_id FROM users WHERE last_bonus_time < ?",
-
             (day_ago,),
         )
         return [row[0] for row in await cursor.fetchall()]
@@ -1242,7 +1260,8 @@ async def get_all_achievements():
         cursor = await db.execute(
             "SELECT id, name FROM achievements ORDER BY rarity, name"
         )
-        return await cursor.fetchall()
+        rows = await cursor.fetchall()
+        return [dict(row) for row in rows]
 
 
 async def get_user_achievements(user_id):
@@ -1259,38 +1278,35 @@ async def get_achievement_details(ach_id):
             "SELECT name, description, reward, rarity FROM achievements WHERE id = ?",
             (ach_id,),
         )
-        return await cursor.fetchone()
+        row = await cursor.fetchone()
+        return dict(row) if row else None
 
 
-async def get_bot_statistics():
+async def get_bot_statistics() -> Dict[str, int]:
     """Собирает общую статистику по боту."""
     async with connect() as db:
         cursor = await db.execute("SELECT COUNT(user_id) FROM users")
         total_users = (await cursor.fetchone())[0]
 
-        today_start_ts = int(
-            datetime.datetime.now()
-            .replace(hour=0, minute=0, second=0, microsecond=0)
-            .timestamp()
+        today_start = datetime.datetime.now().replace(
+            hour=0, minute=0, second=0, microsecond=0
         )
+        today_start_ts = int(today_start.timestamp())
+
         cursor = await db.execute(
             "SELECT COUNT(user_id) FROM users WHERE registration_date >= ?",
             (today_start_ts,),
         )
         new_today = (await cursor.fetchone())[0]
 
-        week_ago_ts = int(
-            (datetime.datetime.now() - datetime.timedelta(days=7)).timestamp()
-        )
+        week_ago_ts = int((today_start - datetime.timedelta(days=7)).timestamp())
         cursor = await db.execute(
             "SELECT COUNT(user_id) FROM users WHERE registration_date >= ?",
             (week_ago_ts,),
         )
         new_week = (await cursor.fetchone())[0]
 
-        day_ago_ts = int(
-            (datetime.datetime.now() - datetime.timedelta(days=1)).timestamp()
-        )
+        day_ago_ts = int((today_start - datetime.timedelta(days=1)).timestamp())
         cursor = await db.execute(
             "SELECT COUNT(user_id) FROM users WHERE last_seen >= ?", (day_ago_ts,)
         )
