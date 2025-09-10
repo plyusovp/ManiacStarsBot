@@ -37,13 +37,20 @@ async def show_main_menu(bot: Bot, chat_id: int, message_id: int):
     balance = await db.get_user_balance(chat_id)
     caption = LEXICON["main_menu"].format(balance=balance)
     media = InputMediaPhoto(media=settings.PHOTO_MAIN_MENU, caption=caption)
-    await safe_edit_media(
+    success = await safe_edit_media(
         bot=bot,
         media=media,
         chat_id=chat_id,
         message_id=message_id,
         reply_markup=main_menu_keyboard(),
     )
+    if not success:
+        await bot.send_photo(
+            chat_id=chat_id,
+            photo=settings.PHOTO_MAIN_MENU,
+            caption=caption,
+            reply_markup=main_menu_keyboard(),
+        )
 
 
 @router.callback_query(MenuCallback.filter(F.name == "games"))
