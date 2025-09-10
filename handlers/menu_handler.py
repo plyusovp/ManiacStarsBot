@@ -1,6 +1,6 @@
 # handlers/menu_handler.py
 from aiogram import Bot, F, Router
-from aiogram.filters import Command
+from aiogram.filters import Command, or_f
 from aiogram.fsm.context import FSMContext
 from aiogram.types import CallbackQuery, InputMediaPhoto, Message
 
@@ -24,7 +24,7 @@ from lexicon.texts import LEXICON
 router = Router()
 
 
-@router.message(Command("start") | F.text == "🏠 Меню")
+@router.message(or_f(Command("start"), F.text == "🏠 Меню"))
 async def start_handler(message: Message, state: FSMContext, bot: Bot):
     await clean_junk_message(state, bot)
     await show_main_menu(
