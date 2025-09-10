@@ -6,6 +6,7 @@ from contextlib import suppress
 from aiogram import Bot, Dispatcher
 from aiogram.client.default import DefaultBotProperties
 from aiogram.enums import ParseMode
+from aiogram.exceptions import TelegramNetworkError
 from aiogram.fsm.storage.memory import MemoryStorage
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 
@@ -120,19 +121,25 @@ async def main():
     dp.include_router(menu_handler.router)
     dp.include_router(user_handlers.router)
 
-    # Установка постоянного меню (команды) для пользователей
-    await bot.set_my_commands(
-        [
-            {"command": "start", "description": "🚀 Перезапустить бота"},
-            {"command": "menu", "description": "🏠 Главное меню"},
-            {"command": "bonus", "description": "🎁 Ежедневный бонус"},
-        ]
-    )
+    try:
+        # Установка постоянного меню (команды) для пользователей
+        await bot.set_my_commands(
+            [
+                {"command": "start", "description": "🚀 Перезапустить бота"},
+                {"command": "menu", "description": "🏠 Главное меню"},
+                {"command": "bonus", "description": "🎁 Ежедневный бонус"},
+            ]
+        )
 
-    # Запуск бота
-    await bot.delete_webhook(drop_pending_updates=True)
-    logging.info("Бот запускается...")
-    await dp.start_polling(bot)
+        # Запуск бота
+        await bot.delete_webhook(drop_pending_updates=True)
+        logging.info("Бот запускается...")
+        await dp.start_polling(bot)
+    except TelegramNetworkError as e:
+        logging.error("Не удалось подключиться к Telegram API: %s", e)
+    finally:
+        scheduler.shutdown()
+        await bot.session.close()
 
 
 if __name__ == "__main__":
