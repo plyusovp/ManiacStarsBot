@@ -13,7 +13,7 @@ from aiogram.types import CallbackQuery
 
 from config import settings
 from database import db
-from handlers.utils import clean_junk_message, safe_edit_caption
+from handlers.utils import clean_junk_message, safe_edit_caption, safe_send_message
 from keyboards.factories import GameCallback, TimerCallback
 from keyboards.inline import (
     timer_finish_keyboard,
@@ -54,28 +54,17 @@ class TimerMatch:
 
 
 async def start_timer_game(
-    bot: Bot, p1_id: int, p2_id: int, stake: int, p1_msg_id: int, p2_msg_id: int
+    bot: Bot,
+    match_id: int,
+    p1_id: int,
+    p2_id: int,
+    stake: int,
+    p1_msg_id: int,
+    p2_msg_id: int,
+    stop_second: float,
 ):
-    """Starts the game: creates a DB entry, sends messages, and starts the timer."""
-    result, stop_second = await db.create_timer_match(p1_id, p2_id, stake)
-    if not result:
-        logger.error(f"Failed to create timer match in DB for {p1_id} and {p2_id}")
-        await db.add_balance_unrestricted(p1_id, stake, "timer_refund")
-        await db.add_balance_unrestricted(p2_id, stake, "timer_refund")
-        await bot.send_message(
-            p1_id, "Произошла ошибка при создании игры. Средства возвращены."
-        )
-        await bot.send_message(
-            p2_id, "Произошла ошибка при создании игры. Средства возвращены."
-        )
-        return
-
-    match_id = result
+    """Sends messages and starts the timer for an already created match."""
     target_time = stop_second
-    if not match_id or not target_time:
-        # Handle case where result might not unpack correctly
-        return
-
     match = TimerMatch(
         match_id, p1_id, p2_id, stake, float(target_time), p1_msg_id, p2_msg_id
     )
@@ -207,11 +196,10 @@ async def resolve_timer_game(bot: Bot, match_id: int):
 # --- Callback Handlers ---
 
 
-@router.callback_query(
-    GameCallback.filter((F.name == "timer") & (F.action == "start"))
-)
+@router.callback_query(GameCallback.filter((F.name == "timer") & (F.action == "start")))
 async def timer_menu_handler(callback: CallbackQuery, state: FSMContext, bot: Bot):
     """Displays the 'Star Timer' game menu."""
+    await state.clear()
     await clean_junk_message(state, bot)
     if not callback.message:
         return
@@ -251,16 +239,38 @@ async def find_timer_handler(
                 f"Timer match found! {user_id} vs {opponent_id} with stake {stake}"
             )
 
-            asyncio.create_task(
-                start_timer_game(
-                    bot,
-                    user_id,
-                    opponent_id,
-                    stake,
-                    callback.message.message_id,
-                    opponent_msg_id,
-                )
+            # Atomically create the match in the database
+            match_id, stop_second = await db.create_timer_match(
+                opponent_id, user_id, stake
             )
+
+            if match_id and stop_second:
+                # Success! Start the game.
+                asyncio.create_task(
+                    start_timer_game(
+                        bot,
+                        match_id,
+                        opponent_id,
+                        user_id,
+                        stake,
+                        opponent_msg_id,
+                        callback.message.message_id,
+                        stop_second,
+                    )
+                )
+            else:
+                # Failure. Put opponent back in queue and notify both players.
+                timer_queue[stake][opponent_id] = opponent_msg_id
+                await callback.answer(
+                    "Не удалось начать игру. Возможно, у вас или соперника не хватило средств.",
+                    show_alert=True,
+                )
+                await safe_send_message(
+                    bot,
+                    opponent_id,
+                    "Попытка начать игру в таймер не удалась, поиск продолжается.",
+                )
+
         else:
             timer_queue[stake][user_id] = callback.message.message_id
             await safe_edit_caption(

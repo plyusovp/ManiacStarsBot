@@ -11,7 +11,7 @@ from aiogram.types import CallbackQuery
 
 from config import settings
 from database import db
-from handlers.utils import safe_delete, safe_edit_caption
+from handlers.utils import safe_delete, safe_edit_caption, safe_send_message
 from keyboards.factories import DuelCallback, GameCallback
 from keyboards.inline import (
     back_to_duels_keyboard,
@@ -216,6 +216,7 @@ async def resolve_game_end(bot: Bot, match: DuelMatch):
 
 async def start_duel_game(
     bot: Bot,
+    match_id: int,
     p1_id: int,
     p2_id: int,
     stake: int,
@@ -224,14 +225,6 @@ async def start_duel_game(
     trace_id: str,
 ):
     """Initializes and starts a new duel match."""
-    match_id = await db.create_duel(p1_id, p2_id, stake)
-    if not match_id:
-        logging.error(
-            f"Failed to create duel in DB for {p1_id} vs {p2_id}",
-            extra={"trace_id": trace_id},
-        )
-        return
-
     p1 = Player(id=p1_id, message_id=p1_msg_id, hand=deal_hand())
     p2 = Player(id=p2_id, message_id=p2_msg_id, hand=deal_hand())
     match = DuelMatch(match_id=match_id, p1=p1, p2=p2, stake=stake, trace_id=trace_id)
@@ -245,11 +238,10 @@ async def start_duel_game(
 
 
 # --- Handlers ---
-@router.callback_query(
-    GameCallback.filter((F.name == "duel") & (F.action == "start"))
-)
+@router.callback_query(GameCallback.filter((F.name == "duel") & (F.action == "start")))
 async def duel_menu_handler(callback: CallbackQuery, state: FSMContext, bot: Bot):
     """Shows the duel menu with stake options."""
+    await state.clear()
     if not callback.message:
         return
     user_id = callback.from_user.id
@@ -288,31 +280,47 @@ async def find_duel_handler(
 
     async with DUEL_MATCHMAKING_LOCK:
         if stake in duel_queue:
-            opponent_id, opponent_msg_id, opponent_trace_id = duel_queue.pop(stake)
+            opponent_id, opponent_msg_id, opponent_trace_id = duel_queue[stake]
+
             if opponent_id == user_id:  # Prevent playing against oneself
-                duel_queue[stake] = (opponent_id, opponent_msg_id, opponent_trace_id)
                 return await callback.answer("Вы уже в поиске.", show_alert=True)
 
-            logging.info(f"Duel match found for stake {stake}", extra=extra)
+            # --- Atomic duel creation ---
+            # We try to create a match. DB handles balances atomically.
+            match_id = await db.create_duel(opponent_id, user_id, stake)
 
-            await db.spend_balance(
-                user_id, stake, "duel_stake_hold", ref_id=str(opponent_id)
-            )
-            await db.spend_balance(
-                opponent_id, stake, "duel_stake_hold", ref_id=str(user_id)
-            )
-
-            asyncio.create_task(
-                start_duel_game(
+            if match_id:
+                # Success! Remove opponent from queue and start the game.
+                del duel_queue[stake]
+                logging.info(
+                    f"Duel match created successfully: {match_id}", extra=extra
+                )
+                asyncio.create_task(
+                    start_duel_game(
+                        bot,
+                        match_id,
+                        opponent_id,
+                        user_id,
+                        stake,
+                        opponent_msg_id,
+                        callback.message.message_id,
+                        trace_id,
+                    )
+                )
+            else:
+                # Failure, likely due to funds. Notify both players.
+                logging.warning(
+                    f"Failed to create duel atomically for stake {stake}", extra=extra
+                )
+                await callback.answer(
+                    "Не удалось начать игру. Возможно, у вас или у соперника не хватило средств.",
+                    show_alert=True,
+                )
+                await safe_send_message(
                     bot,
                     opponent_id,
-                    user_id,
-                    stake,
-                    opponent_msg_id,
-                    callback.message.message_id,
-                    trace_id,
+                    "Попытка начать дуэль не удалась, поиск продолжается.",
                 )
-            )
         else:
             logging.info("User started duel search", extra=extra)
             if callback.message:

@@ -1,6 +1,5 @@
 # handlers/menu_handler.py
 from aiogram import Bot, F, Router
-from aiogram.filters import Command, or_f
 from aiogram.fsm.context import FSMContext
 from aiogram.types import CallbackQuery, InputMediaPhoto, Message
 
@@ -24,26 +23,24 @@ from lexicon.texts import LEXICON
 router = Router()
 
 
-@router.message(or_f(Command("start"), F.text == "🏠 Меню"))
-async def start_handler(message: Message, state: FSMContext, bot: Bot):
-    await clean_junk_message(state, bot)
-    await show_main_menu(
-        bot=bot, chat_id=message.chat.id, message_id=message.message_id
-    )
+# Note: The /start handler has been removed from this file to resolve conflicts.
+# The main /start logic is now exclusively in user_handlers.py
 
 
-async def show_main_menu(bot: Bot, chat_id: int, message_id: int):
+async def show_main_menu(bot: Bot, chat_id: int, message: Message):
     """Отображает или обновляет главное меню."""
     balance = await db.get_user_balance(chat_id)
     caption = LEXICON["main_menu"].format(balance=balance)
     media = InputMediaPhoto(media=settings.PHOTO_MAIN_MENU, caption=caption)
+    # Try editing the existing message if possible
     success = await safe_edit_media(
         bot=bot,
         media=media,
         chat_id=chat_id,
-        message_id=message_id,
+        message_id=message.message_id,
         reply_markup=main_menu_keyboard(),
     )
+    # If editing fails (e.g., it's not a media message), send a new one
     if not success:
         await bot.send_photo(
             chat_id=chat_id,
@@ -56,11 +53,13 @@ async def show_main_menu(bot: Bot, chat_id: int, message_id: int):
 @router.callback_query(MenuCallback.filter(F.name == "games"))
 async def games_menu_handler(callback: CallbackQuery, state: FSMContext, bot: Bot):
     """Отображает меню 'Игры'."""
+    await state.clear()
     await clean_junk_message(state, bot)
     media = InputMediaPhoto(
         media=settings.PHOTO_GAMES_MENU, caption=LEXICON["games_menu"]
     )
     if callback.message:
+        # Пытаемся отредактировать существующее сообщение
         success = await safe_edit_media(
             bot=bot,
             media=media,
@@ -68,12 +67,15 @@ async def games_menu_handler(callback: CallbackQuery, state: FSMContext, bot: Bo
             message_id=callback.message.message_id,
             reply_markup=games_menu_keyboard(),
         )
-        # Если редактирование не удалось, удаляем старое и отправляем новое сообщение
+        # Если редактирование не удалось (например, сообщение не содержит медиа),
+        # удаляем старое сообщение и отправляем новое с фото.
         if not success:
             await safe_delete(
                 bot, callback.message.chat.id, callback.message.message_id
             )
-            await callback.message.answer_photo(
+            # Используем bot.send_photo с chat_id, так как исходное сообщение удалено
+            await bot.send_photo(
+                chat_id=callback.from_user.id,
                 photo=settings.PHOTO_GAMES_MENU,
                 caption=LEXICON["games_menu"],
                 reply_markup=games_menu_keyboard(),

@@ -48,15 +48,15 @@ class Settings(BaseSettings):
     URL_WITHDRAWALS: str
     URL_SUPPORT: str
 
-    # --- Медиа ---
-    PHOTO_MAIN_MENU: str = "https://i.postimg.cc/0MJDw9T8/main_menu.jpg"
-    PHOTO_GAMES_MENU: str = "https://i.postimg.cc/5yL6Vz3F/games.jpg"
-    PHOTO_WITHDRAW: str = "https://i.postimg.cc/kVLt9kBL/withdraw.jpg"
-    PHOTO_PROFILE: str = "https://i.postimg.cc/9zdq5gVN/profile.jpg"
-    PHOTO_TOP: str = "https://i.postimg.cc/Z9vCfVVH/top.jpg"
-    PHOTO_PROMO: str = "https://i.postimg.cc/0r0ddy6Q/promo.jpg"
-    PHOTO_EARN_STARS: str = "https://i.postimg.cc/tYRdrGPz/earn_stars.jpg"
-    PHOTO_ACHIEVEMENTS: str = "https://i.postimg.cc/8JBWHZz3/achievements.jpg"
+    # --- Медиа (ЗАМЕНЕНЫ НА FILE_ID) ---
+    PHOTO_MAIN_MENU: str = "AgACAgQAAxkBAAIFT2i-3VhNvRHGW-NGknLID5K21YbRAAK_yjEbz73wUfBVjxgwJu5VAQADAgADeAADNgQ"
+    PHOTO_GAMES_MENU: str = "AgACAgQAAxkBAAIFUWi-3e3DDGQnfmSgI07_ARaCegSHAALCyjEbz73wUbIz4Aya-g4-AQADAgADeQADNgQ"
+    PHOTO_WITHDRAW: str = "AgACAgQAAxkBAAIFU2i-3f8Ot6ufYOBbkfBs-KVcpyyYAALDyjEbz73wUZ4UbKxxqSbIAQADAgADeQADNgQ"
+    PHOTO_PROFILE: str = "AgACAgQAAxkBAAIFVWi-3g2kcB4cjoiZfheZyeM-iKopAALEyjEbz73wUYJFbRA6z9_NAQADAgADeQADNgQ"
+    PHOTO_TOP: str = "AgACAgQAAxkBAAIFV2i-3hsTMEWzhDJifM3Z7Dce1T_3AALFyjEbz73wUeUKIlH4jeo4AQADAgADeQADNgQ"
+    PHOTO_PROMO: str = "AgACAgQAAxkBAAIFWWi-3iiKHkhTO8mXtvN_txuughqcAALGyjEbz73wUSguJjSO95ZUAQADAgADeQADNgQ"
+    PHOTO_EARN_STARS: str = "AgACAgQAAxkBAAIFW2i-3js0V4olmjSsk4l9MJd6fx-1AALHyjEbz73wUa28ugEb9XUYAQADAgADeQADNgQ"
+    PHOTO_ACHIEVEMENTS: str = "AgACAgQAAxkBAAIFXWi-3mTEOLiTgcMNVtQ3B4ZSqgjvAALIyjEbz73wUdrt80NH-tCCAQADAgADeQADNgQ"
 
     model_config = SettingsConfigDict(
         env_file=".env", env_file_encoding="utf-8", extra="ignore"

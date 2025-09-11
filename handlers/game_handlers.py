@@ -69,6 +69,7 @@ async def coinflip_menu_handler(
     callback: CallbackQuery, state: FSMContext, bot: Bot
 ) -> None:
     """Отображает меню выбора уровня сложности для Coinflip."""
+    await state.clear()
     await clean_junk_message(state, bot)
     await state.clear()
     balance = await db.get_user_balance(callback.from_user.id)
@@ -160,15 +161,20 @@ async def coinflip_stake_selected_handler(
     if not result.get("success"):
         error_reason = result.get("reason", "unknown_error")
         logging.error(f"Coinflip round failed. Reason: {error_reason}", extra=extra)
-        final_text = f"Произошла ошибка: {error_reason}. Попробуйте еще раз."
-        if callback.message:
-            await safe_edit_caption(
-                bot,
-                caption=final_text,
-                chat_id=callback.message.chat.id,
-                message_id=callback.message.message_id,
-                reply_markup=coinflip_stake_keyboard(level),
-            )
+
+        user_friendly_error = "Произошла ошибка в игре. Средства не были списаны."
+        if error_reason == "insufficient_funds":
+            user_friendly_error = "Недостаточно средств для этой ставки."
+
+        await callback.answer(user_friendly_error, show_alert=True)
+
+        # Обновляем меню, чтобы показать актуальный баланс и дать попробовать снова
+        await coinflip_level_selected_handler(
+            callback,
+            CoinflipCallback(action="select_level", value=level),
+            state,
+            bot,
+        )
         return
 
     new_balance = await db.get_user_balance(user_id)

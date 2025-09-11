@@ -38,7 +38,7 @@ async def _begin_transaction(db: aiosqlite.Connection) -> None:
             await db.execute("BEGIN IMMEDIATE;")
             return
         except sqlite3.OperationalError as e:
-            if "transaction" in str(e).lower():
+            if "transaction" in str(e).lower() or "locked" in str(e).lower():
                 await asyncio.sleep(0.001)
             else:
                 raise
@@ -464,7 +464,7 @@ async def spend_balance(
                 exc_info=True,
                 extra={"user_id": user_id},
             )
-            raise
+            return False
 
 
 async def add_balance_with_checks(
@@ -989,10 +989,32 @@ async def grant_achievement(user_id, ach_id, bot: Bot) -> bool:
 
 
 async def create_duel(p1_id: int, p2_id: int, stake: int) -> Optional[int]:
-    """Создает дуэль в БД."""
+    """
+    Атомарно создает дуэль: списывает ставки и создает матч в одной транзакции.
+    Возвращает ID матча в случае успеха, иначе None.
+    """
     async with connect() as db:
         try:
-            await db.execute("BEGIN IMMEDIATE;")
+            await _begin_transaction(db)
+
+            # Пытаемся списать средства с обоих игроков
+            p1_success = await _change_balance(
+                db, p1_id, -stake, "duel_stake_hold", f"vs_{p2_id}"
+            )
+            p2_success = await _change_balance(
+                db, p2_id, -stake, "duel_stake_hold", f"vs_{p1_id}"
+            )
+
+            # Если у кого-то не хватает средств, откатываем транзакцию
+            if not p1_success or not p2_success:
+                await db.rollback()
+                logging.warning(
+                    f"Failed to create duel between {p1_id} and {p2_id} due to insufficient funds."
+                )
+                # Не нужно возвращать деньги вручную, rollback сделает это за нас
+                return None
+
+            # Создаем запись о матче
             bank = stake * 2
             rake_percent = settings.DUEL_RAKE_PERCENT
             cursor = await db.execute(
@@ -1000,16 +1022,23 @@ async def create_duel(p1_id: int, p2_id: int, stake: int) -> Optional[int]:
                 (stake, bank, rake_percent),
             )
             match_id = cursor.lastrowid
-            if match_id:
-                await db.execute(
-                    "INSERT INTO duel_players (match_id, user_id, role) VALUES (?, ?, 'p1'), (?, ?, 'p2')",
-                    (match_id, p1_id, match_id, p2_id),
-                )
+            if not match_id:
+                raise aiosqlite.Error("Failed to create duel match entry.")
+
+            # Добавляем игроков в матч
+            await db.execute(
+                "INSERT INTO duel_players (match_id, user_id, role) VALUES (?, ?, 'p1'), (?, ?, 'p2')",
+                (match_id, p1_id, match_id, p2_id),
+            )
+
             await db.commit()
             return match_id
         except Exception:
             await db.rollback()
-            logging.error("Error in create_duel", exc_info=True)
+            logging.error(
+                f"Atomic duel creation failed for users {p1_id} and {p2_id}",
+                exc_info=True,
+            )
             return None
 
 
@@ -1076,20 +1105,18 @@ async def finish_duel_atomic(
 async def create_timer_match(
     p1_id: int, p2_id: int, stake: int
 ) -> tuple[Optional[int], Optional[float]]:
-    """Создает таймер-матч, списывая ставки с обоих игроков."""
+    """Создает таймер-матч, списывая ставки с обоих игроков в одной транзакции."""
     async with connect() as db:
         try:
-            await db.execute("BEGIN IMMEDIATE;")
+            await _begin_transaction(db)
 
             p1_success = await _change_balance(db, p1_id, -stake, "timer_stake_hold")
-            if not p1_success:
-                await db.rollback()
-                return None, None
-
             p2_success = await _change_balance(db, p2_id, -stake, "timer_stake_hold")
-            if not p2_success:
-                await _change_balance(db, p1_id, stake, "timer_creation_refund")
-                await db.rollback()
+
+            if not p1_success or not p2_success:
+                await (
+                    db.rollback()
+                )  # Откатываем транзакцию, средства вернутся автоматически
                 return None, None
 
             bank = stake * 2
@@ -1254,6 +1281,7 @@ async def get_users_for_notification() -> List[int]:
             (day_ago,),
         )
         return [row[0] for row in await cursor.fetchall()]
+
 
 async def get_all_achievements():
     async with connect() as db:

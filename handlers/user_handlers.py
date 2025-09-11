@@ -4,7 +4,7 @@ import uuid
 
 from aiogram import Bot, F, Router
 from aiogram.exceptions import TelegramBadRequest
-from aiogram.filters import Command, CommandObject, CommandStart, or_f
+from aiogram.filters import Command, CommandObject, or_f
 from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import State, StatesGroup
 from aiogram.types import CallbackQuery, InputMediaPhoto, Message
@@ -44,25 +44,16 @@ class UserState(StatesGroup):
 
 
 # --- Command Handlers ---
-@router.message(CommandStart())
+@router.message(Command("start"))
 async def start_handler(
     message: Message,
     state: FSMContext,
     bot: Bot,
     command: CommandObject,
 ):
-    # ВРЕМЕННЫЙ КОД ДЛЯ ПОЛУЧЕНИЯ FILE_ID
-    if message.photo:
-        await message.answer(f"Вот ID этого фото: `{message.photo[-1].file_id}`")
-        # Останавливаем выполнение, чтобы не показывать меню
-        return
-    # КОНЕЦ ВРЕМЕНЕННОГО КОДА
-
     # Этот обработчик теперь будет игнорироваться, если аргументы начинаются с 'reward_'
     # благодаря более специфичному фильтру в admin_handlers.
     if command.args and command.args.startswith("reward_"):
-        # Это команда для админа, этот хендлер не должен ее обрабатывать.
-        # Aiogram должен был уже отфильтровать это, но на всякий случай.
         return
 
     await state.clear()
@@ -118,19 +109,11 @@ async def menu_handler(message: Message, state: FSMContext):
     balance = await db.get_user_balance(message.from_user.id)
     caption = LEXICON["main_menu"].format(balance=balance)
 
-    # --- НАЧАЛО ИЗМЕНЕНИЙ (ВРЕМЕННАЯ ДИАГНОСТИКА) ---
-
-    # Старый код выключаем, добавляя # в начале
-    # await message.answer_photo(
-    #     photo=settings.PHOTO_MAIN_MENU,
-    #     caption=caption,
-    #     reply_markup=main_menu_keyboard(),
-    # )
-
-    # А вместо него добавляем простой текст
-    await message.answer(caption, reply_markup=main_menu_keyboard())
-
-    # --- КОНЕЦ ИЗМЕНЕНИЙ ---
+    await message.answer_photo(
+        photo=settings.PHOTO_MAIN_MENU,
+        caption=caption,
+        reply_markup=main_menu_keyboard(),
+    )
 
 
 @router.message(Command("bonus"))
@@ -258,6 +241,8 @@ async def enter_promo_start_handler(
 
 @router.message(UserState.enter_promo, F.text)
 async def process_promo_handler(message: Message, state: FSMContext, bot: Bot):
+    if not message.text or not message.from_user:
+        return
     promo_code = message.text.upper()
     user_id = message.from_user.id
     await safe_delete(bot, message.chat.id, message.message_id)
@@ -279,12 +264,14 @@ async def process_promo_handler(message: Message, state: FSMContext, bot: Bot):
         await message.answer(f"❌ Не удалось активировать промокод. Ошибка: {result}")
 
     await state.clear()
+    # After action, show the main menu again by calling the handler
     await menu_handler(message, state)
 
 
 # --- Gifts/Withdrawal Section ---
 @router.callback_query(MenuCallback.filter(F.name == "gifts"))
 async def gifts_handler(callback: CallbackQuery, state: FSMContext, bot: Bot):
+    await state.clear()
     await clean_junk_message(state, bot)
     if not callback.message:
         return await callback.answer()
@@ -331,7 +318,6 @@ async def gifts_handler(callback: CallbackQuery, state: FSMContext, bot: Bot):
 async def withdraw_start_handler(callback: CallbackQuery, state: FSMContext, bot: Bot):
     await state.set_state(UserState.enter_withdrawal_amount)
     if callback.message:
-        # Сохраняем ID оригинального сообщения, чтобы потом его отредактировать
         await state.update_data(original_message_id=callback.message.message_id)
         await safe_edit_caption(
             bot=bot,
@@ -347,6 +333,9 @@ async def withdraw_start_handler(callback: CallbackQuery, state: FSMContext, bot
 async def process_withdrawal_amount_handler(
     message: Message, state: FSMContext, bot: Bot
 ):
+    if not message.text or not message.from_user:
+        return
+
     data = await state.get_data()
     original_message_id = data.get("original_message_id")
     await safe_delete(bot, message.chat.id, message.message_id)

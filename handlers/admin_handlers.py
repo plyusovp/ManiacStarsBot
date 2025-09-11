@@ -57,9 +57,7 @@ async def admin_panel_handler(message: Message, state: FSMContext):
 
 
 @router.callback_query(AdminCallback.filter(F.action == "main_panel"), AdminFilter())
-async def admin_panel_callback_handler(
-    callback: CallbackQuery, state: FSMContext, bot: Bot
-):
+async def admin_panel_callback_handler(callback: CallbackQuery, state: FSMContext):
     await state.clear()
     if callback.message:
         await callback.message.edit_text(
@@ -82,6 +80,8 @@ async def broadcast_start_handler(callback: CallbackQuery, state: FSMContext):
 
 @router.message(AdminState.get_broadcast_message)
 async def broadcast_message_handler(message: Message, state: FSMContext):
+    if not message.text:
+        return
     await state.update_data(broadcast_text=message.html_text)
     await state.set_state(AdminState.confirm_broadcast)
     await message.answer(
@@ -94,7 +94,7 @@ async def broadcast_message_handler(message: Message, state: FSMContext):
     AdminCallback.filter(F.action == "broadcast_confirm"), AdminFilter()
 )
 async def broadcast_confirm_handler(
-    callback: CallbackQuery, state: FSMContext, bot: Bot, data: dict
+    callback: CallbackQuery, state: FSMContext, bot: Bot
 ):
     fsm_data = await state.get_data()
     text = fsm_data.get("broadcast_text")
@@ -114,8 +114,7 @@ async def broadcast_confirm_handler(
     sent_count = 0
     failed_count = 0
 
-    extra = {"trace_id": data.get("trace_id"), "user_id": data.get("user_id")}
-    logging.info(f"Starting broadcast for {len(all_users)} users.", extra=extra)
+    logging.info(f"Starting broadcast for {len(all_users)} users.")
 
     for user_id in all_users:
         if await safe_send_message(bot, user_id, text):
@@ -124,9 +123,7 @@ async def broadcast_confirm_handler(
             failed_count += 1
         await asyncio.sleep(0.1)
 
-    logging.info(
-        f"Broadcast finished. Sent: {sent_count}, Failed: {failed_count}", extra=extra
-    )
+    logging.info(f"Broadcast finished. Sent: {sent_count}, Failed: {failed_count}")
 
     if callback.message:
         summary = (
@@ -152,9 +149,8 @@ async def user_info_prompt_handler(callback: CallbackQuery, state: FSMContext):
 
 
 @router.message(AdminState.get_user_id_for_info)
-async def user_info_process_handler(message: Message, state: FSMContext, data: dict):
+async def user_info_process_handler(message: Message, state: FSMContext):
     user_id = None
-    extra = {"trace_id": data.get("trace_id"), "user_id": data.get("user_id")}
 
     try:
         if message.text:
@@ -163,9 +159,7 @@ async def user_info_process_handler(message: Message, state: FSMContext, data: d
         if message.text:
             user_id = await db.get_user_by_username(message.text.replace("@", ""))
 
-    logging.info(
-        f"Admin requested info for user: {message.text} -> {user_id}", extra=extra
-    )
+    logging.info(f"Admin requested info for user: {message.text} -> {user_id}")
 
     if not user_id or not await db.user_exists(user_id):
         await message.answer(
@@ -202,10 +196,11 @@ async def rewards_list_handler(
         (total_rewards + settings.ADMIN_PAGE_SIZE - 1) // settings.ADMIN_PAGE_SIZE
     ) or 1
 
-    if not rewards and callback.message:
-        await callback.message.edit_text(
-            "Нет активных заявок на вывод.", reply_markup=admin_back_keyboard()
-        )
+    if not rewards:
+        if callback.message:
+            await callback.message.edit_text(
+                "Нет активных заявок на вывод.", reply_markup=admin_back_keyboard()
+            )
         await callback.answer()
         return
 
@@ -265,20 +260,15 @@ async def reward_details_handler(
     AdminCallback.filter(F.action == "reward_approve"), AdminFilter()
 )
 async def reward_approve_handler(
-    callback: CallbackQuery, callback_data: AdminCallback, bot: Bot, data: dict
+    callback: CallbackQuery, callback_data: AdminCallback, bot: Bot
 ):
     reward_id = callback_data.target_id
     if not reward_id:
         return
-    extra = {
-        "trace_id": data.get("trace_id"),
-        "user_id": data.get("user_id"),
-        "reward_id": reward_id,
-    }
 
     success = await db.approve_reward(reward_id, callback.from_user.id)
     if success:
-        logging.info("Reward approved", extra=extra)
+        logging.info(f"Reward {reward_id} approved by {callback.from_user.id}")
         reward_details = await db.get_reward_full_details(reward_id)
         if reward_details:
             reward = reward_details["reward"]
@@ -292,7 +282,7 @@ async def reward_approve_handler(
             callback, AdminCallback(action="rewards_list", page=1), bot
         )
     else:
-        logging.warning("Failed to approve reward (already processed?)", extra=extra)
+        logging.warning(f"Failed to approve reward {reward_id} (already processed?)")
         await callback.answer(
             "Не удалось одобрить заявку (возможно, уже обработана).", show_alert=True
         )
@@ -310,25 +300,21 @@ async def reward_reject_start_handler(
 
 
 @router.message(AdminState.get_rejection_reason, F.text)
-async def reward_reject_reason_handler(
-    message: Message, state: FSMContext, bot: Bot, data: dict
-):
+async def reward_reject_reason_handler(message: Message, state: FSMContext, bot: Bot):
+    if not message.text:
+        return
     fsm_data = await state.get_data()
     reward_id = fsm_data.get("reward_id_to_reject")
     reason = message.text
     if not reward_id or not reason:
         return
-    extra = {
-        "trace_id": data.get("trace_id"),
-        "user_id": data.get("user_id"),
-        "reward_id": reward_id,
-        "reason": reason,
-    }
 
     success = await db.reject_reward(reward_id, message.from_user.id, reason)
 
     if success:
-        logging.info("Reward rejected", extra=extra)
+        logging.info(
+            f"Reward {reward_id} rejected by {message.from_user.id}. Reason: {reason}"
+        )
         reward_details = await db.get_reward_full_details(reward_id)
         if reward_details:
             reward = reward_details["reward"]
@@ -339,7 +325,7 @@ async def reward_reject_reason_handler(
             )
         await message.answer(f"Заявка #{reward_id} отклонена.")
     else:
-        logging.warning("Failed to reject reward (already processed?)", extra=extra)
+        logging.warning(f"Failed to reject reward {reward_id} (already processed?)")
         await message.answer(
             f"Не удалось отклонить заявку #{reward_id} (возможно, уже обработана)."
         )
@@ -352,20 +338,15 @@ async def reward_reject_reason_handler(
     AdminCallback.filter(F.action == "reward_fulfill"), AdminFilter()
 )
 async def reward_fulfill_handler(
-    callback: CallbackQuery, callback_data: AdminCallback, bot: Bot, data: dict
+    callback: CallbackQuery, callback_data: AdminCallback, bot: Bot
 ):
     reward_id = callback_data.target_id
     if not reward_id:
         return
-    extra = {
-        "trace_id": data.get("trace_id"),
-        "user_id": data.get("user_id"),
-        "reward_id": reward_id,
-    }
 
     success = await db.fulfill_reward(reward_id, callback.from_user.id)
     if success:
-        logging.info("Reward fulfilled", extra=extra)
+        logging.info(f"Reward {reward_id} fulfilled by {callback.from_user.id}")
         reward_details = await db.get_reward_full_details(reward_id)
         if reward_details:
             reward = reward_details["reward"]
@@ -379,7 +360,7 @@ async def reward_fulfill_handler(
             callback, AdminCallback(action="rewards_list", page=1), bot
         )
     else:
-        logging.warning("Failed to fulfill reward (already processed?)", extra=extra)
+        logging.warning(f"Failed to fulfill reward {reward_id} (already processed?)")
         await callback.answer(
             "Не удалось выполнить заявку (возможно, уже обработана).", show_alert=True
         )
@@ -387,14 +368,13 @@ async def reward_fulfill_handler(
 
 # --- Stats Section ---
 @router.callback_query(AdminCallback.filter(F.action == "stats"), AdminFilter())
-async def stats_handler(callback: CallbackQuery, data: dict):
+async def stats_handler(callback: CallbackQuery):
     if not callback.message:
         await callback.answer()
         return
     try:
         stats = await db.get_bot_statistics()
-        extra = {"trace_id": data.get("trace_id"), "user_id": data.get("user_id")}
-        logging.info("Admin requested stats", extra=extra)
+        logging.info(f"Admin {callback.from_user.id} requested stats")
 
         text = (
             f"📊 <b>Статистика бота:</b>\n\n"
@@ -454,9 +434,9 @@ async def promo_name_handler(message: Message, state: FSMContext):
 
 @router.message(AdminState.get_promo_reward)
 async def promo_reward_handler(message: Message, state: FSMContext):
+    if not message.text:
+        return
     try:
-        if not message.text:
-            raise ValueError
         reward = int(message.text)
         if reward <= 0:
             raise ValueError
@@ -469,18 +449,20 @@ async def promo_reward_handler(message: Message, state: FSMContext):
 
 @router.message(AdminState.get_promo_activations)
 async def promo_activations_handler(message: Message, state: FSMContext):
+    if not message.text:
+        return
     try:
-        if not message.text:
-            raise ValueError
         activations = int(message.text)
+        if activations < 0:
+            raise ValueError
         await state.update_data(promo_activations=activations)
-        data = await state.get_data()
+        fsm_data = await state.get_data()
 
         text = (
             f"Подтвердите создание промокода:\n\n"
-            f"Название: `{data['promo_name']}`\n"
-            f"Награда: {data['promo_reward']} ⭐\n"
-            f"Активации: {data['promo_activations']}"
+            f"Название: `{fsm_data['promo_name']}`\n"
+            f"Награда: {fsm_data['promo_reward']} ⭐\n"
+            f"Активации: {fsm_data['promo_activations']}"
         )
         await state.set_state(AdminState.confirm_promo_creation)
         await message.answer(
@@ -493,21 +475,26 @@ async def promo_activations_handler(message: Message, state: FSMContext):
 @router.callback_query(
     AdminCallback.filter(F.action == "promo_create_confirm"), AdminFilter()
 )
-async def promo_create_confirm_handler(
-    callback: CallbackQuery, state: FSMContext, data: dict
-):
+async def promo_create_confirm_handler(callback: CallbackQuery, state: FSMContext):
     fsm_data = await state.get_data()
+    if not all(
+        k in fsm_data for k in ["promo_name", "promo_reward", "promo_activations"]
+    ):
+        if callback.message:
+            await callback.message.edit_text(
+                "Ошибка: не все данные были введены. Попробуйте снова."
+            )
+        await state.clear()
+        return
+
     await db.add_promo_code(
         fsm_data["promo_name"], fsm_data["promo_reward"], fsm_data["promo_activations"]
     )
     await state.clear()
 
-    extra = {
-        "trace_id": data.get("trace_id"),
-        "user_id": data.get("user_id"),
-        "promo_code": fsm_data["promo_name"],
-    }
-    logging.info("Admin created a new promo code", extra=extra)
+    logging.info(
+        f"Admin {callback.from_user.id} created promo code {fsm_data['promo_name']}"
+    )
 
     if callback.message:
         await callback.message.edit_text(
@@ -563,34 +550,26 @@ async def grant_amount_handler(message: Message, state: FSMContext):
         amount = int(message.text)
         if amount <= 0:
             raise ValueError
-        data = await state.get_data()
+        fsm_data = await state.get_data()
         await state.update_data(amount=amount)
         await state.set_state(AdminState.confirm_grant)
         await message.answer(
-            f"Начислить {amount} ⭐ пользователю `{data['target_id']}`?",
-            reply_markup=admin_confirm_keyboard("grant", data["target_id"], amount),
+            f"Начислить {amount} ⭐ пользователю `{fsm_data['target_id']}`?",
+            reply_markup=admin_confirm_keyboard("grant", fsm_data["target_id"], amount),
         )
     except (ValueError, TypeError):
         await message.answer("Неверный формат суммы.")
 
 
 @router.callback_query(AdminCallback.filter(F.action == "grant_confirm"), AdminFilter())
-async def grant_confirm_handler(
-    callback: CallbackQuery, state: FSMContext, bot: Bot, data: dict
-):
+async def grant_confirm_handler(callback: CallbackQuery, state: FSMContext, bot: Bot):
     fsm_data = await state.get_data()
     target_id = fsm_data.get("target_id")
     amount = fsm_data.get("amount")
     if not target_id or not amount:
         return
 
-    extra = {
-        "trace_id": data.get("trace_id"),
-        "user_id": data.get("user_id"),
-        "target_id": target_id,
-        "amount": amount,
-    }
-    logging.info("Admin granting balance", extra=extra)
+    logging.info(f"Admin {callback.from_user.id} granting {amount} to {target_id}")
 
     await db.add_balance_unrestricted(
         target_id, amount, "admin_grant", ref_id=str(callback.from_user.id)
@@ -640,8 +619,8 @@ async def debit_amount_handler(message: Message, state: FSMContext):
         amount = int(message.text)
         if amount <= 0:
             raise ValueError
-        data = await state.get_data()
-        balance = await db.get_user_balance(data["target_id"])
+        fsm_data = await state.get_data()
+        balance = await db.get_user_balance(fsm_data["target_id"])
         if amount > balance:
             await message.answer(
                 f"Нельзя списать больше, чем есть у пользователя на балансе ({balance} ⭐)."
@@ -651,30 +630,22 @@ async def debit_amount_handler(message: Message, state: FSMContext):
         await state.update_data(amount=amount)
         await state.set_state(AdminState.confirm_debit)
         await message.answer(
-            f"Списать {amount} ⭐ у пользователя `{data['target_id']}`?",
-            reply_markup=admin_confirm_keyboard("debit", data["target_id"], amount),
+            f"Списать {amount} ⭐ у пользователя `{fsm_data['target_id']}`?",
+            reply_markup=admin_confirm_keyboard("debit", fsm_data["target_id"], amount),
         )
     except (ValueError, TypeError):
         await message.answer("Неверный формат суммы.")
 
 
 @router.callback_query(AdminCallback.filter(F.action == "debit_confirm"), AdminFilter())
-async def debit_confirm_handler(
-    callback: CallbackQuery, state: FSMContext, bot: Bot, data: dict
-):
+async def debit_confirm_handler(callback: CallbackQuery, state: FSMContext, bot: Bot):
     fsm_data = await state.get_data()
     target_id = fsm_data.get("target_id")
     amount = fsm_data.get("amount")
     if not target_id or not amount:
         return
 
-    extra = {
-        "trace_id": data.get("trace_id"),
-        "user_id": data.get("user_id"),
-        "target_id": target_id,
-        "amount": amount,
-    }
-    logging.info("Admin debiting balance", extra=extra)
+    logging.info(f"Admin {callback.from_user.id} debiting {amount} from {target_id}")
 
     await db.spend_balance(
         target_id, amount, "admin_debit", ref_id=str(callback.from_user.id)
@@ -723,21 +694,14 @@ async def reset_fsm_user_id_handler(message: Message, state: FSMContext):
 @router.callback_query(
     AdminCallback.filter(F.action == "reset_fsm_confirm"), AdminFilter()
 )
-async def reset_fsm_confirm_handler(
-    callback: CallbackQuery, state: FSMContext, data: dict
-):
+async def reset_fsm_confirm_handler(callback: CallbackQuery, state: FSMContext):
     fsm_data = await state.get_data()
     target_id = fsm_data.get("target_id")
     if not target_id:
         return
     bot_id = state.key.bot_id
 
-    extra = {
-        "trace_id": data.get("trace_id"),
-        "user_id": data.get("user_id"),
-        "target_id": target_id,
-    }
-    logging.info("Admin resetting FSM for user", extra=extra)
+    logging.info(f"Admin {callback.from_user.id} resetting FSM for {target_id}")
 
     user_fsm_context = FSMContext(
         storage=state.storage,

@@ -70,5 +70,4 @@ class ErrorHandler(BaseMiddleware):
         if event.message:
             await event.message.answer(message_text)
         elif event.callback_query:
-            await event.callback_query.message.answer(message_text)
-            await event.callback_query.answer()
+            await event.callback_query.answer(message_text, show_alert=True)

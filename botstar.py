@@ -115,11 +115,11 @@ async def main():
     # --- Подключаем все роутеры из папки handlers ---
     # Важно: более конкретные хендлеры (admin) должны идти раньше общих (user)
     dp.include_router(admin_handlers.router)
+    dp.include_router(user_handlers.router)
     dp.include_router(duel_handlers.router)
     dp.include_router(timer_handlers.router)
     dp.include_router(game_handlers.router)
     dp.include_router(menu_handler.router)
-    dp.include_router(user_handlers.router)
 
     try:
         # Установка постоянного меню (команды) для пользователей
@@ -128,6 +128,7 @@ async def main():
                 {"command": "start", "description": "🚀 Перезапустить бота"},
                 {"command": "menu", "description": "🏠 Главное меню"},
                 {"command": "bonus", "description": "🎁 Ежедневный бонус"},
+                {"command": "admin", "description": "🔒 Админ-панель"},
             ]
         )
 
