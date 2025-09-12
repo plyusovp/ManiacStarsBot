@@ -27,20 +27,22 @@ router = Router()
 # The main /start logic is now exclusively in user_handlers.py
 
 
-async def show_main_menu(bot: Bot, chat_id: int, message: Message):
+async def show_main_menu(bot: Bot, chat_id: int, message_id: int | None = None):
     """Отображает или обновляет главное меню."""
     balance = await db.get_user_balance(chat_id)
     caption = LEXICON["main_menu"].format(balance=balance)
     media = InputMediaPhoto(media=settings.PHOTO_MAIN_MENU, caption=caption)
-    # Try editing the existing message if possible
-    success = await safe_edit_media(
-        bot=bot,
-        media=media,
-        chat_id=chat_id,
-        message_id=message.message_id,
-        reply_markup=main_menu_keyboard(),
-    )
-    # If editing fails (e.g., it's not a media message), send a new one
+
+    success = False
+    if message_id is not None:
+        success = await safe_edit_media(
+            bot=bot,
+            media=media,
+            chat_id=chat_id,
+            message_id=message_id,
+            reply_markup=main_menu_keyboard(),
+        )
+
     if not success:
         await bot.send_photo(
             chat_id=chat_id,
