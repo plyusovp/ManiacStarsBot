@@ -70,6 +70,8 @@ def deal_hand() -> list[int]:
     return rand.sample(range(1, 11), 5)
 
 
+# handlers/duel_handlers.py
+
 async def update_game_interface(
     bot: Bot, match: DuelMatch, text_override: Optional[str] = None
 ):
@@ -78,11 +80,13 @@ async def update_game_interface(
     p1_hand_text = " ".join(map(str, sorted(match.p1.hand)))
     p2_hand_text = " ".join(map(str, sorted(match.p2.hand)))
 
+    # --- НАЧАЛО ИСПРАВЛЕНИЙ ---
+
     p1_text = text_override or LEXICON["duel_turn"].format(
         round=match.round,
         p1_wins=match.p1_wins,
         p2_wins=match.p2_wins,
-        opponent_card="?" if not match.p2.played_card else str(match.p2.played_card),
+        opponent_card="?",  # ИЗМЕНЕНИЕ: Всегда показывать "?" во время хода
         hand_text=p1_hand_text,
         event_text=event_text,
     )
@@ -90,10 +94,12 @@ async def update_game_interface(
         round=match.round,
         p1_wins=match.p2_wins,  # Swapped for p2's perspective
         p2_wins=match.p1_wins,
-        opponent_card="?" if not match.p1.played_card else str(match.p1.played_card),
+        opponent_card="?",  # ИЗМЕНЕНИЕ: Всегда показывать "?" во время хода
         hand_text=p2_hand_text,
         event_text=event_text,
     )
+    
+    # --- КОНЕЦ ИСПРАВЛЕНИЙ ---
 
     p1_keyboard = (
         back_to_duels_keyboard()
