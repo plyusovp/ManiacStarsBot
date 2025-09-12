@@ -32,37 +32,14 @@ EARN_RULES: Dict[str, Dict[str, Any]] = {
 }
 
 # --- COINFLIP GAME MATHEMATICS ---
-# RTP = (chance / 100) * multiplier * (1 - rake)
-# Rake (commission) is applied to the winnings, not the stake.
+# Новая логика "Рискни и умножь"
+# chance: шанс на победу на данном шаге (в процентах)
+# multiplier: множитель выигрыша от *первоначальной* ставки на данном шаге
 COINFLIP_RAKE_PERCENT: int = 7
-
-COINFLIP_LEVELS: Dict[str, Dict[str, Any]] = {
-    "easy": {
-        "name": "Лёгкий",
-        "win_chance": 48,
-        "multiplier": 2.0,
-        "stakes": [10, 20, 30, 40, 50],
-        "rtp": (48 / 100) * 2.0 * (1 - COINFLIP_RAKE_PERCENT / 100),
-    },
-    "medium": {
-        "name": "Средний",
-        "win_chance": 35,
-        "multiplier": 2.5,
-        "stakes": [25, 50, 75, 100, 150],
-        "rtp": (35 / 100) * 2.5 * (1 - COINFLIP_RAKE_PERCENT / 100),
-    },
-    "hard": {
-        "name": "Сложный",
-        "win_chance": 20,
-        "multiplier": 4.0,
-        "stakes": [50, 100, 150, 200, 250],
-        "rtp": (20 / 100) * 4.0 * (1 - COINFLIP_RAKE_PERCENT / 100),
-    },
-    "insane": {
-        "name": "Безумный",
-        "win_chance": 10,
-        "multiplier": 8.0,
-        "stakes": [100, 200, 300, 400, 500],
-        "rtp": (10 / 100) * 8.0 * (1 - COINFLIP_RAKE_PERCENT / 100),
-    },
-}
+COINFLIP_STAGES = [
+    {"chance": 50, "multiplier": 2.0},  # 1-й бросок
+    {"chance": 40, "multiplier": 3.0},  # 2-й бросок
+    {"chance": 30, "multiplier": 5.0},  # 3-й бросок
+    {"chance": 20, "multiplier": 8.0},  # 4-й бросок
+    {"chance": 10, "multiplier": 15.0},  # 5-й бросок
+]

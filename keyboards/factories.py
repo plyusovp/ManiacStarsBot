@@ -28,8 +28,8 @@ class UserCallback(CallbackData, prefix="user"):  # type: ignore
 class CoinflipCallback(CallbackData, prefix="cf"):  # type: ignore
     """Фабрика для действий в игре 'Орёл и Решка'."""
 
-    action: str  # 'level' or 'stake'
-    value: Union[str, int]  # level_id or stake_amount
+    action: str  # 'stake', 'continue', 'cashout'
+    value: Optional[int] = None  # stake_amount
 
 
 class DuelCallback(CallbackData, prefix="duel"):  # type: ignore
@@ -54,6 +54,7 @@ class AdminCallback(CallbackData, prefix="admin"):  # type: ignore
     """Фабрика для всех действий в админ-панели."""
 
     action: str
+    name: Optional[str] = None  # Для выбора типа начисления и т.д.
     target_id: Optional[int] = None  # user_id, reward_id, etc.
     value: Optional[Union[int, str]] = None
     page: Optional[int] = None
@@ -65,3 +66,11 @@ class AchievementCallback(CallbackData, prefix="ach"):  # type: ignore
     action: str
     ach_id: Optional[str] = None
     page: Optional[int] = None
+
+
+class GiftCallback(CallbackData, prefix="gift"):  # type: ignore
+    """Фабрика для каталога подарков."""
+
+    action: str  # 'select', 'confirm'
+    item_id: str
+    cost: int

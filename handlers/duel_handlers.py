@@ -75,11 +75,15 @@ async def update_game_interface(
 ):
     """Updates the game message for both players."""
     event_text = LEXICON.get(match.current_event, "") if match.current_event else ""
+    p1_hand_text = " ".join(map(str, sorted(match.p1.hand)))
+    p2_hand_text = " ".join(map(str, sorted(match.p2.hand)))
+
     p1_text = text_override or LEXICON["duel_turn"].format(
         round=match.round,
         p1_wins=match.p1_wins,
         p2_wins=match.p2_wins,
         opponent_card="?" if not match.p2.played_card else str(match.p2.played_card),
+        hand_text=p1_hand_text,
         event_text=event_text,
     )
     p2_text = text_override or LEXICON["duel_turn"].format(
@@ -87,6 +91,7 @@ async def update_game_interface(
         p1_wins=match.p2_wins,  # Swapped for p2's perspective
         p2_wins=match.p1_wins,
         opponent_card="?" if not match.p1.played_card else str(match.p1.played_card),
+        hand_text=p2_hand_text,
         event_text=event_text,
     )
 
@@ -260,11 +265,12 @@ async def duel_menu_handler(callback: CallbackQuery, state: FSMContext, bot: Bot
         callback.message.message_id,
         reply_markup=duel_stake_keyboard(),
     )
+    await callback.answer()
 
 
 @router.callback_query(DuelCallback.filter(F.action == "stake"))
 async def find_duel_handler(
-    callback: CallbackQuery, callback_data: DuelCallback, bot: Bot, data: dict
+    callback: CallbackQuery, callback_data: DuelCallback, bot: Bot, **data
 ):
     """Handles stake selection and matchmaking."""
     stake = callback_data.value
@@ -328,7 +334,7 @@ async def find_duel_handler(
                 await safe_edit_caption(
                     bot,
                     f"🔎 Ищем соперника со ставкой {stake} ⭐...",
-                    user_id,
+                    callback.message.chat.id,
                     callback.message.message_id,
                     reply_markup=duel_searching_keyboard(stake),
                 )
@@ -337,35 +343,22 @@ async def find_duel_handler(
 
 @router.callback_query(DuelCallback.filter(F.action == "cancel_search"))
 async def cancel_duel_search_handler(
-    callback: CallbackQuery, callback_data: DuelCallback, bot: Bot, data: dict
+    callback: CallbackQuery, callback_data: DuelCallback, bot: Bot, state: FSMContext
 ):
     """Cancels the duel search."""
     stake = callback_data.value
     if stake is None or not callback.message:
         return
     user_id = callback.from_user.id
-    extra = {"trace_id": data.get("trace_id"), "user_id": user_id, "stake": stake}
+    trace_id = state.key.user_id if state.key else "unknown"
+    extra = {"trace_id": trace_id, "user_id": user_id, "stake": stake}
 
     async with DUEL_MATCHMAKING_LOCK:
         if stake in duel_queue and duel_queue[stake][0] == user_id:
             del duel_queue[stake]
             logging.info("User cancelled duel search", extra=extra)
             await callback.answer("Поиск отменен.", show_alert=True)
-            balance = await db.get_user_balance(user_id)
-            stats = await db.get_user_duel_stats(user_id)
-            caption = LEXICON["duel_menu"].format(
-                balance=balance,
-                rake_percent=settings.DUEL_RAKE_PERCENT,
-                wins=stats.get("wins", 0),
-                losses=stats.get("losses", 0),
-            )
-            await safe_edit_caption(
-                bot,
-                caption,
-                user_id,
-                callback.message.message_id,
-                reply_markup=duel_stake_keyboard(),
-            )
+            await duel_menu_handler(callback, state, bot)
         else:
             logging.warning("Failed to cancel duel search (not in queue?)", extra=extra)
             await callback.answer(
@@ -409,7 +402,7 @@ async def play_card_handler(
         await callback.answer(f"Вы сыграли карту {card_value}")
 
         if match.p1.played_card and match.p2.played_card:
-            await resolve_round(bot, match)
+            asyncio.create_task(resolve_round(bot, match))
         else:
             await update_game_interface(bot, match)
 
@@ -435,7 +428,7 @@ async def boost_card_handler(
     balance = await db.get_user_balance(user_id)
     if balance < settings.DUEL_BOOST_COST:
         return await callback.answer(
-            f"Недостаточно средств. Нужно {settings.DUEL_BOOST_COST} ⭐.",
+            f"Недостаточно средств. Нужна {settings.DUEL_BOOST_COST} ⭐.",
             show_alert=True,
         )
 
@@ -470,9 +463,12 @@ async def boost_confirm_handler(
             # Silently update interface to prevent exploit
             return await update_game_interface(bot, match)
 
-        await db.spend_balance(
+        success = await db.spend_balance(
             user_id, settings.DUEL_BOOST_COST, "duel_boost", ref_id=str(match_id)
         )
+        if not success:
+            await callback.answer("Не удалось списать средства.", show_alert=True)
+            return await update_game_interface(bot, match)
 
         card_index = player.hand.index(card_to_boost)
         player.hand[card_index] += 2
@@ -522,9 +518,13 @@ async def reroll_hand_handler(
                 show_alert=True,
             )
 
-        await db.spend_balance(
+        success = await db.spend_balance(
             user_id, settings.DUEL_REROLL_COST, "duel_reroll", ref_id=str(match_id)
         )
+        if not success:
+            await callback.answer("Не удалось списать средства.", show_alert=True)
+            return
+
         player.hand = deal_hand()
         player.has_rerolled = True
 

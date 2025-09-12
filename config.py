@@ -24,11 +24,16 @@ class Settings(BaseSettings):
             return []
         return v
 
+    # --- ID администраторов для админ-панели ---
+    # Замените на реальные ID, если они отличаются от ADMIN_IDS
+    MARK_ID: int = 1711962100  # Пример
+    MAXIM_ID: int = 1196053514  # Пример
+
     # --- Настройки экономики и игр ---
     INITIAL_BALANCE: int = 0
     DUEL_RAKE_PERCENT: int
-    DUEL_BOOST_COST: int = 10
-    DUEL_REROLL_COST: int = 15
+    DUEL_BOOST_COST: int = 1  # Изменено
+    DUEL_REROLL_COST: int = 2  # Изменено
     REFERRAL_BONUS: int = 5
     MIN_REFERRALS_FOR_WITHDRAW: int = 5
 
@@ -44,11 +49,13 @@ class Settings(BaseSettings):
     ADMIN_PAGE_SIZE: int = 5
 
     # --- Ссылки ---
-    URL_CHANNEL: str
-    URL_WITHDRAWALS: str
-    URL_SUPPORT: str
+    URL_CHANNEL: str = "https://t.me/kolostats"
+    URL_CHAT: str = "https://t.me/kolochats"
+    URL_WITHDRAWALS: str = "https://t.me/withdraw0000"
+    URL_MANUAL: str = "https://t.me/manualstar"
+    URL_SUPPORT: str = "https://t.me/limejko"
 
-    # --- Медиа (ЗАМЕНЕНЫ НА FILE_ID) ---
+    # --- Медиа (FILE_ID) ---
     PHOTO_MAIN_MENU: str = "AgACAgQAAxkBAAIFT2i-3VhNvRHGW-NGknLID5K21YbRAAK_yjEbz73wUfBVjxgwJu5VAQADAgADeAADNgQ"
     PHOTO_GAMES_MENU: str = "AgACAgQAAxkBAAIFUWi-3e3DDGQnfmSgI07_ARaCegSHAALCyjEbz73wUbIz4Aya-g4-AQADAgADeQADNgQ"
     PHOTO_WITHDRAW: str = "AgACAgQAAxkBAAIFU2i-3f8Ot6ufYOBbkfBs-KVcpyyYAALDyjEbz73wUZ4UbKxxqSbIAQADAgADeQADNgQ"
@@ -67,7 +74,4 @@ settings = Settings()
 
 DUEL_STAKES = [10, 25, 50, 100, 250]
 TIMER_STAKES = [10, 25, 50, 100]
-
-# This is now defined in economy.py to avoid circular dependencies
-# and keep economic constants in one place.
-# COINFLIP_LEVELS will be imported from economy where needed.
+COINFLIP_STAKES = [10, 25, 50, 100, 250, 500]

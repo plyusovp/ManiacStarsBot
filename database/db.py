@@ -291,24 +291,37 @@ async def init_db() -> None:
         columns_info = {row[1]: row[2] for row in await cursor.fetchall()}
         if columns_info.get("stop_second") == "INTEGER":
             logging.info("Migrating timer_matches.stop_second to REAL...")
-            await db.execute("ALTER TABLE timer_matches RENAME TO _timer_matches_old;")
-            await db.execute(
-                """
-                CREATE TABLE timer_matches (
-                    id INTEGER PRIMARY KEY AUTOINCREMENT,
-                    stake INTEGER NOT NULL CHECK(stake > 0),
-                    bank INTEGER NOT NULL CHECK(bank >= 0),
-                    winner_id INTEGER,
-                    stop_second REAL NOT NULL,
-                    state TEXT NOT NULL CHECK(state IN ('active','finished','draw','interrupted')),
-                    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-                    FOREIGN KEY(winner_id) REFERENCES users(user_id)
-                )"""
-            )
-            await db.execute(
-                "INSERT INTO timer_matches(id, stake, bank, winner_id, stop_second, state, created_at) SELECT id, stake, bank, winner_id, CAST(stop_second AS REAL), state, created_at FROM _timer_matches_old;"
-            )
-            await db.execute("DROP TABLE _timer_matches_old;")
+            # Turn off foreign keys for safe migration
+            await db.execute("PRAGMA foreign_keys=OFF;")
+            await db.execute("BEGIN TRANSACTION;")
+            try:
+                await db.execute(
+                    "ALTER TABLE timer_matches RENAME TO _timer_matches_old;"
+                )
+                await db.execute(
+                    """
+                    CREATE TABLE timer_matches (
+                        id INTEGER PRIMARY KEY AUTOINCREMENT,
+                        stake INTEGER NOT NULL CHECK(stake > 0),
+                        bank INTEGER NOT NULL CHECK(bank >= 0),
+                        winner_id INTEGER,
+                        stop_second REAL NOT NULL,
+                        state TEXT NOT NULL CHECK(state IN ('active','finished','draw','interrupted')),
+                        created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+                        FOREIGN KEY(winner_id) REFERENCES users(user_id)
+                    )"""
+                )
+                await db.execute(
+                    "INSERT INTO timer_matches(id, stake, bank, winner_id, stop_second, state, created_at) SELECT id, stake, bank, winner_id, CAST(stop_second AS REAL), state, created_at FROM _timer_matches_old;"
+                )
+                await db.execute("DROP TABLE _timer_matches_old;")
+                await db.commit()
+            except Exception:
+                logging.error("Migration failed, rolling back", exc_info=True)
+                await db.rollback()
+            finally:
+                # Always turn foreign keys back on
+                await db.execute("PRAGMA foreign_keys=ON;")
             logging.info("Migration complete.")
 
         await db.execute(

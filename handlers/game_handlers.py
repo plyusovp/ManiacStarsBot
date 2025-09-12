@@ -1,65 +1,29 @@
 # handlers/game_handlers.py
 import asyncio
-import logging
 import secrets
 import uuid
-from typing import Any
 
 from aiogram import Bot, F, Router
 from aiogram.fsm.context import FSMContext
+from aiogram.fsm.state import State, StatesGroup
 from aiogram.types import CallbackQuery
 
 from database import db
-from economy import COINFLIP_LEVELS, COINFLIP_RAKE_PERCENT
+from economy import COINFLIP_RAKE_PERCENT, COINFLIP_STAGES
 from handlers.utils import clean_junk_message, safe_edit_caption
 from keyboards.factories import CoinflipCallback, GameCallback
-from keyboards.inline import coinflip_level_keyboard, coinflip_stake_keyboard
+from keyboards.inline import (
+    coinflip_continue_keyboard,
+    coinflip_play_again_keyboard,
+    coinflip_stake_keyboard,
+)
 from lexicon.texts import LEXICON
 
 router = Router()
 
 
-async def process_coinflip_round(
-    user_id: int, stake: int, level: str, idem_key: str, trace_id: str
-) -> dict[str, Any]:
-    """
-    Обрабатывает один раунд игры Coinflip.
-    Возвращает словарь с результатом.
-    """
-    extra = {"user_id": user_id, "trace_id": trace_id, "idem_key": idem_key}
-    game_rules = COINFLIP_LEVELS.get(level)
-    if not game_rules:
-        logging.error(f"Invalid coinflip level provided: {level}", extra=extra)
-        return {"success": False, "reason": "invalid_level"}
-
-    spent_successfully = await db.spend_balance(
-        user_id, stake, "coinflip_stake", ref_id=f"cf:{level}", idem_key=idem_key
-    )
-    if not spent_successfully:
-        return {"success": False, "reason": "insufficient_funds"}
-
-    is_win = secrets.randbelow(100) + 1 <= game_rules["win_chance"]
-
-    prize = 0
-    if is_win:
-        gross_prize = int(stake * game_rules["multiplier"])
-        rake = int(gross_prize * (COINFLIP_RAKE_PERCENT / 100))
-        prize = gross_prize - rake
-        result = await db.add_balance_with_checks(
-            user_id, prize, "coinflip_win", ref_id=f"cf:{level}"
-        )
-        if not result.get("success"):
-            logging.error(
-                f"Failed to credit coinflip win. Reason: {result.get('reason')}",
-                extra=extra,
-            )
-            await db.add_balance_unrestricted(
-                user_id, stake, "coinflip_win_fail_refund"
-            )
-
-    log_extra = {**extra, "stake": stake, "level": level, "win": is_win, "prize": prize}
-    logging.info("Coinflip result processed", extra=log_extra)
-    return {"success": True, "is_win": is_win, "prize": prize}
+class CoinflipState(StatesGroup):
+    game_in_progress = State()
 
 
 @router.callback_query(
@@ -68,10 +32,9 @@ async def process_coinflip_round(
 async def coinflip_menu_handler(
     callback: CallbackQuery, state: FSMContext, bot: Bot
 ) -> None:
-    """Отображает меню выбора уровня сложности для Coinflip."""
+    """Отображает меню выбора ставки для Coinflip."""
     await state.clear()
     await clean_junk_message(state, bot)
-    await state.clear()
     balance = await db.get_user_balance(callback.from_user.id)
     text = LEXICON["coinflip_menu"].format(balance=balance)
     if callback.message:
@@ -80,118 +43,158 @@ async def coinflip_menu_handler(
             caption=text,
             chat_id=callback.message.chat.id,
             message_id=callback.message.message_id,
-            reply_markup=coinflip_level_keyboard(),
+            reply_markup=coinflip_stake_keyboard(),
         )
     await callback.answer()
 
 
-@router.callback_query(CoinflipCallback.filter(F.action == "select_level"))
-async def coinflip_level_selected_handler(
-    callback: CallbackQuery,
-    callback_data: CoinflipCallback,
-    state: FSMContext,
-    bot: Bot,
-) -> None:
-    """Отображает меню выбора ставки после выбора уровня."""
-    level = str(callback_data.value)
-    level_name = COINFLIP_LEVELS.get(level, {}).get("name", "Неизвестный")
-    await state.update_data(coinflip_level=level)
-    balance = await db.get_user_balance(callback.from_user.id)
-    text = LEXICON["coinflip_stake_select"].format(
-        level_name=level_name, balance=balance
-    )
-    if callback.message:
-        await safe_edit_caption(
-            bot,
-            caption=text,
-            chat_id=callback.message.chat.id,
-            message_id=callback.message.message_id,
-            reply_markup=coinflip_stake_keyboard(level),
-        )
-    await callback.answer()
-
-
-@router.callback_query(CoinflipCallback.filter(F.action == "select_stake"))
+@router.callback_query(CoinflipCallback.filter(F.action == "stake"))
 async def coinflip_stake_selected_handler(
     callback: CallbackQuery,
     callback_data: CoinflipCallback,
     bot: Bot,
     state: FSMContext,
-    data: dict,
 ) -> None:
-    """Обрабатывает игру после выбора ставки."""
-    if not isinstance(callback_data.value, int):
+    """Обрабатывает первый бросок после выбора ставки."""
+    if not isinstance(callback_data.value, int) or not callback.message:
         return
     stake = callback_data.value
-    user_data = await state.get_data()
-    level = user_data.get("coinflip_level")
-    trace_id = data.get("trace_id", "unknown")
     user_id = callback.from_user.id
-    extra = {"user_id": user_id, "trace_id": trace_id}
-
-    if not level:
-        logging.warning("Coinflip level not found in FSM state", extra=extra)
-        await callback.answer("Ошибка: сначала выберите уровень.", show_alert=True)
-        await coinflip_menu_handler(callback, state, bot)
-        return
 
     balance = await db.get_user_balance(user_id)
     if balance < stake:
-        await callback.answer(
-            "У вас недостаточно звёзд для этой ставки.", show_alert=True
-        )
+        await callback.answer("Недостаточно средств.", show_alert=True)
         return
 
-    idem_key = f"cf-{user_id}-{uuid.uuid4()}"
-    level_name = COINFLIP_LEVELS[level]["name"]
-    initial_text = LEXICON["coinflip_process"].format(
-        level_name=level_name, stake=stake
+    idem_key = f"cf-start-{user_id}-{uuid.uuid4()}"
+    spent = await db.spend_balance(user_id, stake, "coinflip_stake", idem_key=idem_key)
+    if not spent:
+        await callback.answer("Не удалось списать ставку.", show_alert=True)
+        return
+
+    await state.set_state(CoinflipState.game_in_progress)
+    await state.update_data(stake=stake, stage=0, idem_key=idem_key)
+
+    await safe_edit_caption(
+        bot,
+        LEXICON["coinflip_process"],
+        callback.message.chat.id,
+        callback.message.message_id,
     )
-    if callback.message:
-        await safe_edit_caption(
-            bot,
-            caption=initial_text,
-            chat_id=callback.message.chat.id,
-            message_id=callback.message.message_id,
-        )
     await asyncio.sleep(1.5)
 
-    result = await process_coinflip_round(user_id, stake, level, idem_key, trace_id)
+    await process_coinflip_stage(callback, bot, state)
 
-    if not result.get("success"):
-        error_reason = result.get("reason", "unknown_error")
-        logging.error(f"Coinflip round failed. Reason: {error_reason}", extra=extra)
 
-        user_friendly_error = "Произошла ошибка в игре. Средства не были списаны."
-        if error_reason == "insufficient_funds":
-            user_friendly_error = "Недостаточно средств для этой ставки."
-
-        await callback.answer(user_friendly_error, show_alert=True)
-
-        # Обновляем меню, чтобы показать актуальный баланс и дать попробовать снова
-        await coinflip_level_selected_handler(
-            callback,
-            CoinflipCallback(action="select_level", value=level),
-            state,
-            bot,
-        )
+async def process_coinflip_stage(callback: CallbackQuery, bot: Bot, state: FSMContext):
+    """Обрабатывает текущий этап игры."""
+    if not callback.message:
         return
+    user_id = callback.from_user.id
+    fsm_data = await state.get_data()
+    stage_index = fsm_data.get("stage", 0)
+    stake = fsm_data.get("stake", 0)
 
-    new_balance = await db.get_user_balance(user_id)
-    if result["is_win"]:
-        final_text = LEXICON["coinflip_win"].format(
-            prize=result["prize"], new_balance=new_balance
-        )
+    if stage_index >= len(COINFLIP_STAGES):
+        return await cash_out(callback, bot, state)
+
+    current_stage = COINFLIP_STAGES[stage_index]
+    is_win = secrets.randbelow(100) < current_stage["chance"]
+
+    if is_win:
+        next_stage_index = stage_index + 1
+        await state.update_data(stage=next_stage_index)
+
+        gross_prize = int(stake * current_stage["multiplier"])
+        rake = int(gross_prize * (COINFLIP_RAKE_PERCENT / 100))
+        current_prize = gross_prize - rake
+
+        if next_stage_index < len(COINFLIP_STAGES):
+            next_stage = COINFLIP_STAGES[next_stage_index]
+            next_gross = int(stake * next_stage["multiplier"])
+            next_prize = next_gross - int(next_gross * (COINFLIP_RAKE_PERCENT / 100))
+
+            text = LEXICON["coinflip_continue"].format(
+                current_prize=current_prize,
+                next_prize=next_prize,
+                next_chance=next_stage["chance"],
+            )
+            await safe_edit_caption(
+                bot,
+                text,
+                callback.message.chat.id,
+                callback.message.message_id,
+                reply_markup=coinflip_continue_keyboard(),
+            )
+        else:
+            # Это был последний возможный выигрыш
+            await cash_out(callback, bot, state)
     else:
-        final_text = LEXICON["coinflip_loss"].format(
-            stake=stake, new_balance=new_balance
+        # Проигрыш
+        await state.clear()
+        new_balance = await db.get_user_balance(user_id)
+        text = LEXICON["coinflip_loss"].format(stake=stake, new_balance=new_balance)
+        await safe_edit_caption(
+            bot,
+            text,
+            callback.message.chat.id,
+            callback.message.message_id,
+            reply_markup=coinflip_play_again_keyboard(),
         )
+
+
+@router.callback_query(CoinflipState.game_in_progress, F.data == "cf:continue")
+async def continue_game_handler(callback: CallbackQuery, bot: Bot, state: FSMContext):
+    """Обрабатывает нажатие кнопки 'Рискнуть'."""
+    await callback.answer()
     if callback.message:
         await safe_edit_caption(
             bot,
-            caption=final_text,
-            chat_id=callback.message.chat.id,
-            message_id=callback.message.message_id,
-            reply_markup=coinflip_stake_keyboard(level),
+            LEXICON["coinflip_process"],
+            callback.message.chat.id,
+            callback.message.message_id,
         )
+    await asyncio.sleep(1.5)
+    await process_coinflip_stage(callback, bot, state)
+
+
+@router.callback_query(CoinflipState.game_in_progress, F.data == "cf:cashout")
+async def cash_out_handler(callback: CallbackQuery, bot: Bot, state: FSMContext):
+    """Обрабатывает нажатие кнопки 'Забрать выигрыш'."""
     await callback.answer()
+    await cash_out(callback, bot, state)
+
+
+async def cash_out(callback: CallbackQuery, bot: Bot, state: FSMContext):
+    """Функция для начисления выигрыша и завершения игры."""
+    if not callback.message:
+        return
+    fsm_data = await state.get_data()
+    stage_index = fsm_data.get("stage", 0)
+    stake = fsm_data.get("stake", 0)
+    user_id = callback.from_user.id
+
+    # Индекс этапа указывает на следующий этап, поэтому для выигрыша берем предыдущий
+    win_stage_index = stage_index - 1
+    if win_stage_index < 0:
+        # Это может случиться, если что-то пошло не так
+        await state.clear()
+        return
+
+    win_stage = COINFLIP_STAGES[win_stage_index]
+    gross_prize = int(stake * win_stage["multiplier"])
+    rake = int(gross_prize * (COINFLIP_RAKE_PERCENT / 100))
+    prize = gross_prize - rake
+
+    await db.add_balance_with_checks(user_id, prize, "coinflip_win")
+    new_balance = await db.get_user_balance(user_id)
+    await state.clear()
+
+    text = LEXICON["coinflip_win_final"].format(prize=prize, new_balance=new_balance)
+    await safe_edit_caption(
+        bot,
+        text,
+        callback.message.chat.id,
+        callback.message.message_id,
+        reply_markup=coinflip_play_again_keyboard(),
+    )

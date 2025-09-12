@@ -1,7 +1,9 @@
 # handlers/menu_handler.py
+from typing import Optional
+
 from aiogram import Bot, F, Router
 from aiogram.fsm.context import FSMContext
-from aiogram.types import CallbackQuery, InputMediaPhoto, Message
+from aiogram.types import CallbackQuery, InputMediaPhoto
 
 from config import settings
 from database import db
@@ -17,17 +19,14 @@ from keyboards.inline import (
     back_to_achievements_keyboard,
     games_menu_keyboard,
     main_menu_keyboard,
+    resources_keyboard,
 )
 from lexicon.texts import LEXICON
 
 router = Router()
 
 
-# Note: The /start handler has been removed from this file to resolve conflicts.
-# The main /start logic is now exclusively in user_handlers.py
-
-
-async def show_main_menu(bot: Bot, chat_id: int, message_id: int | None = None):
+async def show_main_menu(bot: Bot, chat_id: int, message_id: Optional[int] = None):
     """Отображает или обновляет главное меню."""
     balance = await db.get_user_balance(chat_id)
     caption = LEXICON["main_menu"].format(balance=balance)
@@ -44,6 +43,9 @@ async def show_main_menu(bot: Bot, chat_id: int, message_id: int | None = None):
         )
 
     if not success:
+        # Если редактирование не удалось, удаляем старое и отправляем новое
+        if message_id:
+            await safe_delete(bot, chat_id, message_id)
         await bot.send_photo(
             chat_id=chat_id,
             photo=settings.PHOTO_MAIN_MENU,
@@ -61,32 +63,39 @@ async def games_menu_handler(callback: CallbackQuery, state: FSMContext, bot: Bo
         media=settings.PHOTO_GAMES_MENU, caption=LEXICON["games_menu"]
     )
     if callback.message:
-        # Пытаемся отредактировать существующее сообщение
-        success = await safe_edit_media(
+        await safe_edit_media(
             bot=bot,
             media=media,
             chat_id=callback.message.chat.id,
             message_id=callback.message.message_id,
             reply_markup=games_menu_keyboard(),
         )
-        # Если редактирование не удалось (например, сообщение не содержит медиа),
-        # удаляем старое сообщение и отправляем новое с фото.
-        if not success:
-            await safe_delete(
-                bot, callback.message.chat.id, callback.message.message_id
-            )
-            # Используем bot.send_photo с chat_id, так как исходное сообщение удалено
-            await bot.send_photo(
-                chat_id=callback.from_user.id,
-                photo=settings.PHOTO_GAMES_MENU,
-                caption=LEXICON["games_menu"],
-                reply_markup=games_menu_keyboard(),
-            )
+    await callback.answer()
+
+
+@router.callback_query(MenuCallback.filter(F.name == "resources"))
+async def resources_menu_handler(callback: CallbackQuery, state: FSMContext, bot: Bot):
+    """Отображает меню 'Наши ресурсы'."""
+    await state.clear()
+    await clean_junk_message(state, bot)
+    media = InputMediaPhoto(
+        media=settings.PHOTO_MAIN_MENU, caption=LEXICON["resources_menu"]
+    )
+    if callback.message:
+        await safe_edit_media(
+            bot=bot,
+            media=media,
+            chat_id=callback.message.chat.id,
+            message_id=callback.message.message_id,
+            reply_markup=resources_keyboard(),
+        )
     await callback.answer()
 
 
 @router.callback_query(MenuCallback.filter(F.name == "achievements"))
-async def achievements_handler(callback: CallbackQuery, state: FSMContext, bot: Bot):
+async def achievements_handler(
+    callback: CallbackQuery, state: FSMContext, bot: Bot, callback_data: MenuCallback
+):
     """Отображает список достижений (первая страница)."""
     await clean_junk_message(state, bot)
     user_id = callback.from_user.id
@@ -96,7 +105,7 @@ async def achievements_handler(callback: CallbackQuery, state: FSMContext, bot: 
     all_achs = await db.get_all_achievements()
     user_achs_set = set(await db.get_user_achievements(user_id))
 
-    total_pages = (len(all_achs) + limit - 1) // limit
+    total_pages = (len(all_achs) + limit - 1) // limit if all_achs else 1
     start_index = (page - 1) * limit
     end_index = start_index + limit
     current_page_achs = all_achs[start_index:end_index]
@@ -129,7 +138,7 @@ async def achievements_page_handler(
     all_achs = await db.get_all_achievements()
     user_achs_set = set(await db.get_user_achievements(user_id))
 
-    total_pages = (len(all_achs) + limit - 1) // limit
+    total_pages = (len(all_achs) + limit - 1) // limit if all_achs else 1
     start_index = (page - 1) * limit
     end_index = start_index + limit
     current_page_achs = all_achs[start_index:end_index]

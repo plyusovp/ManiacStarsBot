@@ -1,6 +1,7 @@
 # handlers/user_handlers.py
 import logging
 import uuid
+from typing import List
 
 from aiogram import Bot, F, Router
 from aiogram.exceptions import TelegramBadRequest
@@ -11,6 +12,7 @@ from aiogram.types import CallbackQuery, InputMediaPhoto, Message
 
 from config import settings
 from database import db
+from gifts import GIFTS_CATALOG
 from handlers.utils import (
     clean_junk_message,
     generate_referral_link,
@@ -20,13 +22,14 @@ from handlers.utils import (
     safe_send_message,
     validate_referral_code,
 )
-from keyboards.factories import MenuCallback, UserCallback
+from keyboards.factories import GiftCallback, MenuCallback, UserCallback
 from keyboards.inline import (
-    gifts_keyboard,
+    back_to_menu_keyboard,
+    gift_confirm_keyboard,
+    gifts_catalog_keyboard,
     main_menu_keyboard,
     profile_keyboard,
     promo_back_keyboard,
-    referral_keyboard,
     top_users_keyboard,
 )
 from keyboards.reply import persistent_menu_keyboard
@@ -39,8 +42,7 @@ logger = logging.getLogger(__name__)
 # --- FSM States ---
 class UserState(StatesGroup):
     enter_promo = State()
-    enter_withdrawal_amount = State()
-    confirm_withdrawal = State()
+    confirm_gift = State()
 
 
 # --- Command Handlers ---
@@ -51,8 +53,6 @@ async def start_handler(
     bot: Bot,
     command: CommandObject,
 ):
-    # Этот обработчик теперь будет игнорироваться, если аргументы начинаются с 'reward_'
-    # благодаря более специфичному фильтру в admin_handlers.
     if command.args and command.args.startswith("reward_"):
         return
 
@@ -88,13 +88,23 @@ async def start_handler(
     balance = await db.get_user_balance(user_id)
     caption = LEXICON["main_menu"].format(balance=balance)
 
+    # Удаляем предыдущее фото-сообщение, если оно есть, чтобы избежать дублей
+    try:
+        if message.reply_to_message and message.reply_to_message.photo:
+            await bot.delete_message(
+                message.chat.id, message.reply_to_message.message_id
+            )
+    except Exception as e:
+        # Логируем ошибку, но не прерываем выполнение, т.к. удаление
+        # старого сообщения не является критичной операцией.
+        logger.debug(f"Could not delete previous message in start_handler: {e}")
+
     await message.answer_photo(
         photo=settings.PHOTO_MAIN_MENU,
         caption=caption,
         reply_markup=main_menu_keyboard(),
     )
 
-    # Отправляем постоянную клавиатуру с кнопкой "Меню"
     await message.answer(
         "Нажмите «Меню», чтобы открыть навигацию",
         reply_markup=persistent_menu_keyboard(),
@@ -102,7 +112,7 @@ async def start_handler(
 
 
 @router.message(or_f(Command("menu"), F.text == "Меню"))
-async def menu_handler(message: Message, state: FSMContext):
+async def menu_handler(message: Message, state: FSMContext, bot: Bot):
     await state.clear()
     if not message.from_user:
         return
@@ -147,12 +157,24 @@ async def back_to_main_menu_handler(
         balance = await db.get_user_balance(callback.from_user.id)
         caption = LEXICON["main_menu"].format(balance=balance)
         media = InputMediaPhoto(media=settings.PHOTO_MAIN_MENU, caption=caption)
-        await bot.edit_message_media(
-            media=media,
-            chat_id=callback.message.chat.id,
-            message_id=callback.message.message_id,
-            reply_markup=main_menu_keyboard(),
-        )
+        try:
+            await bot.edit_message_media(
+                media=media,
+                chat_id=callback.message.chat.id,
+                message_id=callback.message.message_id,
+                reply_markup=main_menu_keyboard(),
+            )
+        except TelegramBadRequest:
+            # Если редактирование не удалось, отправляем новое сообщение
+            await safe_delete(
+                bot, callback.message.chat.id, callback.message.message_id
+            )
+            await bot.send_photo(
+                chat_id=callback.message.chat.id,
+                photo=settings.PHOTO_MAIN_MENU,
+                caption=caption,
+                reply_markup=main_menu_keyboard(),
+            )
     await callback.answer()
 
 
@@ -173,7 +195,7 @@ async def profile_handler(callback: CallbackQuery, state: FSMContext, bot: Bot):
 
 
 # --- Referral Section ---
-@router.callback_query(MenuCallback.filter(F.name == "referrals"))
+@router.callback_query(MenuCallback.filter(F.name == "earn_bread"))
 async def referral_handler(callback: CallbackQuery, state: FSMContext, bot: Bot):
     await clean_junk_message(state, bot)
     if callback.message:
@@ -189,7 +211,7 @@ async def referral_handler(callback: CallbackQuery, state: FSMContext, bot: Bot)
             media=media,
             chat_id=callback.message.chat.id,
             message_id=callback.message.message_id,
-            reply_markup=referral_keyboard(),
+            reply_markup=back_to_menu_keyboard(),
         )
     await callback.answer()
 
@@ -265,10 +287,29 @@ async def process_promo_handler(message: Message, state: FSMContext, bot: Bot):
 
     await state.clear()
     # After action, show the main menu again by calling the handler
-    await menu_handler(message, state)
+    await menu_handler(message, state, bot)
 
 
 # --- Gifts/Withdrawal Section ---
+async def check_withdrawal_requirements(user_id: int, bot: Bot) -> List[str]:
+    """Проверяет, соответствует ли пользователь требованиям для вывода."""
+    errors = []
+    try:
+        # Проверяем подписку на все каналы из конфига
+        member = await bot.get_chat_member(settings.CHANNEL_ID, user_id)
+        if member.status not in ["member", "administrator", "creator"]:
+            errors.append("Вы не подписаны на основной канал.")
+    except TelegramBadRequest:
+        errors.append("Не удалось проверить подписку на канал.")
+
+    referrals = await db.get_referrals_count(user_id)
+    if referrals < settings.MIN_REFERRALS_FOR_WITHDRAW:
+        errors.append(
+            f"Нужно пригласить еще {settings.MIN_REFERRALS_FOR_WITHDRAW - referrals} друзей."
+        )
+    return errors
+
+
 @router.callback_query(MenuCallback.filter(F.name == "gifts"))
 async def gifts_handler(callback: CallbackQuery, state: FSMContext, bot: Bot):
     await state.clear()
@@ -280,28 +321,10 @@ async def gifts_handler(callback: CallbackQuery, state: FSMContext, bot: Bot):
     balance = await db.get_user_balance(user_id)
     referrals = await db.get_referrals_count(user_id)
 
-    error_text = ""
-    can_withdraw = True
-    try:
-        member = await bot.get_chat_member(settings.CHANNEL_ID, user_id)
-        if member.status not in ["member", "administrator", "creator"]:
-            error_text = LEXICON_ERRORS["error_not_subscribed"]
-            can_withdraw = False
-    except TelegramBadRequest:
-        error_text = "Не удалось проверить подписку."
-        can_withdraw = False
-
-    if can_withdraw and referrals < settings.MIN_REFERRALS_FOR_WITHDRAW:
-        error_text = LEXICON_ERRORS["error_not_enough_referrals"].format(
-            min_refs=settings.MIN_REFERRALS_FOR_WITHDRAW
-        )
-        can_withdraw = False
-
     text = LEXICON["gifts_menu"].format(
         balance=balance,
         min_refs=settings.MIN_REFERRALS_FOR_WITHDRAW,
         referrals_count=referrals,
-        error_text=error_text,
     )
     media = InputMediaPhoto(media=settings.PHOTO_WITHDRAW, caption=text)
 
@@ -309,125 +332,109 @@ async def gifts_handler(callback: CallbackQuery, state: FSMContext, bot: Bot):
         media=media,
         chat_id=callback.message.chat.id,
         message_id=callback.message.message_id,
-        reply_markup=gifts_keyboard(can_withdraw),
+        reply_markup=gifts_catalog_keyboard(),
     )
     await callback.answer()
 
 
-@router.callback_query(UserCallback.filter(F.action == "withdraw"))
-async def withdraw_start_handler(callback: CallbackQuery, state: FSMContext, bot: Bot):
-    await state.set_state(UserState.enter_withdrawal_amount)
-    if callback.message:
-        await state.update_data(original_message_id=callback.message.message_id)
-        await safe_edit_caption(
-            bot=bot,
-            caption="💰 Введите сумму, которую хотите вывести:",
-            chat_id=callback.message.chat.id,
-            message_id=callback.message.message_id,
-            reply_markup=promo_back_keyboard(),
-        )
-    await callback.answer()
-
-
-@router.message(UserState.enter_withdrawal_amount, F.text)
-async def process_withdrawal_amount_handler(
-    message: Message, state: FSMContext, bot: Bot
+@router.callback_query(GiftCallback.filter(F.action == "select"))
+async def select_gift_handler(
+    callback: CallbackQuery, callback_data: GiftCallback, state: FSMContext, bot: Bot
 ):
-    if not message.text or not message.from_user:
+    """Обрабатывает выбор подарка из каталога."""
+    if not callback.message:
         return
+    user_id = callback.from_user.id
+    cost = callback_data.cost
+    item_id = callback_data.item_id
 
-    data = await state.get_data()
-    original_message_id = data.get("original_message_id")
-    await safe_delete(bot, message.chat.id, message.message_id)
+    # 1. Проверка требований
+    errors = await check_withdrawal_requirements(user_id, bot)
+    if errors:
+        error_text = LEXICON_ERRORS["gift_requirements_not_met"].format(
+            errors="\n".join(f"- {e}" for e in errors)
+        )
+        return await callback.answer(error_text, show_alert=True)
 
-    if not original_message_id:
-        await state.clear()
-        return await menu_handler(message, state)
-
-    try:
-        amount = int(message.text)
-        balance = await db.get_user_balance(message.from_user.id)
-        if amount <= 0:
-            raise ValueError("Сумма должна быть положительной.")
-        if amount > balance:
-            await message.answer("❌ На вашем балансе недостаточно средств.")
-            await state.clear()
-            return await menu_handler(message, state)
-        if amount < settings.MIN_WITHDRAWAL_AMOUNT:
-            await message.answer(
-                f"❌ Минимальная сумма для вывода: {settings.MIN_WITHDRAWAL_AMOUNT} ⭐."
-            )
-            await state.clear()
-            return await menu_handler(message, state)
-
-        await state.update_data(withdrawal_amount=amount)
-        await state.set_state(UserState.confirm_withdrawal)
-
-        await safe_edit_caption(
-            bot,
-            f"Вы уверены, что хотите подать заявку на вывод {amount} ⭐?",
-            message.chat.id,
-            original_message_id,
-            reply_markup=gifts_keyboard(can_withdraw=True, confirm_mode=True),
+    # 2. Проверка баланса
+    balance = await db.get_user_balance(user_id)
+    if balance < cost:
+        return await callback.answer(
+            f"Недостаточно средств. Нужно {cost} ⭐, у вас {balance} ⭐.",
+            show_alert=True,
         )
 
-    except (ValueError, TypeError):
-        await message.answer("❌ Неверный формат. Введите целое число.")
-        await state.clear()
-        return await menu_handler(message, state)
+    # 3. Показ подтверждения
+    gift = next((g for g in GIFTS_CATALOG if g["id"] == item_id), None)
+    if not gift:
+        return await callback.answer("Ошибка: подарок не найден.", show_alert=True)
+
+    await state.set_state(UserState.confirm_gift)
+    text = LEXICON["gift_confirm"].format(
+        cost=cost, emoji=gift["emoji"], name=gift["name"]
+    )
+    await safe_edit_caption(
+        bot,
+        text,
+        callback.message.chat.id,
+        callback.message.message_id,
+        reply_markup=gift_confirm_keyboard(item_id, cost),
+    )
+    await callback.answer()
 
 
 @router.callback_query(
-    UserState.confirm_withdrawal, UserCallback.filter(F.action == "confirm_withdraw")
+    UserState.confirm_gift, GiftCallback.filter(F.action == "confirm")
 )
-async def process_withdrawal_confirm_handler(
-    callback: CallbackQuery, state: FSMContext, bot: Bot
+async def confirm_gift_handler(
+    callback: CallbackQuery, callback_data: GiftCallback, state: FSMContext, bot: Bot
 ):
-    data = await state.get_data()
-    amount = data.get("withdrawal_amount")
+    """Финализирует заявку на вывод."""
+    await state.clear()
+    if not callback.message:
+        return
     user_id = callback.from_user.id
+    cost = callback_data.cost
+    item_id = callback_data.item_id
 
-    if not amount:
-        await state.clear()
-        return await back_to_main_menu_handler(callback, state, bot)
-
+    # Повторная проверка на случай, если баланс изменился
     balance = await db.get_user_balance(user_id)
-    if amount > balance:
+    if balance < cost:
         await callback.answer("Недостаточно средств!", show_alert=True)
-        await state.clear()
         return await gifts_handler(callback, state, bot)
 
     idem_key = f"reward-{user_id}-{uuid.uuid4()}"
-    result = await db.create_reward_request(
-        user_id, f"withdraw_{amount}", amount, idem_key
-    )
+    result = await db.create_reward_request(user_id, item_id, cost, idem_key)
 
-    await state.clear()
+    gift = next((g for g in GIFTS_CATALOG if g["id"] == item_id), None)
+    if not gift:
+        return await callback.answer("Ошибка: подарок не найден.", show_alert=True)
 
     if result["success"]:
         reward_id = result["reward_id"]
         admin_text = (
-            f"❗️ Новая заявка на вывод!\n"
-            f"ID заявки: `{reward_id}`\n"
-            f"Пользователь: [{callback.from_user.full_name}](tg://user?id={user_id}) (`{user_id}`)\n"
-            f"Сумма: {amount} ⭐"
+            f"❗️ Новая заявка на вывод!\n\n"
+            f"<b>ID заявки:</b> <code>{reward_id}</code>\n"
+            f"<b>Пользователь:</b> <a href='tg://user?id={user_id}'>{callback.from_user.full_name}</a> (<code>{user_id}</code>)\n"
+            f"<b>Подарок:</b> {gift['emoji']} {gift['name']}\n"
+            f"<b>Стоимость:</b> {cost} ⭐"
         )
         for admin_id in settings.ADMIN_IDS:
-            await safe_send_message(bot, admin_id, admin_text, parse_mode="Markdown")
+            await safe_send_message(bot, admin_id, admin_text)
 
-        if callback.message:
-            await safe_edit_caption(
-                bot=bot,
-                caption=LEXICON["withdrawal_success"].format(amount=amount),
-                chat_id=callback.message.chat.id,
-                message_id=callback.message.message_id,
-                reply_markup=main_menu_keyboard(back_only=True),
-            )
+        await safe_edit_caption(
+            bot=bot,
+            caption=LEXICON["withdrawal_success"].format(
+                emoji=gift["emoji"], name=gift["name"], amount=cost
+            ),
+            chat_id=callback.message.chat.id,
+            message_id=callback.message.message_id,
+            reply_markup=back_to_menu_keyboard(),
+        )
+        await callback.answer("✅ Заявка создана!", show_alert=True)
     else:
         await callback.answer(
             f"Ошибка создания заявки: {result.get('reason', 'unknown')}",
             show_alert=True,
         )
-        await back_to_main_menu_handler(callback, state, bot)
-
-    await callback.answer()
+        await gifts_handler(callback, state, bot)
