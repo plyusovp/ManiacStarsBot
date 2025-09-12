@@ -170,9 +170,9 @@ async def resolve_round(bot: Bot, match: DuelMatch):
 
     if match.current_event == "event_comet" and round_winner:
         if round_winner.id == match.p1.id:
-            match.p1_wins += 1
+            match.p1_wins = min(match.p1_wins + 1, 2)
         else:
-            match.p2_wins += 1
+            match.p2_wins = min(match.p2_wins + 1, 2)
         round_text += "\n" + LEXICON["event_comet_triggered"]
 
     final_text = LEXICON["duel_round_end"].format(
