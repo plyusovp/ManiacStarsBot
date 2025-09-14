@@ -23,7 +23,6 @@ from keyboards.factories import (
 def main_menu_keyboard() -> InlineKeyboardMarkup:
     """Генерирует новую клавиатуру главного меню."""
     builder = InlineKeyboardBuilder()
-
     builder.row(
         InlineKeyboardButton(
             text="🌟 Заработать на хлеб 🌟",
@@ -49,7 +48,7 @@ def main_menu_keyboard() -> InlineKeyboardMarkup:
     )
     builder.row(
         InlineKeyboardButton(
-            text="🎁 Наши ресурсы",
+            text="🧑‍💻 Наши ресурсы",
             callback_data=MenuCallback(name="resources").pack(),
         ),
         InlineKeyboardButton(
@@ -64,7 +63,6 @@ def main_menu_keyboard() -> InlineKeyboardMarkup:
             url=f"{settings.URL_SUPPORT}?start={support_text}",
         )
     )
-
     return builder.as_markup()
 
 
@@ -91,21 +89,58 @@ def resources_keyboard() -> InlineKeyboardMarkup:
 def games_menu_keyboard() -> InlineKeyboardMarkup:
     """Генерирует клавиатуру выбора игр."""
     builder = InlineKeyboardBuilder()
+    # Наши игры
     builder.row(
         InlineKeyboardButton(
             text="🃏 Дуэли",
             callback_data=GameCallback(name="duel", action="start").pack(),
+        ),
+        InlineKeyboardButton(
+            text="⏱️ Таймер",
+            callback_data=GameCallback(name="timer", action="start").pack(),
+        ),
+        InlineKeyboardButton(
+            text="🪙Орёл/Решка",
+            callback_data=GameCallback(name="coinflip", action="start").pack(),
+        ),
+    )
+    # Игры-заглушки
+    builder.row(
+        InlineKeyboardButton(
+            text="🎰 Слоты", callback_data=MenuCallback(name="placeholder_game").pack()
+        ),
+        InlineKeyboardButton(
+            text="🎲 Кости", callback_data=MenuCallback(name="placeholder_game").pack()
+        ),
+        InlineKeyboardButton(
+            text="🏀 Баскетбол",
+            callback_data=MenuCallback(name="placeholder_game").pack(),
+        ),
+    )
+    builder.row(
+        InlineKeyboardButton(
+            text="🎯 Дартс", callback_data=MenuCallback(name="placeholder_game").pack()
+        ),
+        InlineKeyboardButton(
+            text="🎳 Боулинг",
+            callback_data=MenuCallback(name="placeholder_game").pack(),
+        ),
+        InlineKeyboardButton(
+            text="⚽️ Футбол", callback_data=MenuCallback(name="placeholder_game").pack()
+        ),
+    )
+    # Дополнительные кнопки
+    builder.row(
+        InlineKeyboardButton(
+            text="📈 Пассивный доход",
+            callback_data=MenuCallback(name="passive_income").pack(),
         )
     )
     builder.row(
         InlineKeyboardButton(
-            text="⏱️ Звёздный таймер",
-            callback_data=GameCallback(name="timer", action="start").pack(),
-        ),
-        InlineKeyboardButton(
-            text="🪙 Орёл и Решка",
-            callback_data=GameCallback(name="coinflip", action="start").pack(),
-        ),
+            text="💰 Получить ежедневный бонус",
+            callback_data=MenuCallback(name="get_daily_bonus").pack(),
+        )
     )
     builder.row(
         InlineKeyboardButton(
@@ -158,7 +193,7 @@ def promo_back_keyboard() -> InlineKeyboardMarkup:
 
 
 def top_users_keyboard() -> InlineKeyboardMarkup:
-    return back_to_menu_keyboard()  # Use the generic back keyboard
+    return back_to_menu_keyboard()
 
 
 def gifts_catalog_keyboard() -> InlineKeyboardMarkup:
@@ -173,7 +208,7 @@ def gifts_catalog_keyboard() -> InlineKeyboardMarkup:
                 ).pack(),
             )
         )
-    builder.adjust(2)  # По 2 подарка в ряду
+    builder.adjust(2)
     builder.row(
         InlineKeyboardButton(
             text="⬅️ Назад в меню",
@@ -204,7 +239,6 @@ def gift_confirm_keyboard(item_id: str, cost: int) -> InlineKeyboardMarkup:
 
 # --- Duel Keyboards ---
 def duel_stake_keyboard() -> InlineKeyboardMarkup:
-    """Клавиатура выбора ставки для дуэли."""
     builder = InlineKeyboardBuilder()
     buttons = [
         InlineKeyboardButton(
@@ -298,7 +332,6 @@ def duel_boost_choice_keyboard(match_id: int, hand: list[int]) -> InlineKeyboard
 
 
 def back_to_duels_keyboard() -> InlineKeyboardMarkup:
-    """Клавиатура для возврата в меню дуэлей после игры/отмены."""
     builder = InlineKeyboardBuilder()
     builder.add(
         InlineKeyboardButton(
@@ -362,7 +395,6 @@ def timer_finish_keyboard() -> InlineKeyboardMarkup:
 
 # --- Coinflip Keyboards ---
 def coinflip_stake_keyboard() -> InlineKeyboardMarkup:
-    """Клавиатура выбора ставки для 'Орла и решки'."""
     builder = InlineKeyboardBuilder()
     stakes = [
         InlineKeyboardButton(
@@ -380,8 +412,22 @@ def coinflip_stake_keyboard() -> InlineKeyboardMarkup:
     return builder.as_markup()
 
 
+def coinflip_choice_keyboard() -> InlineKeyboardMarkup:
+    builder = InlineKeyboardBuilder()
+    builder.row(
+        InlineKeyboardButton(
+            text="Орёл",
+            callback_data=CoinflipCallback(action="choice", choice="орел").pack(),
+        ),
+        InlineKeyboardButton(
+            text="Решка",
+            callback_data=CoinflipCallback(action="choice", choice="решка").pack(),
+        ),
+    )
+    return builder.as_markup()
+
+
 def coinflip_continue_keyboard() -> InlineKeyboardMarkup:
-    """Клавиатура с выбором: продолжить игру или забрать выигрыш."""
     builder = InlineKeyboardBuilder()
     builder.row(
         InlineKeyboardButton(
@@ -399,7 +445,6 @@ def coinflip_continue_keyboard() -> InlineKeyboardMarkup:
 
 
 def coinflip_play_again_keyboard() -> InlineKeyboardMarkup:
-    """Клавиатура после окончания игры."""
     builder = InlineKeyboardBuilder()
     builder.row(
         InlineKeyboardButton(
@@ -429,8 +474,6 @@ def achievements_keyboard(
                 callback_data=AchievementCallback(action="info", ach_id=ach_id).pack(),
             )
         )
-
-    # Pagination
     nav_buttons = []
     if page > 1:
         nav_buttons.append(
@@ -451,7 +494,6 @@ def achievements_keyboard(
         )
     if len(nav_buttons) > 1:
         builder.row(*nav_buttons)
-
     builder.row(
         InlineKeyboardButton(
             text="⬅️ Назад в меню",
@@ -523,13 +565,17 @@ def admin_confirm_keyboard(
     action: str,
     target_id: Optional[int] = None,
     value: Optional[Union[int, str]] = None,
+    promo_code: Optional[str] = None,
 ) -> InlineKeyboardMarkup:
     builder = InlineKeyboardBuilder()
     builder.row(
         InlineKeyboardButton(
             text="✅ Подтвердить",
             callback_data=AdminCallback(
-                action=f"{action}_confirm", target_id=target_id, value=str(value)
+                action=f"{action}_confirm",
+                target_id=target_id,
+                value=str(value),
+                promo_code=promo_code,
             ).pack(),
         )
     )
@@ -620,11 +666,71 @@ def admin_promos_menu() -> InlineKeyboardMarkup:
         InlineKeyboardButton(
             text="➕ Создать промокод",
             callback_data=AdminCallback(action="promo_create").pack(),
-        )
+        ),
+        InlineKeyboardButton(
+            text="📋 Список промокодов",
+            callback_data=AdminCallback(action="promo_list", page=1).pack(),
+        ),
     )
     builder.row(
         InlineKeyboardButton(
             text="⬅️ Назад", callback_data=AdminCallback(action="main_panel").pack()
+        )
+    )
+    return builder.as_markup()
+
+
+def admin_promos_list_keyboard(page: int, total_pages: int) -> InlineKeyboardMarkup:
+    builder = InlineKeyboardBuilder()
+    nav_row = []
+    if page > 1:
+        nav_row.append(
+            InlineKeyboardButton(
+                text="⬅️",
+                callback_data=AdminCallback(action="promo_list", page=page - 1).pack(),
+            )
+        )
+    if page < total_pages:
+        nav_row.append(
+            InlineKeyboardButton(
+                text="➡️",
+                callback_data=AdminCallback(action="promo_list", page=page + 1).pack(),
+            )
+        )
+    if nav_row:
+        builder.row(*nav_row)
+    builder.row(
+        InlineKeyboardButton(
+            text="⬅️ К промокодам",
+            callback_data=AdminCallback(action="promos").pack(),
+        )
+    )
+    return builder.as_markup()
+
+
+def admin_promo_manage_keyboard(code: str, is_active: bool) -> InlineKeyboardMarkup:
+    builder = InlineKeyboardBuilder()
+    if is_active:
+        builder.row(
+            InlineKeyboardButton(
+                text="🚫 Деактивировать",
+                callback_data=AdminCallback(
+                    action="promo_deactivate", promo_code=code
+                ).pack(),
+            )
+        )
+    builder.row(
+        InlineKeyboardButton(
+            text="➕ Добавить активаций",
+            callback_data=AdminCallback(
+                action="promo_add_uses", promo_code=code
+            ).pack(),
+        )
+    )
+    builder.row(
+        InlineKeyboardButton(
+            text="⬅️ К списку",
+            callback_data=AdminCallback(action="promo_list", page=1).pack(),
         )
     )
     return builder.as_markup()
@@ -644,7 +750,6 @@ def admin_user_info_menu() -> InlineKeyboardMarkup:
             callback_data=AdminCallback(action="main_panel").pack(),
         )
     )
-
     return builder.as_markup()
 
 
@@ -669,52 +774,6 @@ def admin_manage_menu() -> InlineKeyboardMarkup:
     builder.row(
         InlineKeyboardButton(
             text="⬅️ Назад", callback_data=AdminCallback(action="main_panel").pack()
-        )
-    )
-    return builder.as_markup()
-
-
-def admin_grant_target_type_keyboard() -> InlineKeyboardMarkup:
-    builder = InlineKeyboardBuilder()
-    builder.row(
-        InlineKeyboardButton(
-            text="Рабам",
-            callback_data=AdminCallback(action="grant_target", name="user").pack(),
-        )
-    )
-    builder.row(
-        InlineKeyboardButton(
-            text="Админам",
-            callback_data=AdminCallback(action="grant_target", name="admin").pack(),
-        )
-    )
-    builder.row(
-        InlineKeyboardButton(
-            text="⬅️ Назад", callback_data=AdminCallback(action="manage").pack()
-        )
-    )
-    return builder.as_markup()
-
-
-def admin_grant_admin_select_keyboard() -> InlineKeyboardMarkup:
-    builder = InlineKeyboardBuilder()
-    builder.row(
-        InlineKeyboardButton(
-            text="Марк",
-            callback_data=AdminCallback(
-                action="grant_admin_select", target_id=settings.MARK_ID
-            ).pack(),
-        ),
-        InlineKeyboardButton(
-            text="Максим",
-            callback_data=AdminCallback(
-                action="grant_admin_select", target_id=settings.MAXIM_ID
-            ).pack(),
-        ),
-    )
-    builder.row(
-        InlineKeyboardButton(
-            text="⬅️ Назад", callback_data=AdminCallback(action="grant").pack()
         )
     )
     return builder.as_markup()

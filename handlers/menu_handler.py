@@ -43,7 +43,6 @@ async def show_main_menu(bot: Bot, chat_id: int, message_id: Optional[int] = Non
         )
 
     if not success:
-        # Если редактирование не удалось, удаляем старое и отправляем новое
         if message_id:
             await safe_delete(bot, chat_id, message_id)
         await bot.send_photo(
@@ -79,7 +78,7 @@ async def resources_menu_handler(callback: CallbackQuery, state: FSMContext, bot
     await state.clear()
     await clean_junk_message(state, bot)
     media = InputMediaPhoto(
-        media=settings.PHOTO_MAIN_MENU, caption=LEXICON["resources_menu"]
+        media=settings.PHOTO_RESOURCES, caption=LEXICON["resources_menu"]
     )
     if callback.message:
         await safe_edit_media(
@@ -92,6 +91,50 @@ async def resources_menu_handler(callback: CallbackQuery, state: FSMContext, bot
     await callback.answer()
 
 
+# --- Новые обработчики для меню игр ---
+@router.callback_query(MenuCallback.filter(F.name == "placeholder_game"))
+async def placeholder_game_handler(callback: CallbackQuery):
+    """Обработчик для игр в разработке."""
+    await callback.answer("Эта игра скоро появится!", show_alert=True)
+
+
+@router.callback_query(MenuCallback.filter(F.name == "passive_income"))
+async def passive_income_handler(callback: CallbackQuery):
+    """Обработчик для кнопки пассивного дохода."""
+    text = (
+        "Вы можете разместить реферальную ссылку на нашего бота в описании "
+        "своего профиля и получать 1 ⭐ каждый день.\n\n"
+        "(Функция автоматической проверки находится в разработке)"
+    )
+    await callback.answer(text, show_alert=True)
+
+
+@router.callback_query(MenuCallback.filter(F.name == "get_daily_bonus"))
+async def get_daily_bonus_callback_handler(callback: CallbackQuery):
+    """Обработчик для кнопки ежедневного бонуса."""
+    if not callback.from_user:
+        return
+
+    result = await db.get_daily_bonus(callback.from_user.id)
+    status = result.get("status")
+    if status == "success":
+        reward = result.get("reward", 0)
+        await callback.answer(
+            f"🎁 Вы получили {reward} ⭐ дневного бонуса!", show_alert=True
+        )
+    elif status == "wait":
+        seconds = result.get("seconds_left", 0)
+        hours = seconds // 3600
+        minutes = (seconds % 3600) // 60
+        await callback.answer(
+            f"⏳ Бонус будет доступен через {hours} ч {minutes} м.", show_alert=True
+        )
+    else:
+        await callback.answer(
+            "❌ Не удалось получить бонус. Попробуйте позже.", show_alert=True
+        )
+
+
 @router.callback_query(MenuCallback.filter(F.name == "achievements"))
 async def achievements_handler(
     callback: CallbackQuery, state: FSMContext, bot: Bot, callback_data: MenuCallback
@@ -100,7 +143,7 @@ async def achievements_handler(
     await clean_junk_message(state, bot)
     user_id = callback.from_user.id
     page = 1
-    limit = 5  # Achievements per page
+    limit = 5
 
     all_achs = await db.get_all_achievements()
     user_achs_set = set(await db.get_user_achievements(user_id))

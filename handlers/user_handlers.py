@@ -20,7 +20,6 @@ from handlers.utils import (
     safe_delete,
     safe_edit_caption,
     safe_send_message,
-    validate_referral_code,
 )
 from keyboards.factories import GiftCallback, MenuCallback, UserCallback
 from keyboards.inline import (
@@ -43,6 +42,7 @@ logger = logging.getLogger(__name__)
 class UserState(StatesGroup):
     enter_promo = State()
     confirm_gift = State()
+    current_view = State()
 
 
 # --- Command Handlers ---
@@ -67,36 +67,44 @@ async def start_handler(
 
     referrer_id = None
     if command.args:
-        ref_code = command.args
-        validated_id = validate_referral_code(ref_code)
-        if validated_id and validated_id != user_id:
-            referrer_id = validated_id
-            logger.info(f"User {user_id} joined with referrer {referrer_id}")
+        try:
+            # Проверяем, является ли аргумент числом
+            validated_id = int(command.args)
+            # Нельзя пригласить самого себя
+            if validated_id != user_id:
+                referrer_id = validated_id
+                logger.info(f"User {user_id} joined with referrer {referrer_id}")
+        except (ValueError, TypeError):
+            logger.warning(f"Invalid referral code received: {command.args}")
 
     is_new_user = await db.add_user(user_id, username, full_name, referrer_id)
 
     if is_new_user and referrer_id:
-        await db.add_balance_with_checks(
-            referrer_id, settings.REFERRAL_BONUS, "referral_bonus", ref_id=str(user_id)
-        )
-        await safe_send_message(
-            bot,
-            referrer_id,
-            f"По вашей ссылке зарегистрировался новый пользователь! Вам начислено {settings.REFERRAL_BONUS} ⭐.",
-        )
+        # Проверяем, существует ли пригласивший пользователь
+        if await db.user_exists(referrer_id):
+            await db.add_balance_with_checks(
+                referrer_id,
+                settings.REFERRAL_BONUS,
+                "referral_bonus",
+                ref_id=str(user_id),
+            )
+            await safe_send_message(
+                bot,
+                referrer_id,
+                f"По вашей ссылке зарегистрировался новый пользователь! Вам начислено {settings.REFERRAL_BONUS} ⭐.",
+            )
+        else:
+            logger.warning(f"Referrer with ID {referrer_id} not found in database.")
 
     balance = await db.get_user_balance(user_id)
     caption = LEXICON["main_menu"].format(balance=balance)
 
-    # Удаляем предыдущее фото-сообщение, если оно есть, чтобы избежать дублей
     try:
         if message.reply_to_message and message.reply_to_message.photo:
             await bot.delete_message(
                 message.chat.id, message.reply_to_message.message_id
             )
     except Exception as e:
-        # Логируем ошибку, но не прерываем выполнение, т.к. удаление
-        # старого сообщения не является критичной операцией.
         logger.debug(f"Could not delete previous message in start_handler: {e}")
 
     await message.answer_photo(
@@ -104,6 +112,7 @@ async def start_handler(
         caption=caption,
         reply_markup=main_menu_keyboard(),
     )
+    await state.update_data(current_view="main_menu")
 
     await message.answer(
         "Нажмите «Меню», чтобы открыть навигацию",
@@ -124,11 +133,11 @@ async def menu_handler(message: Message, state: FSMContext, bot: Bot):
         caption=caption,
         reply_markup=main_menu_keyboard(),
     )
+    await state.update_data(current_view="main_menu")
 
 
 @router.message(Command("bonus"))
 async def bonus_handler(message: Message):
-    """Обрабатывает команду /bonus для получения ежедневного бонуса."""
     if not message.from_user:
         return
 
@@ -151,6 +160,11 @@ async def bonus_handler(message: Message):
 async def back_to_main_menu_handler(
     callback: CallbackQuery, state: FSMContext, bot: Bot
 ):
+    data = await state.get_data()
+    if data.get("current_view") == "main_menu":
+        await callback.answer()
+        return
+
     await state.clear()
     await clean_junk_message(state, bot)
     if callback.message:
@@ -164,8 +178,9 @@ async def back_to_main_menu_handler(
                 message_id=callback.message.message_id,
                 reply_markup=main_menu_keyboard(),
             )
-        except TelegramBadRequest:
-            # Если редактирование не удалось, отправляем новое сообщение
+            await state.update_data(current_view="main_menu")
+        except TelegramBadRequest as e:
+            logger.warning(f"Failed to edit message to main menu: {e}")
             await safe_delete(
                 bot, callback.message.chat.id, callback.message.message_id
             )
@@ -175,6 +190,7 @@ async def back_to_main_menu_handler(
                 caption=caption,
                 reply_markup=main_menu_keyboard(),
             )
+            await state.update_data(current_view="main_menu")
     await callback.answer()
 
 
@@ -191,6 +207,7 @@ async def profile_handler(callback: CallbackQuery, state: FSMContext, bot: Bot):
             message_id=callback.message.message_id,
             reply_markup=profile_keyboard(),
         )
+        await state.update_data(current_view="profile")
     await callback.answer()
 
 
@@ -213,6 +230,7 @@ async def referral_handler(callback: CallbackQuery, state: FSMContext, bot: Bot)
             message_id=callback.message.message_id,
             reply_markup=back_to_menu_keyboard(),
         )
+        await state.update_data(current_view="earn_bread")
     await callback.answer()
 
 
@@ -239,6 +257,7 @@ async def top_users_handler(callback: CallbackQuery, state: FSMContext, bot: Bot
             message_id=callback.message.message_id,
             reply_markup=top_users_keyboard(),
         )
+        await state.update_data(current_view="top_users")
     await callback.answer()
 
 
@@ -258,6 +277,7 @@ async def enter_promo_start_handler(
             message_id=callback.message.message_id,
             reply_markup=promo_back_keyboard(),
         )
+        await state.update_data(current_view="enter_promo")
     await callback.answer()
 
 
@@ -286,16 +306,13 @@ async def process_promo_handler(message: Message, state: FSMContext, bot: Bot):
         await message.answer(f"❌ Не удалось активировать промокод. Ошибка: {result}")
 
     await state.clear()
-    # After action, show the main menu again by calling the handler
     await menu_handler(message, state, bot)
 
 
 # --- Gifts/Withdrawal Section ---
 async def check_withdrawal_requirements(user_id: int, bot: Bot) -> List[str]:
-    """Проверяет, соответствует ли пользователь требованиям для вывода."""
     errors = []
     try:
-        # Проверяем подписку на все каналы из конфига
         member = await bot.get_chat_member(settings.CHANNEL_ID, user_id)
         if member.status not in ["member", "administrator", "creator"]:
             errors.append("Вы не подписаны на основной канал.")
@@ -334,6 +351,7 @@ async def gifts_handler(callback: CallbackQuery, state: FSMContext, bot: Bot):
         message_id=callback.message.message_id,
         reply_markup=gifts_catalog_keyboard(),
     )
+    await state.update_data(current_view="gifts")
     await callback.answer()
 
 
@@ -341,14 +359,12 @@ async def gifts_handler(callback: CallbackQuery, state: FSMContext, bot: Bot):
 async def select_gift_handler(
     callback: CallbackQuery, callback_data: GiftCallback, state: FSMContext, bot: Bot
 ):
-    """Обрабатывает выбор подарка из каталога."""
     if not callback.message:
         return
     user_id = callback.from_user.id
     cost = callback_data.cost
     item_id = callback_data.item_id
 
-    # 1. Проверка требований
     errors = await check_withdrawal_requirements(user_id, bot)
     if errors:
         error_text = LEXICON_ERRORS["gift_requirements_not_met"].format(
@@ -356,7 +372,6 @@ async def select_gift_handler(
         )
         return await callback.answer(error_text, show_alert=True)
 
-    # 2. Проверка баланса
     balance = await db.get_user_balance(user_id)
     if balance < cost:
         return await callback.answer(
@@ -364,7 +379,6 @@ async def select_gift_handler(
             show_alert=True,
         )
 
-    # 3. Показ подтверждения
     gift = next((g for g in GIFTS_CATALOG if g["id"] == item_id), None)
     if not gift:
         return await callback.answer("Ошибка: подарок не найден.", show_alert=True)
@@ -380,6 +394,7 @@ async def select_gift_handler(
         callback.message.message_id,
         reply_markup=gift_confirm_keyboard(item_id, cost),
     )
+    await state.update_data(current_view="gift_confirm")
     await callback.answer()
 
 
@@ -389,7 +404,6 @@ async def select_gift_handler(
 async def confirm_gift_handler(
     callback: CallbackQuery, callback_data: GiftCallback, state: FSMContext, bot: Bot
 ):
-    """Финализирует заявку на вывод."""
     await state.clear()
     if not callback.message:
         return
@@ -397,7 +411,6 @@ async def confirm_gift_handler(
     cost = callback_data.cost
     item_id = callback_data.item_id
 
-    # Повторная проверка на случай, если баланс изменился
     balance = await db.get_user_balance(user_id)
     if balance < cost:
         await callback.answer("Недостаточно средств!", show_alert=True)
@@ -431,6 +444,7 @@ async def confirm_gift_handler(
             message_id=callback.message.message_id,
             reply_markup=back_to_menu_keyboard(),
         )
+        await state.update_data(current_view="main_menu")
         await callback.answer("✅ Заявка создана!", show_alert=True)
     else:
         await callback.answer(

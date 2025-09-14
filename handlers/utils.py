@@ -1,5 +1,4 @@
-import hashlib
-import hmac
+# handlers/utils.py
 import logging
 from contextlib import suppress
 from typing import Any, Optional, Union
@@ -90,7 +89,7 @@ async def get_user_info_text(user_id: int, for_admin: bool = False) -> str:
         referrals_count=referrals_count,
         duel_wins=user["duel_wins"],
         duel_losses=user["duel_losses"],
-        status_text="",  # Placeholder for now
+        status_text="",
     )
     if for_admin:
         details = await db.get_user_full_details_for_admin(user_id)
@@ -106,29 +105,8 @@ async def get_user_info_text(user_id: int, for_admin: bool = False) -> str:
 
 
 def generate_referral_link(user_id: int) -> str:
-    """Генерирует и подписывает реферальный код."""
-    message = str(user_id).encode("utf-8")
-    signature = hmac.new(
-        settings.PAYLOAD_HMAC_SECRET.encode("utf-8"), message, hashlib.sha256
-    ).hexdigest()
-    ref_code = f"{user_id}-{signature}"
-    return f"https://t.me/{settings.BOT_USERNAME}?start={ref_code}"
-
-
-def validate_referral_code(ref_code: str) -> Union[int, None]:
-    """Проверяет подлинность реферального кода."""
-    try:
-        user_id_str, signature = ref_code.split("-")
-        user_id = int(user_id_str)
-        message = user_id_str.encode("utf-8")
-        expected_signature = hmac.new(
-            settings.PAYLOAD_HMAC_SECRET.encode("utf-8"), message, hashlib.sha256
-        ).hexdigest()
-        if hmac.compare_digest(expected_signature, signature):
-            return user_id
-    except (ValueError, TypeError) as e:
-        logger.warning(f"Invalid referral code format: {ref_code}, error: {e}")
-    return None
+    """Генерирует простую реферальную ссылку."""
+    return f"https://t.me/{settings.BOT_USERNAME}?start={user_id}"
 
 
 async def clean_junk_message(state: FSMContext, bot: Bot):

@@ -56,24 +56,59 @@ async def live_timer_updater(bot: Bot, match: TimerMatch):
     """Periodically updates the timer message for both players."""
     while match.match_id in active_timers:
         try:
-            await asyncio.sleep(0.2)  # Update rate
+            await asyncio.sleep(0.2)
             if not match.start_time or not match.p1_msg_id or not match.p2_msg_id:
                 continue
 
-            # Stop updating if both players have clicked
-            if match.p1_stopped_time > 0 and match.p2_stopped_time > 0:
-                break
+            async with match.lock:
+                if match.match_id not in active_timers:
+                    break
 
-            elapsed_time = time.time() - match.start_time
-            text = LEXICON["timer_live"].format(elapsed_time=elapsed_time)
+                elapsed_time = time.time() - match.start_time
 
-            tasks = []
-            if match.p1_stopped_time == 0:
-                tasks.append(safe_edit_caption(bot, text, match.p1_id, match.p1_msg_id))
-            if match.p2_stopped_time == 0:
-                tasks.append(safe_edit_caption(bot, text, match.p2_id, match.p2_msg_id))
-            if tasks:
-                await asyncio.gather(*tasks, return_exceptions=True)
+                if elapsed_time > 10.0:
+                    logger.info(f"Timer match {match.match_id} timed out.")
+                    if match.match_id in active_timers:
+                        del active_timers[match.match_id]
+
+                    await db.finish_timer_match(match_id=match.match_id, is_draw=True)
+                    text = (
+                        f"⏳ Время вышло! (10.00 сек)\n\n"
+                        f"Ничья. Ставки в размере {match.stake} ⭐ возвращены."
+                    )
+                    await asyncio.gather(
+                        safe_edit_caption(
+                            bot,
+                            text,
+                            match.p1_id,
+                            match.p1_msg_id,
+                            reply_markup=timer_finish_keyboard(),
+                        ),
+                        safe_edit_caption(
+                            bot,
+                            text,
+                            match.p2_id,
+                            match.p2_msg_id,
+                            reply_markup=timer_finish_keyboard(),
+                        ),
+                    )
+                    break
+
+                if match.p1_stopped_time > 0 and match.p2_stopped_time > 0:
+                    break
+
+                text = LEXICON["timer_live"].format(elapsed_time=elapsed_time)
+                tasks = []
+                if match.p1_stopped_time == 0:
+                    tasks.append(
+                        safe_edit_caption(bot, text, match.p1_id, match.p1_msg_id)
+                    )
+                if match.p2_stopped_time == 0:
+                    tasks.append(
+                        safe_edit_caption(bot, text, match.p2_id, match.p2_msg_id)
+                    )
+                if tasks:
+                    await asyncio.gather(*tasks, return_exceptions=True)
 
         except asyncio.CancelledError:
             logger.info(f"Timer updater for match {match.match_id} cancelled.")
@@ -133,10 +168,9 @@ async def start_timer_game(
 
     await asyncio.sleep(secrets.SystemRandom().uniform(2.5, 4.0))
     if match_id not in active_timers:
-        return  # Match was cancelled
+        return
 
     match.start_time = time.time()
-    # Start the live updater task
     match.updater_task = asyncio.create_task(live_timer_updater(bot, match))
 
     if p1_msg_id and p2_msg_id:
@@ -165,12 +199,16 @@ async def resolve_timer_game(bot: Bot, match_id: int):
     match = active_timers[match_id]
 
     async with match.lock:
+        if match_id not in active_timers:
+            return
+
         if not (match.p1_stopped_time > 0 and match.p2_stopped_time > 0):
             return
 
-        # Cancel the live updater task
         if match.updater_task and not match.updater_task.done():
             match.updater_task.cancel()
+
+        del active_timers[match_id]
 
         p1_result = match.p1_stopped_time - match.start_time
         p2_result = match.p2_stopped_time - match.start_time
@@ -227,16 +265,9 @@ async def resolve_timer_game(bot: Bot, match_id: int):
                 reply_markup=timer_finish_keyboard(),
             )
 
-        if match_id in active_timers:
-            del active_timers[match_id]
-
-
-# --- Callback Handlers ---
-
 
 @router.callback_query(GameCallback.filter((F.name == "timer") & (F.action == "start")))
 async def timer_menu_handler(callback: CallbackQuery, state: FSMContext, bot: Bot):
-    """Displays the 'Star Timer' game menu."""
     await state.clear()
     await clean_junk_message(state, bot)
     if not callback.message:
@@ -256,7 +287,6 @@ async def timer_menu_handler(callback: CallbackQuery, state: FSMContext, bot: Bo
 async def find_timer_handler(
     callback: CallbackQuery, callback_data: TimerCallback, bot: Bot, **data
 ):
-    """Handles stake selection and starts searching for an opponent."""
     stake = callback_data.value
     if stake is None or not callback.message:
         return await callback.answer("Ошибка: неверная ставка.", show_alert=True)
@@ -269,7 +299,7 @@ async def find_timer_handler(
     async with TIMER_MATCHMAKING_LOCK:
         if stake in timer_queue and timer_queue[stake]:
             opponent_id, opponent_msg_id = timer_queue[stake].popitem()
-            if opponent_id == user_id:  # Can't play against yourself
+            if opponent_id == user_id:
                 timer_queue[stake][opponent_id] = opponent_msg_id
                 return await callback.answer("Вы уже в поиске.", show_alert=True)
 
@@ -277,13 +307,11 @@ async def find_timer_handler(
                 f"Timer match found! {user_id} vs {opponent_id} with stake {stake}"
             )
 
-            # Atomically create the match in the database
             match_id, stop_second = await db.create_timer_match(
                 opponent_id, user_id, stake
             )
 
             if match_id and stop_second:
-                # Success! Start the game.
                 asyncio.create_task(
                     start_timer_game(
                         bot,
@@ -297,7 +325,6 @@ async def find_timer_handler(
                     )
                 )
             else:
-                # Failure. Put opponent back in queue and notify both players.
                 timer_queue[stake][opponent_id] = opponent_msg_id
                 await callback.answer(
                     "Не удалось начать игру. Возможно, у вас или соперника не хватило средств.",
@@ -325,7 +352,6 @@ async def find_timer_handler(
 async def timer_cancel_search_handler(
     callback: CallbackQuery, state: FSMContext, bot: Bot, **data
 ):
-    """Cancels the game search."""
     user_id = callback.from_user.id
     async with TIMER_MATCHMAKING_LOCK:
         for stake, players in list(timer_queue.items()):
@@ -344,7 +370,6 @@ async def timer_cancel_search_handler(
 async def stop_timer_handler(
     callback: CallbackQuery, callback_data: TimerCallback, bot: Bot, **data
 ):
-    """Handles the 'Stop' button press during the game."""
     match_id = callback_data.match_id
     if match_id is None or not callback.message:
         return await callback.answer("Ошибка: игра не найдена.", show_alert=True)
@@ -369,7 +394,12 @@ async def stop_timer_handler(
 
         should_resolve = match.p1_stopped_time > 0 and match.p2_stopped_time > 0
 
-    await callback.message.edit_text("✅ Ваше время принято! Ожидаем соперника...")
+    await safe_edit_caption(
+        bot=bot,
+        caption="✅ Ваше время принято! Ожидаем соперника...",
+        chat_id=callback.message.chat.id,
+        message_id=callback.message.message_id,
+    )
     await callback.answer()
 
     if should_resolve:

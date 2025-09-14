@@ -14,8 +14,8 @@ class MenuCallback(CallbackData, prefix="menu"):  # type: ignore
 class GameCallback(CallbackData, prefix="game"):  # type: ignore
     """Фабрика для игровых меню."""
 
-    name: str  # e.g., "duel", "coinflip", "timer"
-    action: str  # e.g., "start", "rules"
+    name: str
+    action: str
 
 
 class UserCallback(CallbackData, prefix="user"):  # type: ignore
@@ -28,8 +28,9 @@ class UserCallback(CallbackData, prefix="user"):  # type: ignore
 class CoinflipCallback(CallbackData, prefix="cf"):  # type: ignore
     """Фабрика для действий в игре 'Орёл и Решка'."""
 
-    action: str  # 'stake', 'continue', 'cashout'
-    value: Optional[int] = None  # stake_amount
+    action: str
+    value: Optional[int] = None
+    choice: Optional[str] = None
 
 
 class DuelCallback(CallbackData, prefix="duel"):  # type: ignore
@@ -47,17 +48,17 @@ class TimerCallback(CallbackData, prefix="timer"):  # type: ignore
 
     action: str
     match_id: Optional[int] = None
-    value: Optional[int] = None  # Для ставок
+    value: Optional[int] = None
 
 
 class AdminCallback(CallbackData, prefix="admin"):  # type: ignore
     """Фабрика для всех действий в админ-панели."""
 
     action: str
-    name: Optional[str] = None  # Для выбора типа начисления и т.д.
-    target_id: Optional[int] = None  # user_id, reward_id, etc.
+    target_id: Optional[int] = None
     value: Optional[Union[int, str]] = None
     page: Optional[int] = None
+    promo_code: Optional[str] = None  # Для управления конкретным промокодом
 
 
 class AchievementCallback(CallbackData, prefix="ach"):  # type: ignore
@@ -71,6 +72,6 @@ class AchievementCallback(CallbackData, prefix="ach"):  # type: ignore
 class GiftCallback(CallbackData, prefix="gift"):  # type: ignore
     """Фабрика для каталога подарков."""
 
-    action: str  # 'select', 'confirm'
+    action: str
     item_id: str
     cost: int
