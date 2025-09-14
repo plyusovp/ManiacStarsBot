@@ -1,14 +1,19 @@
 # handlers/menu_handler.py
-from typing import Optional
+import logging
+from typing import List, Optional
 
 from aiogram import Bot, F, Router
+from aiogram.exceptions import TelegramBadRequest
 from aiogram.fsm.context import FSMContext
 from aiogram.types import CallbackQuery, InputMediaPhoto
 
 from config import settings
 from database import db
+from gifts import GIFTS_CATALOG
 from handlers.utils import (
     clean_junk_message,
+    generate_referral_link,
+    get_user_info_text,
     safe_delete,
     safe_edit_caption,
     safe_edit_media,
@@ -17,16 +22,26 @@ from keyboards.factories import AchievementCallback, MenuCallback
 from keyboards.inline import (
     achievements_keyboard,
     back_to_achievements_keyboard,
+    back_to_menu_keyboard,
     games_menu_keyboard,
+    gifts_catalog_keyboard,
     main_menu_keyboard,
+    profile_keyboard,
     resources_keyboard,
+    top_users_keyboard,
 )
-from lexicon.texts import LEXICON
+from lexicon.texts import LEXICON, LEXICON_ERRORS
 
 router = Router()
+logger = logging.getLogger(__name__)
 
 
-async def show_main_menu(bot: Bot, chat_id: int, message_id: Optional[int] = None):
+async def show_main_menu(
+    bot: Bot,
+    chat_id: int,
+    message_id: Optional[int] = None,
+    state: Optional[FSMContext] = None,
+):
     """Отображает или обновляет главное меню."""
     balance = await db.get_user_balance(chat_id)
     caption = LEXICON["main_menu"].format(balance=balance)
@@ -34,6 +49,7 @@ async def show_main_menu(bot: Bot, chat_id: int, message_id: Optional[int] = Non
 
     success = False
     if message_id is not None:
+        # Try to edit the existing message
         success = await safe_edit_media(
             bot=bot,
             media=media,
@@ -43,6 +59,7 @@ async def show_main_menu(bot: Bot, chat_id: int, message_id: Optional[int] = Non
         )
 
     if not success:
+        # If editing fails, delete the old one and send a new one
         if message_id:
             await safe_delete(bot, chat_id, message_id)
         await bot.send_photo(
@@ -51,6 +68,122 @@ async def show_main_menu(bot: Bot, chat_id: int, message_id: Optional[int] = Non
             caption=caption,
             reply_markup=main_menu_keyboard(),
         )
+
+    # Always update the state to reflect the current view
+    if state:
+        await state.update_data(current_view="main_menu")
+
+
+@router.callback_query(MenuCallback.filter(F.name == "main_menu"))
+async def back_to_main_menu_handler(
+    callback: CallbackQuery, state: FSMContext, bot: Bot
+):
+    """Central handler for all 'Back to main menu' buttons."""
+    data = await state.get_data()
+    # Prevent re-editing if already on the main menu
+    if data.get("current_view") == "main_menu":
+        await callback.answer()
+        return
+
+    await state.clear()
+    await clean_junk_message(state, bot)
+    if callback.message:
+        await show_main_menu(
+            bot, callback.message.chat.id, callback.message.message_id, state
+        )
+    await callback.answer()
+
+
+@router.callback_query(MenuCallback.filter(F.name == "profile"))
+async def profile_handler(callback: CallbackQuery, state: FSMContext, bot: Bot):
+    await clean_junk_message(state, bot)
+    if callback.message:
+        profile_text = await get_user_info_text(callback.from_user.id)
+        media = InputMediaPhoto(media=settings.PHOTO_PROFILE, caption=profile_text)
+        await bot.edit_message_media(
+            media=media,
+            chat_id=callback.message.chat.id,
+            message_id=callback.message.message_id,
+            reply_markup=profile_keyboard(),
+        )
+        await state.update_data(current_view="profile")
+    await callback.answer()
+
+
+@router.callback_query(MenuCallback.filter(F.name == "earn_bread"))
+async def referral_handler(callback: CallbackQuery, state: FSMContext, bot: Bot):
+    await clean_junk_message(state, bot)
+    if callback.message:
+        referral_link = generate_referral_link(callback.from_user.id)
+        referrals_count = await db.get_referrals_count(callback.from_user.id)
+        text = LEXICON["referral_menu"].format(
+            ref_link=referral_link,
+            invited_count=referrals_count,
+            ref_bonus=settings.REFERRAL_BONUS,
+        )
+        media = InputMediaPhoto(media=settings.PHOTO_EARN_STARS, caption=text)
+        await bot.edit_message_media(
+            media=media,
+            chat_id=callback.message.chat.id,
+            message_id=callback.message.message_id,
+            reply_markup=back_to_menu_keyboard(),
+        )
+        await state.update_data(current_view="earn_bread")
+    await callback.answer()
+
+
+@router.callback_query(MenuCallback.filter(F.name == "top_users"))
+async def top_users_handler(callback: CallbackQuery, state: FSMContext, bot: Bot):
+    await clean_junk_message(state, bot)
+    if callback.message:
+        top_users = await db.get_top_referrers()
+        top_users_text = ""
+        if top_users:
+            for i, user in enumerate(top_users, 1):
+                top_users_text += (
+                    f"{i}. {user['full_name']} — {user['ref_count']} 🙋‍♂️\n"
+                )
+        else:
+            top_users_text = "Пока никто не пригласил друзей."
+
+        text = LEXICON["top_menu"].format(top_users_text=top_users_text)
+        media = InputMediaPhoto(media=settings.PHOTO_TOP, caption=text)
+        await bot.edit_message_media(
+            media=media,
+            chat_id=callback.message.chat.id,
+            message_id=callback.message.message_id,
+            reply_markup=top_users_keyboard(),
+        )
+        await state.update_data(current_view="top_users")
+    await callback.answer()
+
+
+@router.callback_query(MenuCallback.filter(F.name == "gifts"))
+async def gifts_handler(callback: CallbackQuery, state: FSMContext, bot: Bot):
+    await state.clear()
+    await clean_junk_message(state, bot)
+    if not callback.message:
+        return await callback.answer()
+
+    user_id = callback.from_user.id
+    balance = await db.get_user_balance(user_id)
+    referrals = await db.get_referrals_count(user_id)
+
+    text = LEXICON["gifts_menu"].format(
+        balance=balance,
+        min_refs=settings.MIN_REFERRALS_FOR_WITHDRAW,
+        referrals_count=referrals,
+    )
+    media = InputMediaPhoto(media=settings.PHOTO_WITHDRAW, caption=text)
+
+    await bot.edit_message_media(
+        media=media,
+        chat_id=callback.message.chat.id,
+        message_id=callback.message.message_id,
+        reply_markup=gifts_catalog_keyboard(),
+    )
+    await state.update_data(current_view="gifts")
+    await callback.answer()
 
 
 @router.callback_query(MenuCallback.filter(F.name == "games"))
@@ -69,6 +202,7 @@ async def games_menu_handler(callback: CallbackQuery, state: FSMContext, bot: Bo
             message_id=callback.message.message_id,
             reply_markup=games_menu_keyboard(),
         )
+        await state.update_data(current_view="games")
     await callback.answer()
 
 
@@ -88,10 +222,11 @@ async def resources_menu_handler(callback: CallbackQuery, state: FSMContext, bot
             message_id=callback.message.message_id,
             reply_markup=resources_keyboard(),
         )
+        await state.update_data(current_view="resources")
     await callback.answer()
 
 
-# --- Новые обработчики для меню игр ---
+# --- Game placeholder handlers ---
 @router.callback_query(MenuCallback.filter(F.name == "placeholder_game"))
 async def placeholder_game_handler(callback: CallbackQuery):
     """Обработчик для игр в разработке."""
@@ -135,6 +270,7 @@ async def get_daily_bonus_callback_handler(callback: CallbackQuery):
         )
 
 
+# --- Achievements Section ---
 @router.callback_query(MenuCallback.filter(F.name == "achievements"))
 async def achievements_handler(
     callback: CallbackQuery, state: FSMContext, bot: Bot, callback_data: MenuCallback
@@ -166,6 +302,7 @@ async def achievements_handler(
                 current_page_achs, user_achs_set, page, total_pages
             ),
         )
+        await state.update_data(current_view="achievements")
     await callback.answer()
 
 
@@ -197,7 +334,10 @@ async def achievements_page_handler(
 
 @router.callback_query(AchievementCallback.filter(F.action == "info"))
 async def achievement_info_handler(
-    callback: CallbackQuery, callback_data: AchievementCallback, bot: Bot
+    callback: CallbackQuery,
+    callback_data: AchievementCallback,
+    bot: Bot,
+    state: FSMContext,
 ):
     """Показывает детальную информацию о достижении."""
     ach_id = callback_data.ach_id
@@ -225,4 +365,6 @@ async def achievement_info_handler(
             message_id=callback.message.message_id,
             reply_markup=back_to_achievements_keyboard(),
         )
+        await state.update_data(current_view="achievement_info")
     await callback.answer()
+
