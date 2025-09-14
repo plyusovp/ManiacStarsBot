@@ -62,12 +62,20 @@ async def show_main_menu(
         # If editing fails, delete the old one and send a new one
         if message_id:
             await safe_delete(bot, chat_id, message_id)
-        await bot.send_photo(
-            chat_id=chat_id,
-            photo=settings.PHOTO_MAIN_MENU,
-            caption=caption,
-            reply_markup=main_menu_keyboard(),
-        )
+        try:
+            await bot.send_photo(
+                chat_id=chat_id,
+                photo=settings.PHOTO_MAIN_MENU,
+                caption=caption,
+                reply_markup=main_menu_keyboard(),
+            )
+        except Exception as e:
+            logger.error(f"Failed to send main menu photo: {e}")
+            await bot.send_message(
+                chat_id,
+                caption,
+                reply_markup=main_menu_keyboard(),
+            )
 
     # Always update the state to reflect the current view
     if state:
@@ -216,28 +224,39 @@ async def resources_menu_handler(callback: CallbackQuery, state: FSMContext, bot
         await callback.answer()
         return
 
-    media = InputMediaPhoto(
-        media=settings.PHOTO_RESOURCES, caption=LEXICON["resources_menu"]
-    )
+    chat_id = callback.message.chat.id
+    message_id = callback.message.message_id
+    caption = LEXICON["resources_menu"]
+    media = InputMediaPhoto(media=settings.PHOTO_RESOURCES, caption=caption)
 
     # Try to edit the message first
     success = await safe_edit_media(
         bot=bot,
         media=media,
-        chat_id=callback.message.chat.id,
-        message_id=callback.message.message_id,
+        chat_id=chat_id,
+        message_id=message_id,
         reply_markup=resources_keyboard(),
     )
 
-    # If editing fails, send a new message
+    # If editing fails, delete the old message and send a new one
     if not success:
-        await safe_delete(bot, callback.message.chat.id, callback.message.message_id)
-        await bot.send_photo(
-            chat_id=callback.message.chat.id,
-            photo=settings.PHOTO_RESOURCES,
-            caption=LEXICON["resources_menu"],
-            reply_markup=resources_keyboard(),
-        )
+        await safe_delete(bot, chat_id, message_id)
+        try:
+            # Try sending with photo again
+            await bot.send_photo(
+                chat_id=chat_id,
+                photo=settings.PHOTO_RESOURCES,
+                caption=caption,
+                reply_markup=resources_keyboard(),
+            )
+        except Exception as e:
+            # If it fails again (bad file_id), send a text-only message as a fallback
+            logger.error(f"Failed to send photo for resources menu: {e}")
+            await bot.send_message(
+                chat_id=chat_id,
+                text=caption,
+                reply_markup=resources_keyboard(),
+            )
 
     await state.update_data(current_view="resources")
     await callback.answer()
