@@ -2,7 +2,7 @@
 
 LEXICON = {
     "start_message": "👋 <b>Привет, {full_name}!</b>\n\nДобро пожаловать в Maniac Stars! Используй кнопки ниже, чтобы начать.",
-    "main_menu": "<b><center>⚔️ Maniac Stars ⚔️</center></b>\n\nИспользуй кнопки ниже для навигации.\n<b><center>💰 Баланс: {balance} ⭐</center></b>",
+    "main_menu": "<b>⚔️ Maniac Stars ⚔️</b>\n\nИспользуй кнопки ниже для навигации.\n\n<b>💰 Баланс: {balance} ⭐</b>",
     "games_menu": "👾 <b>Развлечения</b> 👾\n\nВыбери, во что хочешь сыграть.",
     "profile": "👤 <b>Ваш профиль</b>\n\n"
     "<b>Имя:</b> {full_name}\n"
