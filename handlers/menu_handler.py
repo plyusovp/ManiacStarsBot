@@ -211,18 +211,35 @@ async def resources_menu_handler(callback: CallbackQuery, state: FSMContext, bot
     """Отображает меню 'Наши ресурсы'."""
     await state.clear()
     await clean_junk_message(state, bot)
+
+    if not callback.message:
+        await callback.answer()
+        return
+
     media = InputMediaPhoto(
         media=settings.PHOTO_RESOURCES, caption=LEXICON["resources_menu"]
     )
-    if callback.message:
-        await safe_edit_media(
-            bot=bot,
-            media=media,
+
+    # Try to edit the message first
+    success = await safe_edit_media(
+        bot=bot,
+        media=media,
+        chat_id=callback.message.chat.id,
+        message_id=callback.message.message_id,
+        reply_markup=resources_keyboard(),
+    )
+
+    # If editing fails, send a new message
+    if not success:
+        await safe_delete(bot, callback.message.chat.id, callback.message.message_id)
+        await bot.send_photo(
             chat_id=callback.message.chat.id,
-            message_id=callback.message.message_id,
+            photo=settings.PHOTO_RESOURCES,
+            caption=LEXICON["resources_menu"],
             reply_markup=resources_keyboard(),
         )
-        await state.update_data(current_view="resources")
+
+    await state.update_data(current_view="resources")
     await callback.answer()
 
 
