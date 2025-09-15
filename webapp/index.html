@@ -1,0 +1,56 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, shrink-to-fit=no, user-scalable=no, viewport-fit=cover">
+    <title>Maniac Games</title>
+    <link rel="stylesheet" href="styles.css">
+    <link rel="icon" href="assets/favicon.png">
+    <!-- Telegram WebApp API -->
+    <script src="https://telegram.org/js/telegram-web-app.js"></script>
+    <!-- Three.js for 3D Dice -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+</head>
+<body>
+    <!-- 1. Splash Screen -->
+    <div id="splash-screen" class="splash-screen">
+        <img src="assets/logo.png" alt="Maniac Stars Logo" class="splash-logo">
+        <div class="splash-text">
+            <span>m</span><span>a</span><span>d</span><span>e</span> <span>b</span><span>y</span><span>:</span> <span>M</span><span>a</span><span>n</span><span>i</span><span>a</span><span>c</span><span>S</span><span>t</span><span>a</span><span>r</span><span>s</span>
+        </div>
+    </div>
+
+    <!-- 2. Main App Container -->
+    <div id="app" class="app-container hidden">
+        <!-- App Header -->
+        <header class="app-header">
+            <h1 id="header-title"></h1>
+            <div class="balance" id="balance-display">
+                Баланс: <span id="balance-value">0</span> ⭐
+            </div>
+        </header>
+
+        <!-- Main Content Area (views will be injected here) -->
+        <main id="main-content" class="main-content">
+            <!-- Game content goes here -->
+        </main>
+
+        <!-- Bottom Navigation Bar -->
+        <nav id="bottom-nav" class="bottom-nav">
+            <a href="#/home" class="nav-item" data-route="/home">🏠<span>Дом</span></a>
+            <a href="#/crash" class="nav-item" data-route="/crash">🚀<span>Crash</span></a>
+            <a href="#/slots" class="nav-item" data-route="/slots">🎰<span>Слоты</span></a>
+            <a href="#/dice3d" class="nav-item" data-route="/dice3d">🧊<span>Кости 3D</span></a>
+            <a href="#/coin" class="nav-item" data-route="/coin">🪙<span>Монетка</span></a>
+            <a href="#/darts" class="nav-item" data-route="/darts">🎯<span>Дартс</span></a>
+            <!-- Add other simple games here if needed -->
+        </nav>
+    </div>
+
+    <!-- App-wide notification/message box -->
+    <div id="notification-box" class="notification-box"></div>
+
+    <!-- Main script -->
+    <script src="app.js" type="module"></script>
+</body>
+</html>

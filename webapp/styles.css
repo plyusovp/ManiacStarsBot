@@ -1,0 +1,495 @@
+/* --- 1. Design System & Variables --- */
+:root {
+    --bg: #0a0a0f;
+    --panel: rgba(20, 16, 38, 0.6);
+    --text: #e0e0e0;
+    --muted: #8a8a9e;
+    --neon1: #9f50ff; /* Purple */
+    --neon2: #4d94ff; /* Blue */
+    --accent: #ff4da6; /* Pink */
+    --danger: #ff4d6a;
+    --success: #4dffb6;
+    --warning: #ffdb4d;
+
+    --font-main: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+
+    /* Support for iOS safe areas */
+    --safe-area-inset-top: env(safe-area-inset-top, 0px);
+    --safe-area-inset-bottom: env(safe-area-inset-bottom, 0px);
+}
+
+/* --- 2. Base & Body --- */
+body {
+    margin: 0;
+    font-family: var(--font-main);
+    background-color: var(--bg);
+    color: var(--text);
+    overflow: hidden; /* Prevent pull-to-refresh */
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+
+    /* Fog + Noise background */
+    background-image:
+        radial-gradient(circle at 10% 10%, rgba(159, 80, 255, 0.1), transparent 40%),
+        radial-gradient(circle at 90% 80%, rgba(77, 148, 255, 0.1), transparent 40%),
+        url('data:image/svg+xml,%3Csvg viewBox="0 0 250 250" xmlns="http://www.w3.org/2000/svg"%3E%3Cfilter id="noiseFilter"%3E%3CfeTurbulence type="fractalNoise" baseFrequency="0.8" numOctaves="3" stitchTiles="stitch"/%3E%3C/filter%3E%3Crect width="100%" height="100%" filter="url(%23noiseFilter)" opacity="0.03"/%3E%3C/svg%3E');
+    background-color: var(--bg);
+}
+
+.hidden {
+    display: none !important;
+}
+
+/* --- 3. Splash Screen --- */
+.splash-screen {
+    position: fixed;
+    top: 0; left: 0;
+    width: 100%;
+    height: 100%;
+    background: var(--bg);
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    align-items: center;
+    z-index: 1000;
+    transition: opacity 0.5s ease-out;
+}
+
+.splash-logo {
+    width: 120px;
+    height: 120px;
+    margin-bottom: 25px;
+    filter: drop-shadow(0 0 15px var(--neon1));
+}
+
+.splash-text {
+    font-size: 1.5em;
+    font-weight: 700;
+    color: #fff;
+    text-align: center;
+}
+
+.splash-text span {
+    display: inline-block;
+    opacity: 0;
+    filter: blur(4px);
+    animation: neon-explode 1.8s ease-out forwards;
+}
+
+/* Staggered animation for each letter */
+.splash-text span:nth-child(1) { animation-delay: 0.1s; }
+.splash-text span:nth-child(2) { animation-delay: 0.15s; }
+.splash-text span:nth-child(3) { animation-delay: 0.2s; }
+.splash-text span:nth-child(4) { animation-delay: 0.25s; }
+.splash-text span:nth-child(5) { animation-delay: 0.3s; }
+.splash-text span:nth-child(6) { animation-delay: 0.35s; }
+.splash-text span:nth-child(7) { animation-delay: 0.4s; }
+.splash-text span:nth-child(8) { animation-delay: 0.5s; }
+.splash-text span:nth-child(9) { animation-delay: 0.55s; }
+.splash-text span:nth-child(10) { animation-delay: 0.6s; }
+.splash-text span:nth-child(11) { animation-delay: 0.65s; }
+.splash-text span:nth-child(12) { animation-delay: 0.7s; }
+.splash-text span:nth-child(13) { animation-delay: 0.75s; }
+.splash-text span:nth-child(14) { animation-delay: 0.8s; }
+.splash-text span:nth-child(15) { animation-delay: 0.85s; }
+.splash-text span:nth-child(16) { animation-delay: 0.9s; }
+
+@keyframes neon-explode {
+    0% {
+        opacity: 0;
+        filter: blur(10px) brightness(2);
+        transform: scale(2.5);
+        text-shadow: 0 0 10px var(--accent), 0 0 20px var(--accent);
+    }
+    50% {
+        opacity: 1;
+        filter: blur(2px) brightness(1.5);
+        text-shadow: 0 0 5px var(--accent), 0 0 10px var(--accent);
+    }
+    100% {
+        opacity: 1;
+        filter: blur(0);
+        transform: scale(1);
+        text-shadow: 0 0 5px var(--neon2), 0 0 8px var(--neon1);
+    }
+}
+
+
+/* --- 4. Main App Layout --- */
+.app-container {
+    display: flex;
+    flex-direction: column;
+    height: 100vh;
+    height: 100dvh; /* Dynamic viewport height */
+}
+
+.app-header {
+    flex-shrink: 0;
+    padding: 10px 15px;
+    padding-top: calc(10px + var(--safe-area-inset-top));
+    background: rgba(10, 10, 15, 0.7);
+    backdrop-filter: blur(10px);
+    -webkit-backdrop-filter: blur(10px);
+    border-bottom: 1px solid rgba(159, 80, 255, 0.2);
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    z-index: 100;
+}
+
+.app-header h1 {
+    margin: 0;
+    font-size: 1.2rem;
+    font-weight: 600;
+    text-shadow: 0 0 4px var(--neon2);
+}
+
+.balance {
+    font-size: 1rem;
+    font-weight: 600;
+    background: rgba(0,0,0,0.3);
+    padding: 5px 12px;
+    border-radius: 20px;
+    border: 1px solid rgba(255,255,255,0.1);
+}
+
+.main-content {
+    flex-grow: 1;
+    overflow-y: auto;
+    -webkit-overflow-scrolling: touch;
+    padding: 15px;
+    padding-bottom: calc(75px + var(--safe-area-inset-bottom)); /* 60px nav + 15px padding */
+    position: relative;
+}
+
+/* View Transition Animations */
+.view {
+    animation: view-enter 0.4s ease-out;
+}
+
+@keyframes view-enter {
+    from {
+        opacity: 0;
+        transform: translateY(15px);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+.view-leave {
+    animation: view-leave 0.3s ease-in forwards;
+    position: absolute;
+    top: 15px;
+    left: 15px;
+    right: 15px;
+}
+@keyframes view-leave {
+     from {
+        opacity: 1;
+        transform: translateY(0);
+    }
+    to {
+        opacity: 0;
+        transform: translateY(-15px);
+    }
+}
+
+
+/* Bottom Navigation */
+.bottom-nav {
+    flex-shrink: 0;
+    display: flex;
+    justify-content: space-around;
+    background: rgba(10, 10, 15, 0.7);
+    backdrop-filter: blur(10px);
+    -webkit-backdrop-filter: blur(10px);
+    border-top: 1px solid rgba(159, 80, 255, 0.2);
+    padding: 5px 0;
+    padding-bottom: calc(5px + var(--safe-area-inset-bottom));
+    position: fixed;
+    bottom: 0;
+    width: 100%;
+    z-index: 100;
+}
+
+.nav-item {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    color: var(--muted);
+    text-decoration: none;
+    font-size: 0.7rem;
+    padding: 4px 8px;
+    transition: color 220ms, text-shadow 220ms;
+    border-radius: 8px;
+}
+
+.nav-item span:first-child {
+    font-size: 1.5rem; /* Icon size */
+    margin-bottom: 2px;
+}
+
+.nav-item.active {
+    color: #fff;
+    text-shadow: 0 0 8px var(--accent);
+}
+
+/* --- 5. UI Components (Cards, Buttons, Inputs) --- */
+.card {
+    background: var(--panel);
+    border: 1px solid rgba(159, 80, 255, 0.25);
+    border-radius: 16px;
+    padding: 20px;
+    margin-bottom: 15px;
+    backdrop-filter: blur(8px);
+    -webkit-backdrop-filter: blur(8px);
+}
+
+h2 {
+    margin-top: 0;
+    font-size: 1.3rem;
+    font-weight: 600;
+    color: #fff;
+    text-shadow: 0 0 3px var(--neon1);
+}
+
+.btn {
+    display: block;
+    width: 100%;
+    box-sizing: border-box;
+    padding: 14px 20px;
+    margin: 8px 0;
+    border: 1px solid var(--neon1);
+    background: linear-gradient(45deg, rgba(159, 80, 255, 0.1), rgba(77, 148, 255, 0.1));
+    color: var(--text);
+    border-radius: 12px;
+    font-size: 1rem;
+    font-weight: 600;
+    text-align: center;
+    cursor: pointer;
+    transition: 200ms ease-out;
+    position: relative;
+    overflow: hidden;
+}
+
+.btn:hover:not(:disabled) {
+    background: linear-gradient(45deg, rgba(159, 80, 255, 0.2), rgba(77, 148, 255, 0.2));
+    box-shadow: 0 0 12px rgba(159, 80, 255, 0.5);
+    transform: translateY(-2px);
+}
+
+.btn:active:not(:disabled) {
+    transform: translateY(0px);
+    box-shadow: 0 0 5px rgba(159, 80, 255, 0.3);
+}
+
+.btn:disabled {
+    background: rgba(50, 50, 60, 0.5);
+    border-color: #444;
+    color: var(--muted);
+    cursor: not-allowed;
+}
+
+.btn-success { border-color: var(--success); }
+.btn-success:hover:not(:disabled) { box-shadow: 0 0 12px rgba(77, 255, 182, 0.5); }
+.btn-danger { border-color: var(--danger); }
+.btn-danger:hover:not(:disabled) { box-shadow: 0 0 12px rgba(255, 77, 106, 0.5); }
+.btn-warning { border-color: var(--warning); }
+.btn-warning:hover:not(:disabled) { box-shadow: 0 0 12px rgba(255, 219, 77, 0.5); }
+
+.input-field, input[type="number"] {
+    width: 100%;
+    padding: 12px;
+    background: rgba(0,0,0,0.4);
+    border: 1px solid #444;
+    color: var(--text);
+    border-radius: 8px;
+    font-size: 1.2rem;
+    font-weight: 600;
+    text-align: center;
+    box-sizing: border-box;
+    transition: border-color 200ms, box-shadow 200ms;
+}
+.input-field:focus, input[type="number"]:focus {
+    outline: none;
+    border-color: var(--neon1);
+    box-shadow: 0 0 8px rgba(159, 80, 255, 0.4);
+}
+
+/* Chip buttons for bets */
+.chip-controls {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(60px, 1fr));
+    gap: 8px;
+    margin: 15px 0;
+}
+
+.chip {
+    padding: 8px 5px;
+    background: rgba(255,255,255,0.05);
+    border: 1px solid #555;
+    font-size: 0.9rem;
+    font-weight: 600;
+}
+.chip:hover:not(:disabled) {
+    background: rgba(255,255,255,0.1);
+    border-color: var(--muted);
+    transform: none;
+    box-shadow: none;
+}
+
+
+/* --- 6. Game-Specific Styles --- */
+
+/* Home Screen */
+.home-view .games-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(100px, 1fr));
+    gap: 12px;
+}
+
+.home-view .game-tile {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    aspect-ratio: 1 / 1;
+    text-decoration: none;
+    color: var(--text);
+    background: var(--panel);
+    border-radius: 12px;
+    border: 1px solid rgba(159, 80, 255, 0.25);
+    transition: 200ms ease-out;
+}
+.home-view .game-tile:hover {
+    transform: translateY(-4px);
+    border-color: var(--accent);
+    box-shadow: 0 0 10px rgba(255, 77, 166, 0.4);
+}
+
+.home-view .game-tile .icon {
+    font-size: 2.5rem;
+    margin-bottom: 8px;
+}
+.home-view .game-tile .name {
+    font-size: 0.8rem;
+    font-weight: 600;
+}
+
+/* Crash Game */
+.crash-view .display-area {
+    position: relative;
+    width: 100%;
+    aspect-ratio: 2 / 1;
+    background: rgba(0,0,0,0.3);
+    border-radius: 12px;
+    overflow: hidden;
+}
+.crash-view .multiplier-text {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    font-size: clamp(2.5rem, 12vw, 4.5rem);
+    font-weight: 700;
+    transition: color 300ms;
+}
+.crash-view canvas {
+    position: absolute;
+    top: 0; left: 0;
+    width: 100%;
+    height: 100%;
+}
+.crash-view .history {
+    display: flex;
+    gap: 8px;
+    overflow-x: auto;
+    padding-bottom: 5px; /* for scrollbar */
+}
+.crash-view .history-item {
+    flex-shrink: 0;
+    padding: 4px 8px;
+    border-radius: 6px;
+    font-weight: 600;
+    font-size: 0.9rem;
+}
+
+/* Slots Game */
+.slots-view .reels-container {
+    display: flex;
+    justify-content: space-around;
+    align-items: center;
+    padding: 20px 10px;
+    background: rgba(0,0,0,0.3);
+    border-radius: 12px;
+    border: 2px solid #333;
+    margin-bottom: 20px;
+}
+.slots-view .reel {
+    width: 30%;
+    aspect-ratio: 1 / 1.2;
+    font-size: clamp(2.5rem, 15vw, 4rem);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: rgba(0,0,0,0.4);
+    border-radius: 8px;
+    transition: box-shadow 300ms, transform 300ms;
+}
+.slots-view .reel.win {
+    box-shadow: 0 0 15px var(--success), inset 0 0 10px rgba(77, 255, 182, 0.3);
+    transform: scale(1.05);
+}
+
+/* 3D Dice */
+#dice3d-canvas-container {
+    position: relative;
+    width: 100%;
+    height: 250px;
+    background: rgba(0,0,0,0.2);
+    border-radius: 12px;
+    margin-bottom: 15px;
+    cursor: grab;
+}
+#dice3d-canvas-container:active {
+    cursor: grabbing;
+}
+
+/* Simple Games (Coin, Dice2D, Darts etc) */
+.simple-game-display {
+    min-height: 150px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 5rem;
+    margin-bottom: 15px;
+}
+.simple-game-controls {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 10px;
+}
+
+/* --- 7. Notification Box --- */
+.notification-box {
+    position: fixed;
+    top: calc(15px + var(--safe-area-inset-top));
+    left: 50%;
+    transform: translateX(-50%) translateY(-150%);
+    padding: 12px 20px;
+    background: var(--panel);
+    border: 1px solid var(--accent);
+    box-shadow: 0 4px 15px rgba(0,0,0,0.5);
+    border-radius: 10px;
+    z-index: 1001;
+    font-weight: 600;
+    transition: transform 0.4s cubic-bezier(0.2, 0.9, 0.3, 1.2);
+}
+
+.notification-box.show {
+    transform: translateX(-50%) translateY(0);
+}
+.notification-box.success { border-color: var(--success); }
+.notification-box.error { border-color: var(--danger); }
