@@ -11,8 +11,10 @@ import { getBalance, fmt } from './lib/balance.js';
 import * as audio from './lib/audio.js';
 import { hapticFeedback } from './lib/utils.js';
 import * as particles from './lib/particles.js';
-import { isLowPerfDevice } from './lib/performance.js';
+import { isLowPerfDevice } from './lib/perfomance.js';
 import * as i18n from './lib/i18n.js';
+// --- ✨ НОВОЕ: Импортируем модуль с эффектами ---
+import * as effects from './lib/effects.js';
 
 const routes = {
     '/taper': taper,
@@ -243,6 +245,8 @@ const init = async () => {
         playSound: audio.play,
         hapticFeedback,
         particles,
+        // --- ✨ НОВОЕ: Добавляем эффекты в глобальный объект ---
+        effects,
         t: i18n.t,
         changeLanguage,
         getCurrentLanguage: i18n.getCurrentLanguage,
@@ -259,3 +263,4 @@ const init = async () => {
 };
 
 document.addEventListener('DOMContentLoaded', init);
+

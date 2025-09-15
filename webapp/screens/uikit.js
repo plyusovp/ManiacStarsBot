@@ -32,6 +32,16 @@ export function mount(rootEl) {
     rootElement.innerHTML = `
         <!-- Контейнер для Toast-уведомлений -->
         <div id="toast-container" class="toast-container"></div>
+        
+        <!-- ✨ НОВОЕ: Демонстрация "вау-эффектов" -->
+        <div class="card">
+            <h2>"Вау" эффекты</h2>
+            <p>Основные кнопки теперь имеют анимированный градиент, "магнитный" курсор на десктопе и эффект волны при клике.</p>
+            <button id="demo-btn-primary" class="btn btn-primary">Primary Button</button>
+            <button id="demo-btn-secondary" class="btn btn-secondary">Secondary Button</button>
+            <button id="confetti-launcher" class="btn btn-secondary" style="margin-top: 10px;">✨ Запустить конфетти</button>
+        </div>
+
 
         <!-- 1. Карточка (Card) -->
         <div class="card">
@@ -94,6 +104,23 @@ export function mount(rootEl) {
 
     // --- Логика для интерактивных компонентов ---
 
+    // ✨ НОВОЕ: Применяем эффекты к демо-кнопкам
+    const demoBtnPrimary = rootElement.querySelector('#demo-btn-primary');
+    const demoBtnSecondary = rootElement.querySelector('#demo-btn-secondary');
+    const confettiLauncher = rootElement.querySelector('#confetti-launcher');
+
+    window.ManiacGames.effects.applyRippleEffect(demoBtnPrimary);
+    window.ManiacGames.effects.applyMagneticEffect(demoBtnPrimary);
+    
+    window.ManiacGames.effects.applyRippleEffect(demoBtnSecondary);
+    window.ManiacGames.effects.applyMagneticEffect(demoBtnSecondary);
+
+    window.ManiacGames.effects.applyRippleEffect(confettiLauncher);
+    confettiLauncher.addEventListener('click', () => {
+        window.ManiacGames.effects.launchConfetti();
+    });
+
+
     // Модальное окно
     const modal = rootElement.querySelector('#my-modal');
     const showModalBtn = rootElement.querySelector('#show-modal-btn');
@@ -131,3 +158,4 @@ export function unmount() {
     rootElement.innerHTML = '';
     rootElement = null;
 }
+

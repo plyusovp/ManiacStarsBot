@@ -10,47 +10,24 @@ function handleCopyLink(event) {
     navigator.clipboard.writeText(refLink).then(() => {
         window.ManiacGames.hapticFeedback('success');
 
-        // Анимация конфетти
-        createConfetti(button);
+        // --- ✨ НОВОЕ: Используем улучшенный эффект конфетти ---
+        const rect = button.getBoundingClientRect();
+        window.ManiacGames.effects.launchConfetti({
+            x: rect.left + rect.width / 2,
+            y: rect.top + rect.height / 2
+        });
 
         // Показываем временное сообщение
         const originalContent = button.innerHTML;
         button.innerHTML = `✅ ${t('copied_success')}`;
         setTimeout(() => {
-            button.innerHTML = originalContent;
+            if (button) button.innerHTML = originalContent;
         }, 2000);
 
     }).catch(err => {
         console.error('Failed to copy: ', err);
         window.ManiacGames.showNotification(t('copy_failed'), 'error');
     });
-}
-
-function createConfetti(relativeElement) {
-    const rect = relativeElement.getBoundingClientRect();
-    const container = document.createElement('div');
-    container.style.position = 'fixed';
-    container.style.left = `${rect.left + rect.width / 2}px`;
-    container.style.top = `${rect.top + rect.height / 2}px`;
-    container.style.width = '1px';
-    container.style.height = '1px';
-    container.style.pointerEvents = 'none';
-    document.body.appendChild(container);
-
-    for (let i = 0; i < 50; i++) {
-        const confetti = document.createElement('div');
-        confetti.className = 'confetti';
-        confetti.style.setProperty('--x-end', `${(Math.random() - 0.5) * 200}px`);
-        confetti.style.setProperty('--y-end', `${(Math.random() - 0.5) * 200}px`);
-        confetti.style.setProperty('--scale', `${Math.random() * 0.7 + 0.5}`);
-        confetti.style.setProperty('--hue', `${Math.random() * 360}deg`);
-        confetti.style.animationDelay = `${Math.random() * 100}ms`;
-        container.appendChild(confetti);
-    }
-
-    setTimeout(() => {
-        container.remove();
-    }, 1200);
 }
 
 
@@ -111,11 +88,21 @@ export function mount(rootEl) {
         </div>
     `;
 
-    rootElement.querySelector('#copy-ref-link').addEventListener('click', handleCopyLink);
-    rootElement.querySelector('#share-ref-link').addEventListener('click', handleShare);
+    const copyBtn = rootElement.querySelector('#copy-ref-link');
+    const shareBtn = rootElement.querySelector('#share-ref-link');
+    
+    copyBtn.addEventListener('click', handleCopyLink);
+    shareBtn.addEventListener('click', handleShare);
+
+    // --- ✨ НОВОЕ: Применяем эффекты к кнопкам ---
+    window.ManiacGames.effects.applyRippleEffect(copyBtn);
+    window.ManiacGames.effects.applyRippleEffect(shareBtn);
+    window.ManiacGames.effects.applyMagneticEffect(copyBtn, { distance: 40 });
+    window.ManiacGames.effects.applyMagneticEffect(shareBtn, { distance: 40 });
 }
 
 export function unmount() {
     rootElement.innerHTML = '';
     rootElement = null;
 }
+
