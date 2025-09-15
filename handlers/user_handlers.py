@@ -156,44 +156,6 @@ async def bonus_handler(message: Message):
 
 
 # --- Callback Handlers (Main Menu Navigation) ---
-@router.callback_query(MenuCallback.filter(F.name == "main_menu"))
-async def back_to_main_menu_handler(
-    callback: CallbackQuery, state: FSMContext, bot: Bot
-):
-    data = await state.get_data()
-    if data.get("current_view") == "main_menu":
-        await callback.answer()
-        return
-
-    await state.clear()
-    await clean_junk_message(state, bot)
-    if callback.message:
-        balance = await db.get_user_balance(callback.from_user.id)
-        caption = LEXICON["main_menu"].format(balance=balance)
-        media = InputMediaPhoto(media=settings.PHOTO_MAIN_MENU, caption=caption)
-        try:
-            await bot.edit_message_media(
-                media=media,
-                chat_id=callback.message.chat.id,
-                message_id=callback.message.message_id,
-                reply_markup=main_menu_keyboard(),
-            )
-            await state.update_data(current_view="main_menu")
-        except TelegramBadRequest as e:
-            logger.warning(f"Failed to edit message to main menu: {e}")
-            await safe_delete(
-                bot, callback.message.chat.id, callback.message.message_id
-            )
-            await bot.send_photo(
-                chat_id=callback.message.chat.id,
-                photo=settings.PHOTO_MAIN_MENU,
-                caption=caption,
-                reply_markup=main_menu_keyboard(),
-            )
-            await state.update_data(current_view="main_menu")
-    await callback.answer()
-
-
 # --- Profile Section ---
 @router.callback_query(MenuCallback.filter(F.name == "profile"))
 async def profile_handler(callback: CallbackQuery, state: FSMContext, bot: Bot):
