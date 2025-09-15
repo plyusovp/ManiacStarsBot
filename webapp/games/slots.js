@@ -60,12 +60,12 @@ async function spin() {
     state.isSpinning = true;
     subBalance(state.betAmount);
     window.ManiacGames.updateBalance();
-    window.ManiacGames.playSound('whoosh');
+    window.ManiacGames.playSound('spinStart');
     window.ManiacGames.hapticFeedback('medium');
 
     elements.spinButton.disabled = true;
     elements.winMessage.textContent = '';
-    elements.reels.forEach(r => r.classList.remove('win'));
+    elements.reels.forEach(r => r.classList.remove('win', 'skeleton-pulse')); // Убираем скелет при старте
 
     // Generate result beforehand
     const result = [weightedRandom(WEIGHTS), weightedRandom(WEIGHTS), weightedRandom(WEIGHTS)];
@@ -73,7 +73,7 @@ async function spin() {
     // Animate reels
     for (let i = 0; i < elements.reels.length; i++) {
         await animateReel(elements.reels[i], result[i]);
-        window.ManiacGames.playSound('click');
+        window.ManiacGames.playSound('spinStop');
     }
 
     // Calculate and process winnings
@@ -88,6 +88,7 @@ async function spin() {
         window.ManiacGames.hapticFeedback('success');
     } else {
         updateStats({ losses: 1 });
+        window.ManiacGames.playSound('lose'); // <-- Звук проигрыша
         window.ManiacGames.hapticFeedback('error');
     }
 
@@ -128,7 +129,7 @@ function bindEvents() {
             const value = parseInt(e.target.dataset.value, 10);
             state.betAmount = value;
             elements.betInput.value = value;
-            window.ManiacGames.playSound('click');
+            window.ManiacGames.playSound('tap');
         }
     });
 }
@@ -140,9 +141,9 @@ export function mount(rootEl) {
     root.innerHTML = `
         <div class="card">
             <div class="reels-container">
-                <div class="reel">${state.reels[0]}</div>
-                <div class="reel">${state.reels[1]}</div>
-                <div class="reel">${state.reels[2]}</div>
+                <div class="reel skeleton-pulse"></div>
+                <div class="reel skeleton-pulse"></div>
+                <div class="reel skeleton-pulse"></div>
             </div>
         </div>
         <div class="card">
@@ -168,6 +169,16 @@ export function mount(rootEl) {
         spinButton: root.querySelector('#slots-spin-button'),
     };
 
+    // Имитируем "загрузку" слотов и заменяем скелеты на символы
+    setTimeout(() => {
+        if (!root) return; // Проверка, что компонент всё ещё смонтирован
+        elements.reels.forEach((reel, i) => {
+            reel.classList.remove('skeleton-pulse');
+            reel.textContent = state.reels[i];
+        });
+    }, 500);
+
+
     bindEvents();
 }
 
@@ -175,31 +186,4 @@ export function unmount() {
     root = null;
     elements = null;
     state = null;
-}
-
-/**
- * Simulates N rounds to calculate the real Return To Player (RTP).
- * @param {number} rounds - The number of rounds to simulate.
- * @returns {string} The calculated RTP as a percentage string.
- */
-export function simulateRTP(rounds = 10000) {
-    let totalBet = 0;
-    let totalWin = 0;
-    const originalBet = state ? state.betAmount : 10;
-
-    // Set bet to 1 for simulation
-    if(state) state.betAmount = 1;
-    else state = { betAmount: 1};
-
-    for (let i = 0; i < rounds; i++) {
-        const result = [weightedRandom(WEIGHTS), weightedRandom(WEIGHTS), weightedRandom(WEIGHTS)];
-        const winnings = calculateWinnings(result);
-        const finalPayout = applyPayout(winnings);
-        totalBet += 1;
-        totalWin += finalPayout;
-    }
-
-    if(state) state.betAmount = originalBet; // Restore bet amount
-    const rtp = (totalWin / totalBet) * 100;
-    return rtp.toFixed(2);
 }

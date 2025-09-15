@@ -8,15 +8,34 @@
     <link rel="icon" href="assets/favicon.png">
     <!-- Telegram WebApp API -->
     <script src="https://telegram.org/js/telegram-web-app.js"></script>
-    <!-- Three.js for 3D Dice -->
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <!-- Tone.js for sound synthesis -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/tone/14.7.77/Tone.js"></script>
+    <script>
+        // --- Скрипт для предотвращения "вспышки" неправильной темы ---
+        (function() {
+            const themeKey = 'mg.theme';
+            const savedTheme = localStorage.getItem(themeKey) || 'dark'; // Тёмная по умолчанию
+
+            let themeToApply = savedTheme;
+            if (savedTheme === 'system') {
+                const systemPrefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
+                themeToApply = systemPrefersDark ? 'dark' : 'light';
+            }
+
+            // Устанавливаем атрибут на body. CSS сделает всё остальное.
+            document.documentElement.setAttribute('data-theme', themeToApply);
+        })();
+    </script>
 </head>
 <body>
+    <!-- Canvas для фоновых частиц. Он будет за всем остальным контентом. -->
+    <canvas id="particle-canvas"></canvas>
+
     <!-- 1. Splash Screen -->
     <div id="splash-screen" class="splash-screen">
         <img src="assets/logo.png" alt="Maniac Stars Logo" class="splash-logo">
         <div class="splash-text">
-            <span>m</span><span>a</span><span>d</span><span>e</span> <span>b</span><span>y</span><span>:</span> <span>M</span><span>a</span><span>n</span><span>i</span><span>a</span><span>c</span><span>S</span><span>t</span><span>a</span><span>r</span><span>s</span>
+            Maniac Games
         </div>
     </div>
 
@@ -26,29 +45,20 @@
         <header class="app-header">
             <h1 id="header-title"></h1>
             <div class="balance" id="balance-display">
-                Баланс: <span id="balance-value">0</span> ⭐
+                <span id="balance-value">0</span> ⭐
             </div>
         </header>
 
         <!-- Main Content Area (views will be injected here) -->
         <main id="main-content" class="main-content">
-            <!-- Game content goes here -->
+            <!-- Screen content goes here -->
         </main>
 
         <!-- Bottom Navigation Bar -->
         <nav id="bottom-nav" class="bottom-nav">
-            <a href="#/home" class="nav-item" data-route="/home">🏠<span>Дом</span></a>
-            <a href="#/crash" class="nav-item" data-route="/crash">🚀<span>Crash</span></a>
-            <a href="#/slots" class="nav-item" data-route="/slots">🎰<span>Слоты</span></a>
-            <a href="#/dice3d" class="nav-item" data-route="/dice3d">🧊<span>Кости 3D</span></a>
-            <a href="#/coin" class="nav-item" data-route="/coin">🪙<span>Монетка</span></a>
-            <a href="#/darts" class="nav-item" data-route="/darts">🎯<span>Дартс</span></a>
-            <!-- Add other simple games here if needed -->
+            <!-- Навигация будет сгенерирована в app.js -->
         </nav>
     </div>
-
-    <!-- App-wide notification/message box -->
-    <div id="notification-box" class="notification-box"></div>
 
     <!-- Main script -->
     <script src="app.js" type="module"></script>

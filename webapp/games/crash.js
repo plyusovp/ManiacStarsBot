@@ -24,6 +24,7 @@ function resetState() {
         history: state ? state.history : [],
         cashedOut: false,
         countdown: BETTING_WINDOW_MS / 1000,
+        lastCurvePos: { x: 0, y: 0 } // Для частиц
     };
 }
 
@@ -109,32 +110,75 @@ function drawCurve() {
     const maxX = Math.log(state.crashPoint || 20);
     const maxY = state.crashPoint || 20;
 
+    let finalX = 0, finalY = height;
+
     for (let t = 0; t <= duration; t += 0.02) {
         const m = 1.00 * Math.pow(1.05, t * 2); // Exponential growth
         const x = (Math.log(m) / maxX) * width;
         const y = height - (m / maxY) * height;
-        if(y > 0) ctx.lineTo(x, y);
+        if(y > 0) {
+            ctx.lineTo(x, y);
+            finalX = x;
+            finalY = y;
+        }
     }
     ctx.stroke();
     ctx.shadowBlur = 0;
+
+    // Сохраняем последнюю позицию кривой для частиц
+    const canvasRect = elements.canvas.getBoundingClientRect();
+    state.lastCurvePos.x = canvasRect.left + finalX;
+    state.lastCurvePos.y = canvasRect.top + finalY;
 }
 
 
 function gameLoop(timestamp) {
     if (state.gameState !== 'running') return;
 
+    // Прячем скелет при первом кадре анимации
+    if (elements.graphSkeleton) {
+        elements.graphSkeleton.style.display = 'none';
+        elements.graphSkeleton = null; // Удаляем ссылку
+    }
+
     const elapsedSeconds = (timestamp - state.startTime) / 1000;
     state.multiplier = 1.00 * Math.pow(1.05, elapsedSeconds * 2);
+
+    // --- Интеграция частиц: шлейф за графиком ---
+    if (window.ManiacGames.particles && Math.random() < 0.5) { // Создаем частицы с вероятностью 50%
+        window.ManiacGames.particles.emit(state.lastCurvePos.x, state.lastCurvePos.y, {
+            count: 1,
+            speed: 1,
+            life: 30,
+            size: 1.5,
+            color: ['#8A7CFF', '#F92B75', '#ffffff'],
+            angle: Math.PI * 1.5, // Направляем вверх
+            angleOffset: Math.random() * 0.4 - 0.2
+        });
+    }
 
     if (state.multiplier >= state.crashPoint) {
         state.multiplier = state.crashPoint;
         state.gameState = 'crashed';
+
+        // --- Интеграция частиц: взрыв при краше ---
+        if (window.ManiacGames.particles) {
+            window.ManiacGames.particles.emit(state.lastCurvePos.x, state.lastCurvePos.y, {
+                count: 60,
+                speed: 5,
+                life: 90,
+                size: 2.5,
+                color: ['#FF6B6B', '#FFC85C', '#ffffff'],
+            });
+        }
+
 
         state.history.unshift(state.multiplier);
         updateStats({ maxCrashMultiplier: state.multiplier });
 
         if (state.stake > 0 && !state.cashedOut) {
             updateStats({ losses: 1 });
+            window.ManiacGames.playSound('lose');
             window.ManiacGames.hapticFeedback('error');
         }
 
@@ -153,14 +197,24 @@ function startNewRound() {
     state.crashPoint = generateCrashPoint();
     console.log(`Next crash at: ${state.crashPoint.toFixed(2)}x`);
 
+    // Показываем скелет, если он был скрыт
+    if (elements.graphSkeleton) {
+         elements.graphSkeleton.style.display = 'block';
+    }
+
+
     const countdownInterval = setInterval(() => {
+        if (state.gameState === 'unmounted') { // Проверка, чтобы остановить таймер при размонтировании
+            clearInterval(countdownInterval);
+            return;
+        }
         state.countdown--;
         if (state.countdown <= 0) {
             clearInterval(countdownInterval);
             if (state.gameState === 'betting') {
                  state.gameState = 'running';
                  state.startTime = performance.now();
-                 window.ManiacGames.playSound('whoosh');
+                 window.ManiacGames.playSound('spinStart');
                  animationFrameId = requestAnimationFrame(gameLoop);
             }
         }
@@ -181,6 +235,7 @@ function handleBet() {
         subBalance(bet);
         state.stake = bet;
         window.ManiacGames.updateBalance();
+        window.ManiacGames.playSound('tap');
         window.ManiacGames.hapticFeedback('medium');
         elements.betButton.textContent = 'Ставка принята';
         elements.betButton.disabled = true;
@@ -226,7 +281,7 @@ function bindEvents() {
 
             state.betAmount = Math.min(currentBet, getBalance());
             updateUI();
-            window.ManiacGames.playSound('click');
+            window.ManiacGames.playSound('tap');
         }
     });
 }
@@ -236,6 +291,7 @@ export function mount(rootEl) {
     root.innerHTML = `
         <div class="card">
             <div class="display-area">
+                <div id="crash-graph-skeleton" class="skeleton-pulse" style="width: 100%; height: 100%; position: absolute; top: 0; left: 0; border-radius: var(--radius-lg);"></div>
                 <canvas id="crash-canvas"></canvas>
                 <div id="crash-multiplier" class="multiplier-text">1.00x</div>
             </div>
@@ -263,6 +319,7 @@ export function mount(rootEl) {
 
     elements = {
         canvas: root.querySelector('#crash-canvas'),
+        graphSkeleton: root.querySelector('#crash-graph-skeleton'),
         multiplierText: root.querySelector('#crash-multiplier'),
         history: root.querySelector('#crash-history'),
         betInput: root.querySelector('#crash-bet-input'),
@@ -283,27 +340,8 @@ export function unmount() {
     if (animationFrameId) {
         cancelAnimationFrame(animationFrameId);
     }
-    // Set a flag to stop any pending timeouts
+    // Устанавливаем флаг, чтобы остановить любые отложенные таймеры
     if(state) state.gameState = 'unmounted';
     root = null;
     elements = null;
-}
-
-/**
- * Simulates N rounds to calculate the real Return To Player (RTP).
- * This is a developer utility.
- * @param {number} rounds - The number of rounds to simulate.
- * @returns {string} The calculated RTP as a percentage string.
- */
-export function simulateRTP(rounds = 10000) {
-    let totalMultiplier = 0;
-    for (let i = 0; i < rounds; i++) {
-        totalMultiplier += generateCrashPoint();
-    }
-    const averageMultiplier = totalMultiplier / rounds;
-    // Theoretical RTP is complex, but this gives a good idea of the average outcome
-    // A true RTP simulation would involve player cashing out strategies.
-    // This value represents the average "house take" if everyone played to the end.
-    const houseHold = (1 - (1 / averageMultiplier)) * 100;
-    return (100 - houseHold).toFixed(2);
 }

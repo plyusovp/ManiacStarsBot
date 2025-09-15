@@ -1,46 +1,91 @@
-/* --- 1. Design System & Variables --- */
+/* --- 0. Импорт шрифтов --- */
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap');
+
+/* --- 1. Дизайн-система (Tokens) --- */
 :root {
-    --bg: #0a0a0f;
-    --panel: rgba(20, 16, 38, 0.6);
-    --text: #e0e0e0;
-    --muted: #8a8a9e;
-    --neon1: #9f50ff; /* Purple */
-    --neon2: #4d94ff; /* Blue */
-    --accent: #ff4da6; /* Pink */
-    --danger: #ff4d6a;
-    --success: #4dffb6;
-    --warning: #ffdb4d;
+  /* Фоны */
+  --bg: #0B0E12;          /* Основной фон */
+  --bg-soft: #0E131A;    /* Мягкий фон */
+  --card: #111823;       /* Фон карточек */
 
-    --font-main: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+  /* Текст */
+  --text: #EAF2FF;        /* Основной текст */
+  --text-dim: #9AA6B2;    /* Приглушённый текст */
+  --muted: #6E7B8A;       /* Второстепенный текст */
 
-    /* Support for iOS safe areas */
-    --safe-area-inset-top: env(safe-area-inset-top, 0px);
-    --safe-area-inset-bottom: env(safe-area-inset-bottom, 0px);
+  /* Акценты */
+  --primary-1: #8A7CFF;   /* Градиент кнопок (начало) */
+  --primary-2: #F92B75;   /* Градиент кнопок (конец) */
+  --accent: #8A7CFF;     /* Доп. акцентный цвет */
+  --success: #33D6A6;    /* Успех */
+  --danger: #FF6B6B;     /* Ошибка */
+  --warning: #FFC85C;    /* Предупреждение */
+
+  /* Радиусы и тени */
+  --radius-lg: 22px;     /* Большой радиус скругления */
+  --radius-xl: 28px;     /* Очень большой */
+  --radius-pill: 999px;  /* Для кнопок-пилюль */
+  /* --- Оптимизированная тень --- */
+  --shadow-soft: 0 8px 32px rgba(0,0,0,.35);
+  --blur-ambient: 18px;  /* Размытие для фона */
+
+  /* Анимации */
+  --dur-fast: 140ms;     /* Быстрая анимация */
+  --dur-md: 240ms;       /* Средняя */
+  --dur-slow: 360ms;     /* Медленная */
+  --ease-out: cubic-bezier(.16,1,.3,1);       /* Плавный выход */
+  --ease-spring: cubic-bezier(.34,1.56,.64,1); /* Пружинистый эффект */
+
+  /* Шрифты */
+  --font-main: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+  --h1-size: 24px;
+  --h2-size: 18px;
+  --body-size: 15px;
+  --letter-spacing: .2px;
+
+  /* Поддержка безопасных зон iOS */
+  --safe-area-inset-top: env(safe-area-inset-top, 0px);
+  --safe-area-inset-bottom: env(safe-area-inset-bottom, 0px);
 }
 
-/* --- 2. Base & Body --- */
+/* --- 2. Базовые стили --- */
 body {
     margin: 0;
     font-family: var(--font-main);
+    font-size: var(--body-size);
+    letter-spacing: var(--letter-spacing);
     background-color: var(--bg);
     color: var(--text);
-    overflow: hidden; /* Prevent pull-to-refresh */
+    overflow: hidden;
     -webkit-font-smoothing: antialiased;
     -moz-osx-font-smoothing: grayscale;
 
-    /* Fog + Noise background */
     background-image:
-        radial-gradient(circle at 10% 10%, rgba(159, 80, 255, 0.1), transparent 40%),
-        radial-gradient(circle at 90% 80%, rgba(77, 148, 255, 0.1), transparent 40%),
+        radial-gradient(circle at 10% 10%, rgba(138, 124, 255, 0.1), transparent 40%),
+        radial-gradient(circle at 90% 80%, rgba(249, 43, 117, 0.1), transparent 40%),
         url('data:image/svg+xml,%3Csvg viewBox="0 0 250 250" xmlns="http://www.w3.org/2000/svg"%3E%3Cfilter id="noiseFilter"%3E%3CfeTurbulence type="fractalNoise" baseFrequency="0.8" numOctaves="3" stitchTiles="stitch"/%3E%3C/filter%3E%3Crect width="100%" height="100%" filter="url(%23noiseFilter)" opacity="0.03"/%3E%3C/svg%3E');
-    background-color: var(--bg);
 }
 
 .hidden {
     display: none !important;
 }
 
-/* --- 3. Splash Screen --- */
+body.modal-open {
+    overflow: hidden;
+}
+
+/* --- Стили для Canvas частиц --- */
+#particle-canvas {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    z-index: -1; /* Помещаем за всем контентом */
+    pointer-events: none; /* Отключаем реакцию на клики */
+}
+
+/* --- 3. Загрузочный экран --- */
 .splash-screen {
     position: fixed;
     top: 0; left: 0;
@@ -52,85 +97,46 @@ body {
     justify-content: center;
     align-items: center;
     z-index: 1000;
-    transition: opacity 0.5s ease-out;
+    transition: opacity var(--dur-slow) var(--ease-out);
+    will-change: opacity;
 }
 
 .splash-logo {
     width: 120px;
     height: 120px;
     margin-bottom: 25px;
-    filter: drop-shadow(0 0 15px var(--neon1));
+    filter: drop-shadow(0 0 25px var(--accent));
 }
 
 .splash-text {
     font-size: 1.5em;
-    font-weight: 700;
-    color: #fff;
+    font-weight: 600;
+    color: var(--text);
     text-align: center;
 }
 
-.splash-text span {
-    display: inline-block;
-    opacity: 0;
-    filter: blur(4px);
-    animation: neon-explode 1.8s ease-out forwards;
-}
-
-/* Staggered animation for each letter */
-.splash-text span:nth-child(1) { animation-delay: 0.1s; }
-.splash-text span:nth-child(2) { animation-delay: 0.15s; }
-.splash-text span:nth-child(3) { animation-delay: 0.2s; }
-.splash-text span:nth-child(4) { animation-delay: 0.25s; }
-.splash-text span:nth-child(5) { animation-delay: 0.3s; }
-.splash-text span:nth-child(6) { animation-delay: 0.35s; }
-.splash-text span:nth-child(7) { animation-delay: 0.4s; }
-.splash-text span:nth-child(8) { animation-delay: 0.5s; }
-.splash-text span:nth-child(9) { animation-delay: 0.55s; }
-.splash-text span:nth-child(10) { animation-delay: 0.6s; }
-.splash-text span:nth-child(11) { animation-delay: 0.65s; }
-.splash-text span:nth-child(12) { animation-delay: 0.7s; }
-.splash-text span:nth-child(13) { animation-delay: 0.75s; }
-.splash-text span:nth-child(14) { animation-delay: 0.8s; }
-.splash-text span:nth-child(15) { animation-delay: 0.85s; }
-.splash-text span:nth-child(16) { animation-delay: 0.9s; }
-
-@keyframes neon-explode {
-    0% {
-        opacity: 0;
-        filter: blur(10px) brightness(2);
-        transform: scale(2.5);
-        text-shadow: 0 0 10px var(--accent), 0 0 20px var(--accent);
-    }
-    50% {
-        opacity: 1;
-        filter: blur(2px) brightness(1.5);
-        text-shadow: 0 0 5px var(--accent), 0 0 10px var(--accent);
-    }
-    100% {
-        opacity: 1;
-        filter: blur(0);
-        transform: scale(1);
-        text-shadow: 0 0 5px var(--neon2), 0 0 8px var(--neon1);
-    }
-}
-
-
-/* --- 4. Main App Layout --- */
+/* --- 4. Основная структура приложения --- */
 .app-container {
     display: flex;
     flex-direction: column;
     height: 100vh;
-    height: 100dvh; /* Dynamic viewport height */
+    height: 100dvh;
+    /* --- Адаптивность: Центрирование и ограничение ширины --- */
+    margin: 0 auto;
+    width: 100%;
+    max-width: 560px; /* Ограничиваем макс. ширину на десктопах */
+    position: relative;
+    box-shadow: 0 0 50px rgba(0,0,0,0.6); /* Тень для "десктопного" вида */
 }
 
 .app-header {
     flex-shrink: 0;
     padding: 10px 15px;
     padding-top: calc(10px + var(--safe-area-inset-top));
-    background: rgba(10, 10, 15, 0.7);
-    backdrop-filter: blur(10px);
-    -webkit-backdrop-filter: blur(10px);
-    border-bottom: 1px solid rgba(159, 80, 255, 0.2);
+    background: rgba(11, 14, 18, 0.75);
+    backdrop-filter: blur(var(--blur-ambient));
+    -webkit-backdrop-filter: blur(var(--blur-ambient));
+    border-bottom: 1px solid rgba(255, 255, 255, 0.08);
     display: flex;
     justify-content: space-between;
     align-items: center;
@@ -141,16 +147,15 @@ body {
     margin: 0;
     font-size: 1.2rem;
     font-weight: 600;
-    text-shadow: 0 0 4px var(--neon2);
 }
 
 .balance {
     font-size: 1rem;
     font-weight: 600;
-    background: rgba(0,0,0,0.3);
+    background: var(--bg-soft);
     padding: 5px 12px;
-    border-radius: 20px;
-    border: 1px solid rgba(255,255,255,0.1);
+    border-radius: var(--radius-pill);
+    box-shadow: inset 0 0 0 1px rgba(255,255,255,.04);
 }
 
 .main-content {
@@ -158,58 +163,35 @@ body {
     overflow-y: auto;
     -webkit-overflow-scrolling: touch;
     padding: 15px;
-    padding-bottom: calc(75px + var(--safe-area-inset-bottom)); /* 60px nav + 15px padding */
+    padding-bottom: calc(75px + var(--safe-area-inset-bottom));
     position: relative;
 }
 
-/* View Transition Animations */
+/* Анимации смены экранов */
 .view {
-    animation: view-enter 0.4s ease-out;
+    animation: view-enter var(--dur-slow) var(--ease-out) 60ms both;
 }
 
 @keyframes view-enter {
-    from {
-        opacity: 0;
-        transform: translateY(15px);
-    }
-    to {
-        opacity: 1;
-        transform: translateY(0);
-    }
-}
-.view-leave {
-    animation: view-leave 0.3s ease-in forwards;
-    position: absolute;
-    top: 15px;
-    left: 15px;
-    right: 15px;
-}
-@keyframes view-leave {
-     from {
-        opacity: 1;
-        transform: translateY(0);
-    }
-    to {
-        opacity: 0;
-        transform: translateY(-15px);
-    }
+    from { opacity: 0; transform: translateY(15px); }
+    to { opacity: 1; transform: translateY(0); }
 }
 
-
-/* Bottom Navigation */
+/* Нижняя навигация */
 .bottom-nav {
     flex-shrink: 0;
     display: flex;
     justify-content: space-around;
-    background: rgba(10, 10, 15, 0.7);
-    backdrop-filter: blur(10px);
-    -webkit-backdrop-filter: blur(10px);
-    border-top: 1px solid rgba(159, 80, 255, 0.2);
+    background: rgba(11, 14, 18, 0.75);
+    backdrop-filter: blur(var(--blur-ambient));
+    -webkit-backdrop-filter: blur(var(--blur-ambient));
+    border-top: 1px solid rgba(255, 255, 255, 0.08);
     padding: 5px 0;
     padding-bottom: calc(5px + var(--safe-area-inset-bottom));
-    position: fixed;
+    position: absolute; /* Changed from fixed to stay inside the container */
     bottom: 0;
     width: 100%;
+    box-sizing: border-box; /* Ensure padding is included in width */
     z-index: 100;
 }
 
@@ -222,274 +204,616 @@ body {
     text-decoration: none;
     font-size: 0.7rem;
     padding: 4px 8px;
-    transition: color 220ms, text-shadow 220ms;
-    border-radius: 8px;
+    transition: color var(--dur-md), transform var(--dur-md);
+    border-radius: var(--radius-lg);
+    will-change: transform, color;
 }
 
-.nav-item span:first-child {
-    font-size: 1.5rem; /* Icon size */
-    margin-bottom: 2px;
+/* --- ИЗМЕНЕНИЕ: Стили для SVG иконок в навигации --- */
+.nav-item svg {
+    width: 24px;
+    height: 24px;
+    stroke-width: 1.75px;
+    margin-bottom: 3px;
 }
 
 .nav-item.active {
-    color: #fff;
-    text-shadow: 0 0 8px var(--accent);
+    color: var(--accent);
+    transform: translateY(-2px);
 }
 
-/* --- 5. UI Components (Cards, Buttons, Inputs) --- */
+/* --- 5. UI-Библиотека --- */
+
+/* 5.1 Карточка (Card) */
+@keyframes card-appear {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
 .card {
-    background: var(--panel);
-    border: 1px solid rgba(159, 80, 255, 0.25);
-    border-radius: 16px;
+    background: var(--card);
+    border-radius: var(--radius-lg);
     padding: 20px;
     margin-bottom: 15px;
-    backdrop-filter: blur(8px);
-    -webkit-backdrop-filter: blur(8px);
+    box-shadow: var(--shadow-soft), inset 0 0 0 1px rgba(255,255,255,.04);
+    transition: transform var(--dur-md) var(--ease-out),
+                box-shadow var(--dur-md) var(--ease-out);
+    animation: card-appear var(--dur-slow) var(--ease-out) both;
+    will-change: transform;
+}
+.card:hover {
+    transform: translateY(-2px) scale(1.01);
+}
+.card:focus-within {
+    outline: 1px solid rgba(250, 250, 255, .08);
 }
 
-h2 {
-    margin-top: 0;
-    font-size: 1.3rem;
-    font-weight: 600;
-    color: #fff;
-    text-shadow: 0 0 3px var(--neon1);
-}
+h1 { font-size: var(--h1-size); font-weight: 700; }
+h2 { margin-top: 0; font-size: var(--h2-size); font-weight: 600; color: var(--text); }
+p { margin-top: 0; color: var(--text-dim); line-height: 1.6; }
 
+/* 5.2 Кнопка (Button) */
 .btn {
-    display: block;
+    display: flex;
+    align-items: center;
+    justify-content: center;
     width: 100%;
     box-sizing: border-box;
     padding: 14px 20px;
     margin: 8px 0;
-    border: 1px solid var(--neon1);
-    background: linear-gradient(45deg, rgba(159, 80, 255, 0.1), rgba(77, 148, 255, 0.1));
-    color: var(--text);
-    border-radius: 12px;
+    border: none;
+    border-radius: var(--radius-pill);
+    font-family: var(--font-main);
     font-size: 1rem;
     font-weight: 600;
     text-align: center;
     cursor: pointer;
-    transition: 200ms ease-out;
+    transition: all var(--dur-md) var(--ease-out);
     position: relative;
     overflow: hidden;
+    -webkit-tap-highlight-color: transparent;
+    will-change: transform, box-shadow, filter;
 }
-
-.btn:hover:not(:disabled) {
-    background: linear-gradient(45deg, rgba(159, 80, 255, 0.2), rgba(77, 148, 255, 0.2));
-    box-shadow: 0 0 12px rgba(159, 80, 255, 0.5);
-    transform: translateY(-2px);
-}
-
-.btn:active:not(:disabled) {
-    transform: translateY(0px);
-    box-shadow: 0 0 5px rgba(159, 80, 255, 0.3);
-}
-
 .btn:disabled {
-    background: rgba(50, 50, 60, 0.5);
-    border-color: #444;
+    opacity: 0.5;
+    cursor: not-allowed;
+    transform: none !important;
+    filter: none;
+}
+.btn-primary {
+    background: linear-gradient(135deg, var(--primary-1), var(--primary-2));
+    color: white;
+    filter: drop-shadow(0 4px 20px rgba(138, 124, 255, 0.45));
+}
+.btn-secondary {
+    background: rgba(255, 255, 255, .06);
+    backdrop-filter: blur(12px);
+    -webkit-backdrop-filter: blur(12px);
+    color: var(--text);
+    box-shadow: inset 0 0 0 1px rgba(255,255,255,.04);
+}
+.btn:active:not(:disabled) {
+    transform: scale(0.96);
+    transition-duration: var(--dur-fast);
+}
+
+/* 5.3 Переключатель (Switch/Toggle) */
+.switch {
+    position: relative;
+    display: inline-block;
+    width: 50px;
+    height: 28px;
+}
+.switch input { opacity: 0; width: 0; height: 0; }
+.switch-track {
+    position: absolute;
+    cursor: pointer;
+    top: 0; left: 0; right: 0; bottom: 0;
+    background: rgba(255, 255, 255, .06);
+    backdrop-filter: blur(12px);
+    -webkit-backdrop-filter: blur(12px);
+    border-radius: var(--radius-pill);
+    transition: background-color var(--dur-md) var(--ease-out);
+    box-shadow: inset 0 0 0 1px rgba(255,255,255,.04);
+}
+.switch-thumb {
+    position: absolute;
+    content: '';
+    height: 22px; width: 22px;
+    left: 3px; bottom: 3px;
+    background: linear-gradient(135deg, #ddd, #fff);
+    border-radius: 50%;
+    transition: transform var(--dur-slow) var(--ease-spring);
+}
+.switch input:checked + .switch-track {
+    background: linear-gradient(135deg, var(--primary-1), var(--primary-2));
+}
+.switch input:checked + .switch-track .switch-thumb {
+    transform: translateX(22px);
+}
+
+/* 5.4 Модальное окно (Modal/Sheet) */
+.modal-backdrop {
+    position: fixed;
+    top: 0; left: 0;
+    width: 100%; height: 100%;
+    background: rgba(0, 0, 0, .55);
+    backdrop-filter: blur(4px);
+    -webkit-backdrop-filter: blur(4px);
+    z-index: 1000;
+    opacity: 0;
+    visibility: hidden;
+    transition: opacity var(--dur-md) ease-out, visibility var(--dur-md) ease-out;
+}
+.modal-sheet {
+    position: fixed;
+    bottom: 0; left: 0;
+    width: 100%;
+    max-width: 560px; /* Ensure modal respects container width */
+    left: 50%;
+    transform: translateX(-50%) translateY(100%);
+    background: var(--card);
+    border-top-left-radius: var(--radius-xl);
+    border-top-right-radius: var(--radius-xl);
+    padding: 24px;
+    padding-bottom: calc(24px + var(--safe-area-inset-bottom));
+    z-index: 1001;
+    box-sizing: border-box;
+    transition: transform var(--dur-slow) var(--ease-out);
+    border-top: 1px solid rgba(255,255,255,0.08);
+    will-change: transform;
+}
+.modal-backdrop.is-visible {
+    opacity: 1;
+    visibility: visible;
+}
+.modal-backdrop.is-visible .modal-sheet {
+    transform: translateX(-50%) translateY(0);
+}
+
+/* 5.5 Уведомления (Toasts) */
+.toast-container {
+    position: fixed;
+    top: calc(15px + var(--safe-area-inset-top));
+    left: 50%;
+    transform: translateX(-50%);
+    width: calc(100% - 30px);
+    max-width: 530px; /* max-width - padding */
+    z-index: 2000;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    pointer-events: none;
+}
+@keyframes toast-in {
+  from {
+    opacity: 0;
+    transform: translateY(-20px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+@keyframes toast-out {
+  from {
+    opacity: 1;
+    transform: translateY(0);
+  }
+  to {
+    opacity: 0;
+    transform: translateY(-20px);
+  }
+}
+.toast {
+    background: var(--card);
+    color: var(--text);
+    padding: 12px 18px;
+    border-radius: var(--radius-pill);
+    margin-bottom: 10px;
+    box-shadow: var(--shadow-soft);
+    font-size: 0.9rem;
+    font-weight: 600;
+    animation: toast-in 0.5s var(--ease-out) forwards;
+    border-left: 4px solid var(--accent);
+}
+.toast.success { border-left-color: var(--success); }
+.toast.error { border-left-color: var(--danger); }
+.toast.warning { border-left-color: var(--warning); }
+
+
+/* --- 6. Стили Экрана "Игры" (4.1) --- */
+.games-grid {
+    display: grid;
+    /* --- Адаптивность: Сетка карточек --- */
+    grid-template-columns: repeat(2, 1fr);
+    gap: 14px;
+}
+
+/* --- Адаптивность: Сетка для очень маленьких экранов --- */
+@media (max-width: 340px) {
+    .games-grid {
+        grid-template-columns: 1fr; /* Перестраиваем в одну колонку */
+    }
+}
+
+
+@keyframes game-card-appear {
+    from {
+        opacity: 0;
+        transform: translateY(20px) scale(0.98);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0) scale(1);
+    }
+}
+
+.game-card {
+    background: var(--card);
+    border-radius: var(--radius-lg);
+    padding: 15px;
+    aspect-ratio: 1 / 1.1;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    align-items: center;
+    text-align: center;
+    cursor: pointer;
+    transition: transform var(--dur-md) var(--ease-out),
+                box-shadow var(--dur-md) var(--ease-out);
+    animation: game-card-appear var(--dur-slow) var(--ease-out) both;
+    animation-delay: calc(var(--stagger-index) * 40ms);
+    box-shadow: inset 0 0 0 1px rgba(255,255,255,.04);
+    will-change: transform, box-shadow;
+}
+/* --- ИЗМЕНЕНИЕ: Стили для SVG иллюстраций в карточках игр --- */
+.game-card-icon {
+    height: 48px;
+    width: 48px;
+    margin-bottom: 10px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+.game-card-icon svg {
+    width: 100%;
+    height: 100%;
+}
+
+.game-card-title {
+    font-weight: 600;
+    color: var(--text);
+}
+.game-card-info {
+    font-size: 0.8rem;
+    color: var(--muted);
+}
+.game-card:hover {
+    transform: translateY(-4px);
+    box-shadow: 0 0 20px rgba(138, 124, 255, 0.2), inset 0 0 0 1px rgba(255,255,255,.04);
+}
+.game-card.selected {
+    transform: translateY(-4px);
+    box-shadow: 0 0 30px rgba(138, 124, 255, 0.5), inset 0 0 0 1px var(--accent);
+}
+
+.play-bar {
+    position: absolute; /* Changed from fixed */
+    bottom: calc(65px + var(--safe-area-inset-bottom));
+    left: 15px;
+    right: 15px;
+    transform: translateY(150%);
+    transition: transform var(--dur-slow) var(--ease-out);
+    z-index: 50;
+    will-change: transform;
+}
+.play-bar.visible {
+    transform: translateY(0);
+}
+
+/* --- 7. Стили Экрана "Рефералы" (4.2) --- */
+.glassmorphism-card {
+    background: rgba(255, 255, 255, .06);
+    backdrop-filter: blur(12px);
+    -webkit-backdrop-filter: blur(12px);
+    box-shadow: inset 0 0 0 1px rgba(255,255,255,.04);
+}
+
+.ref-link-container {
+    background: var(--bg-soft);
+    border-radius: var(--radius-pill);
+    padding: 5px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-top: 20px;
+}
+.ref-link-text {
+    padding-left: 15px;
+    font-family: monospace;
+    color: var(--text-dim);
+}
+.ref-buttons {
+    display: flex;
+    gap: 5px;
+}
+.btn-icon {
+    background: var(--card);
+    border: none;
+    width: 44px;
+    height: 44px;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: var(--text);
+    cursor: pointer;
+    transition: background-color var(--dur-md), box-shadow var(--dur-md);
+}
+.btn-icon:hover {
+    background-color: var(--accent);
+    box-shadow: 0 0 15px var(--accent);
+}
+
+.friends-list {
+    display: flex;
+    flex-direction: column;
+    gap: 15px;
+}
+.friend-item {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+}
+.friend-avatar {
+    font-size: 1.5rem;
+}
+.friend-name {
+    flex-grow: 1;
+    font-weight: 600;
+}
+.friend-bonus {
+    font-weight: 600;
+}
+.friend-bonus.success { color: var(--success); }
+.friend-bonus.pending { color: var(--muted); }
+
+/* Анимация конфетти */
+@keyframes confetti-pop {
+    0% {
+        transform: translate(0, 0) scale(1);
+        opacity: 1;
+    }
+    100% {
+        transform: translate(var(--x-end), var(--y-end)) scale(var(--scale));
+        opacity: 0;
+    }
+}
+.confetti {
+    position: absolute;
+    width: 8px;
+    height: 8px;
+    background-color: hsla(var(--hue), 90%, 60%, 1);
+    border-radius: 50%;
+    animation: confetti-pop 1s ease-out forwards;
+}
+
+/* --- 8. Стили Экрана "Профиль" (4.3) --- */
+.profile-header {
+    text-align: center;
+    margin-bottom: 25px;
+}
+.profile-avatar-wrapper {
+    position: relative;
+    width: 100px;
+    height: 100px;
+    margin: 0 auto 15px;
+}
+.profile-avatar {
+    width: 100%;
+    height: 100%;
+    border-radius: 50%;
+    box-shadow: 0 0 25px rgba(138, 124, 255, 0.6);
+}
+.profile-name {
+    font-size: 1.5rem;
+    font-weight: 700;
+    margin: 0 0 8px 0;
+}
+.profile-level {
+    color: var(--text-dim);
+}
+.progress-bar-sm {
+    width: 120px;
+    height: 6px;
+    background: var(--bg-soft);
+    border-radius: var(--radius-pill);
+    overflow: hidden;
+    margin: 5px auto 0;
+}
+.progress-bar-inner-sm {
+    height: 100%;
+    background: linear-gradient(135deg, var(--primary-1), var(--primary-2));
+    border-radius: var(--radius-pill);
+}
+
+.balance-container {
+    text-align: center;
+}
+.balance-value-large {
+    font-size: 2.8rem;
+    font-weight: 700;
+    line-height: 1;
+}
+.balance-currency {
+    font-size: 2rem;
+    color: var(--muted);
+}
+
+.achievements-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(50px, 1fr));
+    gap: 15px;
+    justify-content: center;
+}
+.achievement {
+    width: 50px;
+    height: 50px;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 1.8rem;
+    background: var(--bg-soft);
+    filter: grayscale(100%) blur(2px);
+    opacity: 0.5;
+    transition: all var(--dur-md);
+}
+.achievement.unlocked {
+    filter: none;
+    opacity: 1;
+    background: var(--card);
+    box-shadow: 0 0 15px rgba(138, 124, 255, 0.2), inset 0 0 0 1px var(--accent);
+}
+
+.history-list { display: flex; flex-direction: column; gap: 12px; }
+.history-item { display: flex; justify-content: space-between; align-items: center; }
+.history-type { font-weight: 600; }
+.history-details { text-align: right; }
+.history-amount { display: block; font-weight: 700; }
+.history-date { font-size: 0.8rem; color: var(--muted); }
+
+/* --- 9. Стили Экрана "Настройки" (4.4) --- */
+.settings-list {
+    display: flex;
+    flex-direction: column;
+    gap: 20px;
+}
+.setting-item {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+}
+.setting-item label:first-child {
+    font-weight: 600;
+}
+
+.segmented-control {
+    display: flex;
+    background: var(--bg-soft);
+    border-radius: var(--radius-pill);
+    padding: 4px;
+}
+.segmented-control button {
+    background: transparent;
+    border: none;
+    color: var(--text-dim);
+    padding: 6px 16px;
+    border-radius: var(--radius-pill);
+    font-weight: 600;
+    cursor: pointer;
+    transition: all var(--dur-md);
+}
+.segmented-control button.active {
+    background: var(--card);
+    color: var(--text);
+    box-shadow: 0 2px 5px rgba(0,0,0,0.2);
+}
+.segmented-control button:disabled {
     color: var(--muted);
     cursor: not-allowed;
 }
 
-.btn-success { border-color: var(--success); }
-.btn-success:hover:not(:disabled) { box-shadow: 0 0 12px rgba(77, 255, 182, 0.5); }
-.btn-danger { border-color: var(--danger); }
-.btn-danger:hover:not(:disabled) { box-shadow: 0 0 12px rgba(255, 77, 106, 0.5); }
-.btn-warning { border-color: var(--warning); }
-.btn-warning:hover:not(:disabled) { box-shadow: 0 0 12px rgba(255, 219, 77, 0.5); }
-
-.input-field, input[type="number"] {
-    width: 100%;
-    padding: 12px;
-    background: rgba(0,0,0,0.4);
-    border: 1px solid #444;
-    color: var(--text);
-    border-radius: 8px;
-    font-size: 1.2rem;
-    font-weight: 600;
-    text-align: center;
-    box-sizing: border-box;
-    transition: border-color 200ms, box-shadow 200ms;
-}
-.input-field:focus, input[type="number"]:focus {
-    outline: none;
-    border-color: var(--neon1);
-    box-shadow: 0 0 8px rgba(159, 80, 255, 0.4);
-}
-
-/* Chip buttons for bets */
-.chip-controls {
-    display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(60px, 1fr));
-    gap: 8px;
-    margin: 15px 0;
-}
-
-.chip {
-    padding: 8px 5px;
-    background: rgba(255,255,255,0.05);
-    border: 1px solid #555;
-    font-size: 0.9rem;
-    font-weight: 600;
-}
-.chip:hover:not(:disabled) {
-    background: rgba(255,255,255,0.1);
-    border-color: var(--muted);
-    transform: none;
-    box-shadow: none;
-}
-
-
-/* --- 6. Game-Specific Styles --- */
-
-/* Home Screen */
-.home-view .games-grid {
-    display: grid;
-    grid-template-columns: repeat(auto-fill, minmax(100px, 1fr));
-    gap: 12px;
-}
-
-.home-view .game-tile {
+.settings-links {
     display: flex;
     flex-direction: column;
-    align-items: center;
-    justify-content: center;
-    aspect-ratio: 1 / 1;
+    gap: 15px;
+}
+.settings-links a {
+    color: var(--accent);
     text-decoration: none;
-    color: var(--text);
-    background: var(--panel);
-    border-radius: 12px;
-    border: 1px solid rgba(159, 80, 255, 0.25);
-    transition: 200ms ease-out;
-}
-.home-view .game-tile:hover {
-    transform: translateY(-4px);
-    border-color: var(--accent);
-    box-shadow: 0 0 10px rgba(255, 77, 166, 0.4);
-}
-
-.home-view .game-tile .icon {
-    font-size: 2.5rem;
-    margin-bottom: 8px;
-}
-.home-view .game-tile .name {
-    font-size: 0.8rem;
     font-weight: 600;
 }
 
-/* Crash Game */
-.crash-view .display-area {
+/* --- 10. РЕЖИМ НИЗКОЙ ПРОИЗВОДИТЕЛЬНОСТИ --- */
+
+/* Отключаем дорогой эффект размытия */
+.low-perf .app-header,
+.low-perf .bottom-nav,
+.low-perf .glassmorphism-card,
+.low-perf .btn-secondary,
+.low-perf .switch-track,
+.low-perf .modal-backdrop {
+    backdrop-filter: none !important;
+    -webkit-backdrop-filter: none !important;
+}
+
+.low-perf .app-header,
+.low-perf .bottom-nav {
+    background-color: rgba(11, 14, 18, 0.92);
+}
+
+/* Упрощаем тени и свечение */
+.low-perf .card,
+.low-perf .splash-logo,
+.low-perf .btn-primary,
+.low-perf .game-card:hover,
+.low-perf .game-card.selected,
+.low-perf .profile-avatar,
+.low-perf .achievement.unlocked {
+    box-shadow: 0 4px 12px rgba(0,0,0,.3), inset 0 0 0 1px rgba(255,255,255,.04);
+    filter: none;
+}
+
+/* Значительно сокращаем или отключаем все анимации и переходы */
+.low-perf *,
+.low-perf *::before,
+.low-perf *::after {
+    transition-duration: 0.01ms !important;
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+}
+
+
+/* --- 13. Скелет-загрузки (Skeletons) --- */
+.skeleton {
+    background-color: var(--bg-soft);
     position: relative;
-    width: 100%;
-    aspect-ratio: 2 / 1;
-    background: rgba(0,0,0,0.3);
-    border-radius: 12px;
     overflow: hidden;
 }
-.crash-view .multiplier-text {
+
+.skeleton::after {
+    content: '';
     position: absolute;
-    top: 50%;
-    left: 50%;
-    transform: translate(-50%, -50%);
-    font-size: clamp(2.5rem, 12vw, 4.5rem);
-    font-weight: 700;
-    transition: color 300ms;
-}
-.crash-view canvas {
-    position: absolute;
-    top: 0; left: 0;
-    width: 100%;
-    height: 100%;
-}
-.crash-view .history {
-    display: flex;
-    gap: 8px;
-    overflow-x: auto;
-    padding-bottom: 5px; /* for scrollbar */
-}
-.crash-view .history-item {
-    flex-shrink: 0;
-    padding: 4px 8px;
-    border-radius: 6px;
-    font-weight: 600;
-    font-size: 0.9rem;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    transform: translateX(-100%);
+    background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.05), transparent);
+    animation: skeleton-shimmer 1.5s infinite;
 }
 
-/* Slots Game */
-.slots-view .reels-container {
-    display: flex;
-    justify-content: space-around;
-    align-items: center;
-    padding: 20px 10px;
-    background: rgba(0,0,0,0.3);
-    border-radius: 12px;
-    border: 2px solid #333;
-    margin-bottom: 20px;
-}
-.slots-view .reel {
-    width: 30%;
-    aspect-ratio: 1 / 1.2;
-    font-size: clamp(2.5rem, 15vw, 4rem);
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    background: rgba(0,0,0,0.4);
-    border-radius: 8px;
-    transition: box-shadow 300ms, transform 300ms;
-}
-.slots-view .reel.win {
-    box-shadow: 0 0 15px var(--success), inset 0 0 10px rgba(77, 255, 182, 0.3);
-    transform: scale(1.05);
+@keyframes skeleton-shimmer {
+    100% {
+        transform: translateX(100%);
+    }
 }
 
-/* 3D Dice */
-#dice3d-canvas-container {
-    position: relative;
-    width: 100%;
-    height: 250px;
-    background: rgba(0,0,0,0.2);
-    border-radius: 12px;
-    margin-bottom: 15px;
-    cursor: grab;
-}
-#dice3d-canvas-container:active {
-    cursor: grabbing;
+.skeleton-pulse {
+    background-color: var(--bg-soft);
+    animation: skeleton-pulse 1.2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
 }
 
-/* Simple Games (Coin, Dice2D, Darts etc) */
-.simple-game-display {
-    min-height: 150px;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    font-size: 5rem;
-    margin-bottom: 15px;
+@keyframes skeleton-pulse {
+    50% {
+        opacity: 0.85;
+    }
 }
-.simple-game-controls {
-    display: grid;
-    grid-template-columns: 1fr 1fr;
-    gap: 10px;
-}
-
-/* --- 7. Notification Box --- */
-.notification-box {
-    position: fixed;
-    top: calc(15px + var(--safe-area-inset-top));
-    left: 50%;
-    transform: translateX(-50%) translateY(-150%);
-    padding: 12px 20px;
-    background: var(--panel);
-    border: 1px solid var(--accent);
-    box-shadow: 0 4px 15px rgba(0,0,0,0.5);
-    border-radius: 10px;
-    z-index: 1001;
-    font-weight: 600;
-    transition: transform 0.4s cubic-bezier(0.2, 0.9, 0.3, 1.2);
-}
-
-.notification-box.show {
-    transform: translateX(-50%) translateY(0);
-}
-.notification-box.success { border-color: var(--success); }
-.notification-box.error { border-color: var(--danger); }
