@@ -1,17 +1,14 @@
 import { getBalance, subBalance, addBalance, updateStats } from '../core/state.js';
 import { applyPayout } from '../core/houseedge.js';
 
-export const title = 'Crash';
+export const titleKey = 'crash_game_title';
 
-// --- Game Parameters (for RTP tuning) ---
-const CRASH_ALPHA = 1.6; // Higher = more frequent low multipliers
-const CRASH_MIN = 1.00;
+const CRASH_ALPHA = 1.6;
 const CRASH_MAX = 100.0;
 const BETTING_WINDOW_MS = 7000;
 
-// --- State ---
 let root, elements, state;
-let animationFrameId;
+let animationFrameId, countdownInterval;
 
 function resetState() {
     state = {
@@ -24,59 +21,48 @@ function resetState() {
         history: state ? state.history : [],
         cashedOut: false,
         countdown: BETTING_WINDOW_MS / 1000,
-        lastCurvePos: { x: 0, y: 0 } // Для частиц
+        lastCurvePos: { x: 0, y: 0 }
     };
 }
 
-/**
- * Generates the crash point. The math ensures RTP can be tuned.
- * The formula creates a distribution where lower multipliers are more common.
- * @returns {number} The multiplier at which the game will crash.
- */
 function generateCrashPoint() {
     const u = Math.random();
-    // Inverse transform sampling for a power-law distribution
     const point = Math.pow(1 / (1 - u), 1 / CRASH_ALPHA);
-    return Math.min(CRASH_MAX, Math.max(CRASH_MIN, point));
+    return Math.max(1.0, Math.min(CRASH_MAX, point));
 }
 
 function updateUI() {
-    if (!root) return;
+    if (!root || !elements.betInput) return;
+    const t = window.ManiacGames.t;
+
     elements.betInput.value = state.betAmount;
     elements.multiplierText.textContent = `${state.multiplier.toFixed(2)}x`;
 
-    // Colorize multiplier text
-    if (state.gameState === 'crashed') {
-        elements.multiplierText.style.color = 'var(--danger)';
-    } else if (state.cashedOut) {
-        elements.multiplierText.style.color = 'var(--success)';
-    } else {
-        elements.multiplierText.style.color = 'var(--text)';
-    }
+    elements.multiplierText.style.color = state.gameState === 'crashed' ? 'var(--danger)' :
+                                         state.cashedOut ? 'var(--success)' : 'var(--text)';
 
-    // Update main button text and state
     switch (state.gameState) {
         case 'betting':
-            elements.betButton.disabled = false;
+            elements.betButton.disabled = state.stake > 0;
             elements.betButton.className = 'btn btn-success';
-            elements.betButton.textContent = `Сделать ставку (${state.countdown}с)`;
+            elements.betButton.textContent = state.stake > 0 ? t('crash_accepted') : `${t('crash_place_bet')} (${state.countdown}s)`;
             break;
         case 'running':
             if (state.stake > 0 && !state.cashedOut) {
                 const potentialWin = Math.floor(state.stake * state.multiplier);
                 elements.betButton.disabled = false;
                 elements.betButton.className = 'btn btn-warning';
-                elements.betButton.textContent = `Забрать ${potentialWin} ⭐`;
+                elements.betButton.textContent = `${t('crash_take')} ${potentialWin} ⭐`;
             } else {
                 elements.betButton.disabled = true;
                 elements.betButton.className = 'btn';
-                elements.betButton.textContent = 'Приём ставок завершён';
+                elements.betButton.textContent = t('crash_betting_closed');
             }
             break;
         case 'crashed':
             elements.betButton.disabled = true;
             elements.betButton.className = 'btn btn-danger';
-            elements.betButton.textContent = 'Краш!';
+            elements.betButton.textContent = t('crash_crashed');
             break;
     }
     updateHistory();
@@ -86,12 +72,11 @@ function updateUI() {
 function updateHistory() {
     elements.history.innerHTML = state.history.slice(0, 10).map(m => {
         let color = 'var(--danger)';
-        if (m > 2.0) color = 'var(--success)';
-        else if (m > 1.2) color = 'var(--warning)';
+        if (m >= 2.0) color = 'var(--success)';
+        else if (m >= 1.2) color = 'var(--warning)';
         return `<span class="history-item" style="background-color: ${color}20; color: ${color};">${m.toFixed(2)}x</span>`;
     }).join('');
 }
-
 
 function drawCurve() {
     const ctx = elements.canvas.getContext('2d');
@@ -106,17 +91,15 @@ function drawCurve() {
     ctx.moveTo(0, height);
 
     const duration = state.startTime ? (performance.now() - state.startTime) / 1000 : 0;
-    // Logarithmic scaling for better visualization of high multipliers
-    const maxX = Math.log(state.crashPoint || 20);
-    const maxY = state.crashPoint || 20;
+    const maxX = Math.log(Math.max(20, state.crashPoint || 20));
+    const maxY = Math.max(20, state.crashPoint || 20);
 
     let finalX = 0, finalY = height;
-
-    for (let t = 0; t <= duration; t += 0.02) {
-        const m = 1.00 * Math.pow(1.05, t * 2); // Exponential growth
+    for (let t_step = 0; t_step <= duration; t_step += 0.02) {
+        const m = 1.00 * Math.pow(1.05, t_step * 2);
         const x = (Math.log(m) / maxX) * width;
         const y = height - (m / maxY) * height;
-        if(y > 0) {
+        if (y > 0) {
             ctx.lineTo(x, y);
             finalX = x;
             finalY = y;
@@ -125,66 +108,47 @@ function drawCurve() {
     ctx.stroke();
     ctx.shadowBlur = 0;
 
-    // Сохраняем последнюю позицию кривой для частиц
     const canvasRect = elements.canvas.getBoundingClientRect();
     state.lastCurvePos.x = canvasRect.left + finalX;
     state.lastCurvePos.y = canvasRect.top + finalY;
 }
 
-
 function gameLoop(timestamp) {
     if (state.gameState !== 'running') return;
 
-    // Прячем скелет при первом кадре анимации
     if (elements.graphSkeleton) {
         elements.graphSkeleton.style.display = 'none';
-        elements.graphSkeleton = null; // Удаляем ссылку
+        elements.graphSkeleton = null;
     }
 
     const elapsedSeconds = (timestamp - state.startTime) / 1000;
     state.multiplier = 1.00 * Math.pow(1.05, elapsedSeconds * 2);
 
-    // --- Интеграция частиц: шлейф за графиком ---
-    if (window.ManiacGames.particles && Math.random() < 0.5) { // Создаем частицы с вероятностью 50%
+    if (window.ManiacGames.particles && Math.random() < 0.5) {
         window.ManiacGames.particles.emit(state.lastCurvePos.x, state.lastCurvePos.y, {
-            count: 1,
-            speed: 1,
-            life: 30,
-            size: 1.5,
-            color: ['#8A7CFF', '#F92B75', '#ffffff'],
-            angle: Math.PI * 1.5, // Направляем вверх
-            angleOffset: Math.random() * 0.4 - 0.2
+            count: 1, speed: 1, life: 30, size: 1.5,
+            color: ['#8A7CFF', '#F92B75', '#ffffff'], angle: Math.PI * 1.5, angleOffset: Math.random() * 0.4 - 0.2
         });
     }
 
     if (state.multiplier >= state.crashPoint) {
         state.multiplier = state.crashPoint;
         state.gameState = 'crashed';
-
-        // --- Интеграция частиц: взрыв при краше ---
         if (window.ManiacGames.particles) {
             window.ManiacGames.particles.emit(state.lastCurvePos.x, state.lastCurvePos.y, {
-                count: 60,
-                speed: 5,
-                life: 90,
-                size: 2.5,
-                color: ['#FF6B6B', '#FFC85C', '#ffffff'],
+                count: 60, speed: 5, life: 90, size: 2.5, color: ['#FF6B6B', '#FFC85C', '#ffffff'],
             });
         }
-
-
         state.history.unshift(state.multiplier);
         updateStats({ maxCrashMultiplier: state.multiplier });
-
         if (state.stake > 0 && !state.cashedOut) {
             updateStats({ losses: 1 });
             window.ManiacGames.playSound('lose');
             window.ManiacGames.hapticFeedback('error');
         }
-
         window.ManiacGames.playSound('crash');
         updateUI();
-        setTimeout(startNewRound, 2000); // 2s pause before new round
+        setTimeout(startNewRound, 2000);
     } else {
         updateUI();
         animationFrameId = requestAnimationFrame(gameLoop);
@@ -195,16 +159,11 @@ function startNewRound() {
     if (animationFrameId) cancelAnimationFrame(animationFrameId);
     resetState();
     state.crashPoint = generateCrashPoint();
-    console.log(`Next crash at: ${state.crashPoint.toFixed(2)}x`);
 
-    // Показываем скелет, если он был скрыт
-    if (elements.graphSkeleton) {
-         elements.graphSkeleton.style.display = 'block';
-    }
+    if (elements.graphSkeleton) elements.graphSkeleton.style.display = 'block';
 
-
-    const countdownInterval = setInterval(() => {
-        if (state.gameState === 'unmounted') { // Проверка, чтобы остановить таймер при размонтировании
+    countdownInterval = setInterval(() => {
+        if (!root) {
             clearInterval(countdownInterval);
             return;
         }
@@ -225,93 +184,97 @@ function startNewRound() {
 }
 
 function handleBet() {
-    if (state.gameState === 'betting' && state.stake === 0) {
-        const bet = state.betAmount;
-        if (bet <= 0) return;
-        if (getBalance() < bet) {
-            window.ManiacGames.showNotification('Недостаточно средств', 'error');
-            return;
-        }
-        subBalance(bet);
-        state.stake = bet;
-        window.ManiacGames.updateBalance();
-        window.ManiacGames.playSound('tap');
-        window.ManiacGames.hapticFeedback('medium');
-        elements.betButton.textContent = 'Ставка принята';
-        elements.betButton.disabled = true;
+    if (state.gameState !== 'betting' || state.stake !== 0) return;
+    const t = window.ManiacGames.t;
+
+    const bet = state.betAmount;
+    if (bet <= 0) return;
+    if (getBalance() < bet) {
+        window.ManiacGames.showNotification(t('not_enough_funds'), 'error');
+        return;
     }
+    subBalance(bet);
+    state.stake = bet;
+    window.ManiacGames.updateBalance();
+    window.ManiacGames.playSound('tap');
+    window.ManiacGames.hapticFeedback('medium');
+    updateUI();
 }
 
 function handleCashout() {
-     if (state.gameState === 'running' && state.stake > 0 && !state.cashedOut) {
-        const payout = applyPayout(state.stake * state.multiplier);
-        addBalance(payout);
-        state.cashedOut = true;
+     if (state.gameState !== 'running' || state.stake <= 0 || state.cashedOut) return;
+     const t = window.ManiacGames.t;
 
-        updateStats({ wins: 1, topWin: payout });
-        window.ManiacGames.updateBalance();
-        window.ManiacGames.playSound('win');
-        window.ManiacGames.hapticFeedback('success');
-        updateUI();
-    }
+    const payout = applyPayout(state.stake * state.multiplier);
+    addBalance(payout);
+    state.cashedOut = true;
+    updateStats({ wins: 1, topWin: payout });
+    window.ManiacGames.updateBalance();
+    window.ManiacGames.playSound('win');
+    window.ManiacGames.hapticFeedback('success');
+    updateUI();
 }
 
 function bindEvents() {
     elements.betButton.addEventListener('click', () => {
-        if(state.gameState === 'betting') handleBet();
+        if (state.gameState === 'betting') handleBet();
         else if (state.gameState === 'running') handleCashout();
     });
-
     elements.betInput.addEventListener('change', e => {
         const val = parseInt(e.target.value, 10);
         state.betAmount = Math.max(1, isNaN(val) ? 1 : val);
         updateUI();
     });
-
     elements.chipControls.addEventListener('click', e => {
-        if (e.target.classList.contains('chip')) {
-            const action = e.target.dataset.action;
-            const value = parseInt(e.target.dataset.value, 10);
-            let currentBet = state.betAmount;
+        const chip = e.target.closest('.chip');
+        if (!chip) return;
 
-            if (action === 'add') currentBet += value;
-            else if (action === 'set') currentBet = value;
-            else if (action === 'div2') currentBet = Math.max(1, Math.floor(currentBet / 2));
-            else if (action === 'mul2') currentBet *= 2;
+        const action = chip.dataset.action;
+        const value = parseInt(chip.dataset.value, 10);
+        let currentBet = state.betAmount;
 
-            state.betAmount = Math.min(currentBet, getBalance());
-            updateUI();
-            window.ManiacGames.playSound('tap');
-        }
+        if (action === 'add') currentBet += value;
+        else if (action === 'set') currentBet = value;
+        else if (action === 'div2') currentBet = Math.max(1, Math.floor(currentBet / 2));
+        else if (action === 'mul2') currentBet *= 2;
+
+        state.betAmount = Math.min(currentBet, getBalance());
+        updateUI();
+        window.ManiacGames.playSound('tap');
     });
 }
 
 export function mount(rootEl) {
     root = rootEl;
+    const t = window.ManiacGames.t;
+
     root.innerHTML = `
+        <style>
+        .display-area { position: relative; width: 100%; aspect-ratio: 16/9; background: var(--bg-soft); border-radius: var(--radius-lg); overflow: hidden;}
+        #crash-canvas { width: 100%; height: 100%; }
+        .multiplier-text { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); font-size: 2.5rem; font-weight: 700; color: var(--text); }
+        .history { display: flex; gap: 8px; overflow-x: auto; padding-bottom: 5px; }
+        .history-item { padding: 4px 10px; border-radius: var(--radius-pill); font-weight: 600; font-size: 0.8rem; flex-shrink: 0; }
+        </style>
         <div class="card">
             <div class="display-area">
-                <div id="crash-graph-skeleton" class="skeleton-pulse" style="width: 100%; height: 100%; position: absolute; top: 0; left: 0; border-radius: var(--radius-lg);"></div>
+                <div id="crash-graph-skeleton" class="skeleton-pulse" style="width: 100%; height: 100%; position: absolute; top: 0; left: 0;"></div>
                 <canvas id="crash-canvas"></canvas>
                 <div id="crash-multiplier" class="multiplier-text">1.00x</div>
             </div>
         </div>
         <div class="card">
-            <h2>История</h2>
+            <h2>${t('crash_history')}</h2>
             <div id="crash-history" class="history"></div>
         </div>
         <div class="card">
-            <h2>Ставка</h2>
+            <h2>${t('crash_bet')}</h2>
             <input type="number" id="crash-bet-input" class="input-field" value="10">
-            <div id="crash-chip-controls" class="chip-controls">
-                <button class="btn chip" data-action="add" data-value="10">+10</button>
-                <button class="btn chip" data-action="add" data-value="50">+50</button>
+            <div id="crash-chip-controls" class="chip-controls" style="grid-template-columns: repeat(4, 1fr);">
                 <button class="btn chip" data-action="add" data-value="100">+100</button>
-                <button class="btn chip" data-action="add" data-value="500">+500</button>
-                <button class="btn chip" data-action="div2">÷2</button>
-                <button class="btn chip" data-action="mul2">×2</button>
-                <button class="btn chip" data-action="set" data-value="1000">1k</button>
-                 <button class="btn chip" data-action="set" data-value="${getBalance()}">ALL</button>
+                <button class="btn chip" data-action="div2">/2</button>
+                <button class="btn chip" data-action="mul2">*2</button>
+                <button class="btn chip" data-action="set" data-value="${getBalance()}">ALL</button>
             </div>
             <button id="crash-bet-button" class="btn"></button>
         </div>
@@ -327,7 +290,6 @@ export function mount(rootEl) {
         betButton: root.querySelector('#crash-bet-button'),
     };
 
-    // Resize canvas
     const rect = elements.canvas.parentElement.getBoundingClientRect();
     elements.canvas.width = rect.width;
     elements.canvas.height = rect.height;
@@ -337,11 +299,9 @@ export function mount(rootEl) {
 }
 
 export function unmount() {
-    if (animationFrameId) {
-        cancelAnimationFrame(animationFrameId);
-    }
-    // Устанавливаем флаг, чтобы остановить любые отложенные таймеры
-    if(state) state.gameState = 'unmounted';
+    if (animationFrameId) cancelAnimationFrame(animationFrameId);
+    if (countdownInterval) clearInterval(countdownInterval);
     root = null;
     elements = null;
+    state = null;
 }

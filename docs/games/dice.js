@@ -4,26 +4,20 @@ import { randomInt } from '../core/rng.js';
 
 export const titleKey = 'dice_game_title';
 
-// --- Game Payouts ---
 const PAYOUT_EVEN_ODD = 1.9;
 const PAYOUT_EXACT = 5.5;
 
-// --- State ---
 let root, elements, state;
-const t = window.ManiacGames.t;
 
 function resetState() {
     state = {
         isRolling: false,
         betAmount: 10,
-        betType: null, // 'even', 'odd', or a number 1-6
-        lastResult: 0,
+        betType: null,
     };
 }
 
-
 function getDiceFace(value) {
-    // ... (код getDiceFace без изменений)
     const dotPositions = {
         1: '<div class="dot d-center"></div>',
         2: '<div class="dot d-top-left"></div><div class="dot d-bottom-right"></div>',
@@ -61,13 +55,14 @@ async function rollDice(targetFace) {
 
 async function playGame(betType) {
     if (state.isRolling) return;
+    const t = window.ManiacGames.t; // Получаем t здесь
+
     if (getBalance() < state.betAmount) {
         window.ManiacGames.showNotification(t('not_enough_funds'), 'error');
         return;
     }
 
     state.betType = isNaN(betType) ? betType : parseInt(betType, 10);
-
     subBalance(state.betAmount);
     window.ManiacGames.updateBalance();
 
@@ -122,13 +117,39 @@ function bindEvents() {
             playGame(button.dataset.bet);
         }
     });
-}
 
+     elements.exactBetControls.addEventListener('click', e => {
+        const button = e.target.closest('button');
+        if (button && button.dataset.bet) {
+            window.ManiacGames.playSound('tap');
+            playGame(button.dataset.bet);
+        }
+    });
+}
 
 export function mount(rootEl) {
     root = rootEl;
     resetState();
+    const t = window.ManiacGames.t; // Получаем t здесь
+
     root.innerHTML = `
+        <style>
+        .dice-2d-container { display: flex; justify-content: center; align-items: center; min-height: 150px; }
+        .dice-face { width: 100px; height: 100px; background: #fff; border-radius: 12px; display: grid; padding: 10px; box-shadow: 0 5px 15px rgba(0,0,0,0.2); transition: transform 0.3s ease; }
+        .dice-face.rolling { transform: rotate(360deg) scale(0.8); }
+        .dot { width: 20px; height: 20px; background: #111; border-radius: 50%; }
+        .dice-face[data-face="1"] { grid-template-areas: ". . ." ". a ." ". . ."; }
+        .dice-face[data-face="2"] { grid-template-areas: "a . ." ". . ." ". . b"; }
+        /* ... simplified grid for brevity, positions are set with justify/align self ... */
+        .d-center { grid-area: a; justify-self: center; align-self: center; }
+        .d-top-left { justify-self: start; align-self: start; }
+        .d-top-right { justify-self: end; align-self: start; }
+        .d-bottom-left { justify-self: start; align-self: end; }
+        .d-bottom-right { justify-self: end; align-self: end; }
+        .d-mid-left { justify-self: start; align-self: center; }
+        .d-mid-right { justify-self: end; align-self: center; }
+        </style>
+
         <div class="card dice-2d-container">
             <div id="dice-2d-face" class="dice-face">
                 ${getDiceFace(6)}
@@ -141,7 +162,7 @@ export function mount(rootEl) {
                 <button class="btn" data-bet="even">${t('dice_even')} (x${PAYOUT_EVEN_ODD})</button>
                 <button class="btn" data-bet="odd">${t('dice_odd')} (x${PAYOUT_EVEN_ODD})</button>
              </div>
-             <div class="chip-controls" style="grid-template-columns: repeat(3, 1fr);">
+             <div id="dice-exact-bet-controls" class="chip-controls" style="grid-template-columns: repeat(3, 1fr);">
                 <button class="btn chip" data-bet="1">1</button>
                 <button class="btn chip" data-bet="2">2</button>
                 <button class="btn chip" data-bet="3">3</button>
@@ -157,6 +178,7 @@ export function mount(rootEl) {
         dice: root.querySelector('#dice-2d-face'),
         betInput: root.querySelector('#dice-bet-input'),
         betControls: root.querySelector('#dice-bet-controls'),
+        exactBetControls: root.querySelector('#dice-exact-bet-controls'),
         resultText: root.querySelector('#dice-result'),
     };
 

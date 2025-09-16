@@ -2,9 +2,8 @@ import { getBalance, subBalance, addBalance, updateStats } from '../core/state.j
 import { applyPayout } from '../core/houseedge.js';
 import { weightedRandom } from '../core/rng.js';
 
-export const title = 'Слоты';
+export const titleKey = 'slots_game_title';
 
-// --- Game Parameters ---
 const SYMBOLS = ['🍒', '🍋', '🍇', '🔔', '⭐', '💎'];
 const WEIGHTS = { '🍒': 40, '🍋': 30, '🍇': 15, '🔔': 10, '⭐': 4, '💎': 1 };
 const PAYOUT_RULES = [
@@ -14,17 +13,13 @@ const PAYOUT_RULES = [
     { combo: ['🍇', '🍇', '🍇'], multiplier: 10 },
     { combo: ['🍋', '🍋', '🍋'], multiplier: 5 },
     { combo: ['🍒', '🍒', '🍒'], multiplier: 3 },
-    // Special rule for two stars
     { check: (r) => r.filter(s => s === '⭐').length === 2, multiplier: 3 },
-    // Any two identical (except diamond)
     { check: (r) => {
         const counts = r.reduce((acc, val) => { if(val !== '💎') acc[val] = (acc[val] || 0) + 1; return acc; }, {});
         return Object.values(counts).some(count => count === 2);
     }, multiplier: 1.5 },
 ];
 
-
-// --- State ---
 let root, elements, state;
 
 function resetState() {
@@ -52,8 +47,10 @@ function calculateWinnings(result) {
 
 async function spin() {
     if (state.isSpinning) return;
+    const t = window.ManiacGames.t;
+
     if (getBalance() < state.betAmount) {
-        window.ManiacGames.showNotification('Недостаточно средств', 'error');
+        window.ManiacGames.showNotification(t('not_enough_funds'), 'error');
         return;
     }
 
@@ -65,30 +62,27 @@ async function spin() {
 
     elements.spinButton.disabled = true;
     elements.winMessage.textContent = '';
-    elements.reels.forEach(r => r.classList.remove('win', 'skeleton-pulse')); // Убираем скелет при старте
+    elements.reels.forEach(r => r.classList.remove('win'));
 
-    // Generate result beforehand
     const result = [weightedRandom(WEIGHTS), weightedRandom(WEIGHTS), weightedRandom(WEIGHTS)];
-
-    // Animate reels
+    const animationPromises = [];
     for (let i = 0; i < elements.reels.length; i++) {
-        await animateReel(elements.reels[i], result[i]);
-        window.ManiacGames.playSound('spinStop');
+        animationPromises.push(animateReel(elements.reels[i], result[i], i));
     }
+    await Promise.all(animationPromises);
 
-    // Calculate and process winnings
     const winnings = calculateWinnings(result);
     if (winnings > 0) {
         const finalPayout = applyPayout(winnings);
         addBalance(finalPayout);
         updateStats({ wins: 1, topWin: finalPayout });
-        elements.winMessage.textContent = `Выигрыш +${finalPayout} ⭐`;
+        elements.winMessage.textContent = `${t('win_message')} +${finalPayout} ⭐`;
         elements.reels.forEach(r => r.classList.add('win'));
         window.ManiacGames.playSound('win');
         window.ManiacGames.hapticFeedback('success');
     } else {
         updateStats({ losses: 1 });
-        window.ManiacGames.playSound('lose'); // <-- Звук проигрыша
+        window.ManiacGames.playSound('lose');
         window.ManiacGames.hapticFeedback('error');
     }
 
@@ -97,8 +91,8 @@ async function spin() {
     elements.spinButton.disabled = false;
 }
 
-async function animateReel(reelEl, finalSymbol) {
-    const animationDuration = 1000 + Math.random() * 500;
+function animateReel(reelEl, finalSymbol, reelIndex) {
+    const animationDuration = 1000 + reelIndex * 300 + Math.random() * 200;
     const startTime = performance.now();
 
     return new Promise(resolve => {
@@ -110,13 +104,13 @@ async function animateReel(reelEl, finalSymbol) {
                 requestAnimationFrame(tick);
             } else {
                 reelEl.textContent = finalSymbol;
+                window.ManiacGames.playSound('spinStop');
                 resolve();
             }
         }
         requestAnimationFrame(tick);
     });
 }
-
 
 function bindEvents() {
     elements.spinButton.addEventListener('click', spin);
@@ -125,8 +119,9 @@ function bindEvents() {
         state.betAmount = Math.max(1, isNaN(val) ? 1 : val);
     });
     elements.chipControls.addEventListener('click', e => {
-        if (e.target.classList.contains('chip')) {
-            const value = parseInt(e.target.dataset.value, 10);
+        const chip = e.target.closest('.chip');
+        if (chip) {
+            const value = parseInt(chip.dataset.value, 10);
             state.betAmount = value;
             elements.betInput.value = value;
             window.ManiacGames.playSound('tap');
@@ -134,11 +129,17 @@ function bindEvents() {
     });
 }
 
-
 export function mount(rootEl) {
     root = rootEl;
     resetState();
+    const t = window.ManiacGames.t;
+
     root.innerHTML = `
+        <style>
+        .reels-container { display: flex; justify-content: center; gap: 15px; margin-bottom: 20px; }
+        .reel { width: 80px; height: 100px; background: var(--bg-soft); border-radius: 10px; display: flex; justify-content: center; align-items: center; font-size: 3rem; transition: all 0.2s; }
+        .reel.win { background: var(--accent); color: white; transform: scale(1.1); box-shadow: 0 0 20px var(--accent); }
+        </style>
         <div class="card">
             <div class="reels-container">
                 <div class="reel skeleton-pulse"></div>
@@ -150,14 +151,12 @@ export function mount(rootEl) {
             <div id="slots-win-message" class="win-message" style="text-align:center; font-weight:bold; min-height: 1.2em; margin-bottom:15px; color:var(--success);"></div>
             <input type="number" id="slots-bet-input" class="input-field" value="${state.betAmount}">
             <div id="slots-chip-controls" class="chip-controls">
-                <button class="btn chip" data-value="1">1</button>
-                <button class="btn chip" data-value="5">5</button>
                 <button class="btn chip" data-value="10">10</button>
                 <button class="btn chip" data-value="25">25</button>
                 <button class="btn chip" data-value="50">50</button>
                 <button class="btn chip" data-value="100">100</button>
             </div>
-            <button id="slots-spin-button" class="btn btn-success">Крутить</button>
+            <button id="slots-spin-button" class="btn btn-success">${t('slots_spin')}</button>
         </div>
     `;
 
@@ -169,15 +168,13 @@ export function mount(rootEl) {
         spinButton: root.querySelector('#slots-spin-button'),
     };
 
-    // Имитируем "загрузку" слотов и заменяем скелеты на символы
     setTimeout(() => {
-        if (!root) return; // Проверка, что компонент всё ещё смонтирован
+        if (!root) return;
         elements.reels.forEach((reel, i) => {
             reel.classList.remove('skeleton-pulse');
             reel.textContent = state.reels[i];
         });
     }, 500);
-
 
     bindEvents();
 }
