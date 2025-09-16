@@ -1,4 +1,3 @@
-// ИСПРАВЛЕНО: Пути к модулям ядра и API
 import { getBalance, fmt } from '../../../core/state.js';
 import { getUser } from '../../../api.js';
 
@@ -6,7 +5,6 @@ export const titleKey = 'profile_title';
 
 let rootElement = null;
 let balanceAnimator = null;
-const t = window.ManiacGames.t;
 
 // Моковые данные
 const user = getUser();
@@ -56,6 +54,7 @@ function animateBalance(element, start, end) {
 
 
 function render() {
+    const t = window.ManiacGames.t; // <-- ИСПРАВЛЕНО: Доступ к t внутри функции
     rootElement.innerHTML = `
         <div class="profile-header">
             <div class="profile-avatar-wrapper">

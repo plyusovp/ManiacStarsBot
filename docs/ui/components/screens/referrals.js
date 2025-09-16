@@ -1,11 +1,11 @@
 export const titleKey = 'referrals_title';
 
 let rootElement = null;
-const t = window.ManiacGames.t;
 
 function handleCopyLink(event) {
     const button = event.currentTarget;
     const refLink = 'https://t.me/maniac_games_bot?start=ref_123456';
+    const t = window.ManiacGames.t; // <-- ИСПРАВЛЕНО: Доступ к t внутри функции
 
     navigator.clipboard.writeText(refLink).then(() => {
         window.ManiacGames.hapticFeedback('success');
@@ -33,6 +33,7 @@ function handleCopyLink(event) {
 
 function handleShare() {
     const refLink = 'https://t.me/maniac_games_bot?start=ref_123456';
+    const t = window.ManiacGames.t; // <-- ИСПРАВЛЕНО: Доступ к t внутри функции
     if (navigator.share) {
         navigator.share({
             title: 'Maniac Games',
@@ -49,6 +50,7 @@ function handleShare() {
 
 export function mount(rootEl) {
     rootElement = rootEl;
+    const t = window.ManiacGames.t; // <-- ИСПРАВЛЕНО: Доступ к t внутри функции
     rootElement.innerHTML = `
         <div class="card glassmorphism-card">
             <h2>${t('referrals_header')}</h2>

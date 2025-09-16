@@ -3,8 +3,6 @@ export const titleKey = 'games_title'; // <-- Ключ для заголовка
 let rootElement = null;
 let selectedGame = null;
 
-const t = window.ManiacGames.t; // <-- Получаем функцию перевода
-
 // Игры теперь используют ключи для названий
 const games = [
     { id: 'dice', titleKey: 'dice_game_title', rtp: '98.5%', volatility: 'Низкая' },
@@ -15,6 +13,7 @@ const games = [
 
 function render() {
     if (!rootElement) return; // Добавим проверку
+    const t = window.ManiacGames.t; // <-- ИСПРАВЛЕНО: Доступ к t внутри функции
     rootElement.innerHTML = `
         <div class="games-grid">
             ${games.map((game, index) => `
@@ -36,6 +35,7 @@ function render() {
 function renderGameListSkeleton() {
     const skeletonCount = 4;
     if (!rootElement) return;
+    const t = window.ManiacGames.t; // <-- ИСПРАВЛЕНО: Доступ к t внутри функции
     rootElement.innerHTML = `
         <div class="games-grid">
             ${Array(skeletonCount).fill(0).map((_, index) => `

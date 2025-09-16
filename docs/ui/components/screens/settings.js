@@ -1,12 +1,11 @@
-// ИСПРАВЛЕНО: Путь к модулю audio
 import * as audio from '../../../core/audio.js';
 
 export const titleKey = 'settings_title';
 
 let rootElement = null;
-const t = window.ManiacGames.t;
 
 function render() {
+    const t = window.ManiacGames.t; // <-- ИСПРАВЛЕНО: Доступ к t внутри функции
     const currentLang = window.ManiacGames.getCurrentLanguage();
     const currentTheme = window.ManiacGames.getCurrentTheme();
 
@@ -107,6 +106,7 @@ function showRulesModal() {
     let modal = document.getElementById('rules-modal');
     if (modal) modal.remove();
 
+    const t = window.ManiacGames.t; // <-- ИСПРАВЛЕНО: Доступ к t внутри функции
     modal = document.createElement('div');
     modal.id = 'rules-modal';
     modal.className = 'modal-backdrop';
