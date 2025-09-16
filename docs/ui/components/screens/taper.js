@@ -8,41 +8,71 @@ export const title = 'Главная';
 
 // --- Константы ---
 const STARS_PER_TAP = 1;
+const LARVAE_COUNT = 30; // Количество "личинок" внутри
+const STAR_BOUNDS = 0.85; // Область, в которой плавают "личинки"
 
 // --- Переменные модуля ---
 let root, elements, state;
 let three, animationFrameId;
 
-// --- Шейдеры для плазмы (Новая, более надёжная версия) ---
-const plasmaVertexShader = `
-  varying vec2 vUv;
-  void main() {
-    vUv = uv;
-    gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
-  }
-`;
 
-const plasmaFragmentShader = `
-  precision mediump float;
-  uniform float time;
-  uniform vec3 color1;
-  uniform vec3 color2;
-  varying vec2 vUv;
+/**
+ * Создает текстуру мягкой, светящейся звезды на 2D-холсте.
+ * Это позволяет добиться точного визуального стиля, как на референсе.
+ * @returns {THREE.CanvasTexture}
+ */
+function createStarTexture() {
+    const canvas = document.createElement('canvas');
+    const size = 512;
+    canvas.width = size;
+    canvas.height = size;
+    const ctx = canvas.getContext('2d');
 
-  void main() {
-    // Более простой и надёжный эффект плазмы на основе синусоид
-    float v1 = sin(vUv.x * 8.0 + time * 0.5);
-    float v2 = sin(vUv.y * 10.0 - time * 0.8);
-    float v3 = sin(length(vUv - 0.5) * 20.0 + time);
-    float value = (v1 + v2 + v3) / 3.0;
+    // 1. Внешнее дымчатое свечение
+    ctx.shadowColor = 'rgba(249, 43, 117, 0.7)';
+    ctx.shadowBlur = 80;
 
-    vec3 finalColor = mix(color1, color2, (value + 1.0) * 0.5);
+    // 2. Основной градиент звезды
+    const gradient = ctx.createRadialGradient(size / 2, size / 2, 0, size / 2, size / 2, size / 2.5);
+    gradient.addColorStop(0, 'rgba(255, 160, 210, 1)');
+    gradient.addColorStop(1, 'rgba(249, 43, 117, 1)');
+    ctx.fillStyle = gradient;
 
-    // Плавное затухание по краям для создания объёма
-    float alpha = 1.0 - (length(vUv - 0.5) * 2.0);
-    gl_FragColor = vec4(finalColor, alpha);
-  }
-`;
+    // 3. Рисуем саму форму мягкой звезды с помощью кривых
+    const points = 5;
+    const outerRadius = size / 2.3;
+    const innerRadius = size / 4;
+
+    ctx.beginPath();
+    let angle = -Math.PI / 2;
+    const angleStep = Math.PI / points;
+
+    // Начальная точка
+    ctx.moveTo(size/2 + Math.cos(angle) * outerRadius, size/2 + Math.sin(angle) * outerRadius);
+
+    // Проходим по всем вершинам, соединяя их сглаженными кривыми
+    for (let i = 0; i < points * 2; i++) {
+        let radius = (i % 2) === 1 ? innerRadius : outerRadius;
+        let nextAngle = angle + angleStep;
+
+        let cp1_angle = angle + angleStep * 0.5;
+        let cp1_radius_factor = (i % 2) === 0 ? 1.1 : 0.8;
+
+        let cp1x = size/2 + Math.cos(cp1_angle) * radius * cp1_radius_factor;
+        let cp1y = size/2 + Math.sin(cp1_angle) * radius * cp1_radius_factor;
+
+        let endX = size/2 + Math.cos(nextAngle) * radius;
+        let endY = size/2 + Math.sin(nextAngle) * radius;
+
+        ctx.quadraticCurveTo(cp1x, cp1y, endX, endY);
+        angle = nextAngle;
+    }
+    ctx.closePath();
+    ctx.fill();
+
+    return new THREE.CanvasTexture(canvas);
+}
+
 
 /**
  * Инициализация 3D сцены
@@ -64,66 +94,58 @@ function initThree() {
     // Lights
     const ambientLight = new THREE.AmbientLight(0xffffff, 0.7);
     scene.add(ambientLight);
-    const directionalLight = new THREE.DirectionalLight(0xffffff, 1.5);
-    directionalLight.position.set(5, 5, 5);
-    scene.add(directionalLight);
 
     // Star Group (for easier animation)
     const starGroup = new THREE.Group();
     scene.add(starGroup);
 
-    // 1. Outer Crystal (Новый, более надёжный материал)
-    const crystalGeom = new THREE.IcosahedronGeometry(1.2, 1);
-    const crystalMat = new THREE.MeshPhongMaterial({
-        color: 0xffffff,
-        shininess: 100,
-        specular: 0xeeeeff,
+    // 1. Основное тело звезды (текстура на плоскости)
+    const starTexture = createStarTexture();
+    const starMaterial = new THREE.MeshBasicMaterial({
+        map: starTexture,
         transparent: true,
-        opacity: 0.4,
     });
-    const crystal = new THREE.Mesh(crystalGeom, crystalMat);
-    starGroup.add(crystal);
+    const starGeometry = new THREE.PlaneGeometry(3.8, 3.8);
+    const starMesh = new THREE.Mesh(starGeometry, starMaterial);
+    starGroup.add(starMesh);
 
-    // 2. Inner Plasma
-    const plasmaGeom = new THREE.SphereGeometry(0.8, 32, 32);
-    const plasmaMat = new THREE.ShaderMaterial({
-        uniforms: {
-            time: { value: 0 },
-            color1: { value: new THREE.Color(0x8A7CFF) }, // violet
-            color2: { value: new THREE.Color(0xF92B75) }  // pink
-        },
-        vertexShader: plasmaVertexShader,
-        fragmentShader: plasmaFragmentShader,
-        transparent: true,
-        blending: THREE.AdditiveBlending,
-    });
-    const plasma = new THREE.Mesh(plasmaGeom, plasmaMat);
-    starGroup.add(plasma);
+    // 2. Движущиеся "Личинки" (система частиц)
+    const larvaePositions = new Float32Array(LARVAE_COUNT * 3);
+    const larvaeData = []; // Для хранения скорости и других данных
 
-    // 3. Background Starfield
-    const starVertices = [];
-    for (let i = 0; i < 8000; i++) {
-        const x = THREE.MathUtils.randFloatSpread(100);
-        const y = THREE.MathUtils.randFloatSpread(100);
-        const z = THREE.MathUtils.randFloatSpread(100);
-        if (new THREE.Vector3(x, y, z).length() > 20) { // Keep them in the distance
-             starVertices.push(x, y, z);
-        }
+    for (let i = 0; i < LARVAE_COUNT; i++) {
+        // Генерируем случайную позицию внутри круга
+        const angle = Math.random() * Math.PI * 2;
+        const radius = Math.random() * STAR_BOUNDS;
+        larvaePositions[i * 3] = Math.cos(angle) * radius;
+        larvaePositions[i * 3 + 1] = Math.sin(angle) * radius;
+        larvaePositions[i * 3 + 2] = 0.1; // Слегка впереди звезды
+
+        larvaeData.push({
+            velocity: new THREE.Vector3((Math.random() - 0.5) * 0.005, (Math.random() - 0.5) * 0.005, 0),
+        });
     }
-    const starGeometry = new THREE.BufferGeometry();
-    starGeometry.setAttribute('position', new THREE.Float32BufferAttribute(starVertices, 3));
-    const starMaterial = new THREE.PointsMaterial({ color: 0x555555, size: 0.1 });
-    const starfield = new THREE.Points(starGeometry, starMaterial);
-    scene.add(starfield);
+    const larvaeGeom = new THREE.BufferGeometry();
+    larvaeGeom.setAttribute('position', new THREE.BufferAttribute(larvaePositions, 3));
 
+    const larvaeMat = new THREE.PointsMaterial({
+        color: 0xffe0ff,
+        size: 0.05,
+        blending: THREE.AdditiveBlending,
+        transparent: true,
+        opacity: 0.8,
+        sizeAttenuation: true
+    });
+    const larvae = new THREE.Points(larvaeGeom, larvaeMat);
+    starGroup.add(larvae);
 
     // Post-processing (Glow Effect)
     const composer = new EffectComposer(renderer);
     composer.addPass(new RenderPass(scene, camera));
-    const bloomPass = new UnrealBloomPass(new THREE.Vector2(width, height), 0.8, 0.4, 0.6);
+    const bloomPass = new UnrealBloomPass(new THREE.Vector2(width, height), 1.0, 0.5, 0.2);
     composer.addPass(bloomPass);
 
-    three = { scene, camera, renderer, composer, starGroup, plasmaMat, starfield };
+    three = { scene, camera, renderer, composer, starGroup, larvae, larvaeData };
 
     // Handle Resize
     const onResize = () => {
@@ -149,11 +171,35 @@ function animate() {
     const elapsedTime = clock.getElapsedTime();
 
     if (three) {
-        // Анимация в состоянии покоя
-        three.starGroup.rotation.y = elapsedTime * 0.2;
-        three.starGroup.rotation.x = Math.sin(elapsedTime * 0.5) * 0.1;
-        three.plasmaMat.uniforms.time.value = elapsedTime;
-        three.starfield.rotation.y = elapsedTime * 0.02;
+        // Плавное покачивание звезды
+        three.starGroup.rotation.z = Math.sin(elapsedTime * 0.5) * 0.05;
+        three.starGroup.position.y = Math.sin(elapsedTime * 0.7) * 0.05;
+
+        // Анимация "личинок"
+        const positions = three.larvae.geometry.attributes.position;
+        const starRadiusSq = STAR_BOUNDS * STAR_BOUNDS;
+
+        for (let i = 0; i < three.larvaeData.length; i++) {
+            const data = three.larvaeData[i];
+
+            let x = positions.getX(i) + data.velocity.x;
+            let y = positions.getY(i) + data.velocity.y;
+
+            // Отталкиваем от краев круга
+            if (x*x + y*y > starRadiusSq) {
+                data.velocity.x *= -1;
+                data.velocity.y *= -1;
+            }
+
+            // Добавляем случайное блуждание
+            data.velocity.x += (Math.random() - 0.5) * 0.0002;
+            data.velocity.y += (Math.random() - 0.5) * 0.0002;
+            // Ограничиваем максимальную скорость
+            data.velocity.clampLength(0.001, 0.004);
+
+            positions.setXY(i, x, y);
+        }
+        positions.needsUpdate = true; // Важно для обновления позиций
 
         three.composer.render();
     }
@@ -200,7 +246,6 @@ function updateFlipCounter(start, end) {
 function showTapEffects(x, y) {
     const container = elements.feedbackContainer;
 
-    // 1. Создаём "+1"
     const text = document.createElement('div');
     text.className = 'floating-text-new';
     text.textContent = `+${STARS_PER_TAP}`;
@@ -209,7 +254,6 @@ function showTapEffects(x, y) {
     text.style.left = `${x}px`;
     text.style.top = `${y}px`;
 
-    // Задаём конечную точку анимации (координаты счётчика)
     const counterRect = elements.balanceCounter.getBoundingClientRect();
     const endX = counterRect.left + counterRect.width / 2;
     const endY = counterRect.top + counterRect.height / 2;
@@ -217,7 +261,6 @@ function showTapEffects(x, y) {
     text.style.setProperty('--fly-to-x', `translateX(${endX - x}px)`);
     text.style.setProperty('--fly-to-y', `translateY(${endY - y}px)`);
 
-    // 2. Создаём взрыв частиц
     const particleCount = 8 + Math.floor(Math.random() * 5);
     for (let i = 0; i < particleCount; i++) {
         const particle = document.createElement('div');
@@ -250,30 +293,24 @@ function handleTap(event) {
 
     if (tapX === undefined) return;
 
-    // 1. Обновляем баланс
     const oldBalance = getBalance();
     addBalance(STARS_PER_TAP);
     const newBalance = getBalance();
 
     updateFlipCounter(oldBalance, newBalance);
-
-    // 2. Эффекты
     showTapEffects(tapX, tapY);
 
-    // 3. Анимация звезды ("сжатие-разжатие")
     if (three && !state.isStarAnimating) {
         state.isStarAnimating = true;
         const group = three.starGroup;
         const startScale = 1;
-        group.scale.set(startScale, startScale, startScale); // Сброс на случай
         let elapsed = 0;
-        const duration = 300; // 0.3s
+        const duration = 300;
 
         function squeeze() {
-            elapsed += 16.67; // ~60fps
+            elapsed += 16.67;
             const progress = Math.min(elapsed / duration, 1);
-            // Пружинистая анимация
-            const scale = 1 - 0.2 * Math.sin(progress * Math.PI) * Math.exp(-progress * 2);
+            const scale = 1 - 0.15 * Math.sin(progress * Math.PI);
             group.scale.set(scale, scale, scale);
 
             if (progress < 1) {
@@ -286,7 +323,6 @@ function handleTap(event) {
         squeeze();
     }
 
-    // 4. Звук и вибрация
     window.ManiacGames.playSound('crystalClick');
     window.ManiacGames.hapticFeedback('light');
 }
@@ -297,36 +333,31 @@ function handleTap(event) {
 function handleDeviceMotion(event) {
     if (!three || !event.gamma || !event.beta) return;
 
-    // Плавное вращение вместо резкого смещения
-    const gamma = THREE.MathUtils.degToRad(event.gamma) * 0.1; // наклон влево-вправо
-    const beta = THREE.MathUtils.degToRad(event.beta) * 0.1;   // наклон вперед-назад
+    const gamma = THREE.MathUtils.degToRad(event.gamma) * 0.1;
+    const beta = THREE.MathUtils.degToRad(event.beta) * 0.1;
 
-    // Плавное движение к целевому вращению
-    const targetRotation = new THREE.Quaternion().setFromEuler(new THREE.Euler(beta, gamma, 0, 'XYZ'));
-    three.starGroup.quaternion.slerp(targetRotation, 0.05);
+    const targetPosition = new THREE.Vector3(gamma, -beta, 0);
+    three.starGroup.position.lerp(targetPosition, 0.05);
 }
 
 function requestMotionPermission() {
-    if (typeof DeviceOrientationEvent !== 'undefined' && typeof DeviceOrientationEvent.requestPermission === 'function') {
-        DeviceOrientationEvent.requestPermission()
+    if (typeof DeviceMotionEvent !== 'undefined' && typeof DeviceMotionEvent.requestPermission === 'function') {
+        DeviceMotionEvent.requestPermission()
             .then(permissionState => {
                 if (permissionState === 'granted') {
-                    window.addEventListener('deviceorientation', handleDeviceMotion);
+                    window.addEventListener('devicemotion', handleDeviceMotion);
                 }
             })
             .catch(console.error);
     } else {
-        // Для устройств без необходимости запрашивать разрешение
-        window.addEventListener('deviceorientation', handleDeviceMotion);
+        window.addEventListener('devicemotion', handleDeviceMotion);
     }
 }
 
 
 export function mount(rootEl) {
     root = rootEl;
-    state = {
-        isStarAnimating: false,
-    };
+    state = { isStarAnimating: false };
 
     root.innerHTML = `
         <div class="tapper-wrapper">
@@ -335,15 +366,11 @@ export function mount(rootEl) {
                 <div id="tapper-balance-counter" class="tapper-balance-counter"></div>
             </div>
 
-            <div id="tapper-canvas-container" class="tapper-canvas-container">
-                <!-- Сюда будет вставлен canvas -->
-            </div>
+            <div id="tapper-canvas-container" class="tapper-canvas-container"></div>
 
             <div id="tap-feedback-container" class="tap-feedback-container"></div>
 
-            <div class="tapper-energy-info">
-                <!-- Место для полосы энергии, если понадобится -->
-            </div>
+            <div class="tapper-energy-info"></div>
         </div>
     `;
 
@@ -353,7 +380,6 @@ export function mount(rootEl) {
         feedbackContainer: root.querySelector('#tap-feedback-container'),
     };
 
-    // Инициализация
     const threeCleanup = initThree();
     state.disposeThree = threeCleanup.dispose;
 
@@ -362,7 +388,6 @@ export function mount(rootEl) {
 
     elements.canvasContainer.addEventListener('pointerdown', handleTap);
 
-    // Запрашиваем доступ к гироскопу
     requestMotionPermission();
 }
 
@@ -376,7 +401,6 @@ export function unmount() {
     }
 
     if (three) {
-        // Очистка памяти Three.js
         three.scene.traverse(object => {
             if (object.geometry) object.geometry.dispose();
             if (object.material) {
@@ -390,7 +414,7 @@ export function unmount() {
         three.renderer.dispose();
     }
 
-    window.removeEventListener('deviceorientation', handleDeviceMotion);
+    window.removeEventListener('devicemotion', handleDeviceMotion);
 
     root = null;
     elements = null;
