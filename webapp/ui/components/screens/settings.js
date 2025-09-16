@@ -1,4 +1,4 @@
-import * as audio from '../lib/audio.js';
+import * as audio from '../../core/audio.js';
 
 export const titleKey = 'settings_title';
 

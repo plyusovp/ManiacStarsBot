@@ -4,8 +4,8 @@ const BALANCE_KEY = 'ms.balance';
 const BONUS_KEY = 'ms.bonusAt';
 const STARTING_BALANCE = 1000;
 
-// Инициализация Telegram WebApp
-const tg = window.Telegram.WebApp;
+// ИСПРАВЛЕНО: Убрана небезопасная инициализация Telegram WebApp на верхнем уровне.
+// Теперь доступ к API происходит внутри функции getUser, где это безопасно.
 
 /**
  * Инициализирует баланс, если он не установлен
@@ -21,6 +21,9 @@ function initBalance() {
  * @returns {{id: number, name: string, photo_url: string|null}}
  */
 export function getUser() {
+    // Инициализация Telegram WebApp происходит здесь, с проверкой на существование
+    const tg = window.Telegram?.WebApp;
+
     // В реальном приложении данные берутся из tg.initDataUnsafe
     if (tg && tg.initDataUnsafe && tg.initDataUnsafe.user) {
         const user = tg.initDataUnsafe.user;

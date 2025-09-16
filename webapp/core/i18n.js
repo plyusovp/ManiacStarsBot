@@ -9,7 +9,8 @@ let currentLang = localStorage.getItem(LANG_KEY) || 'ru'; // По умолчан
  */
 async function loadTranslations() {
     try {
-        const response = await fetch('/locales/i18n.json');
+        // ИСПРАВЛЕНО: Путь сделан относительным для корректной загрузки
+        const response = await fetch('locales/i18n.json');
         if (!response.ok) {
             throw new Error(`HTTP error! status: ${response.status}`);
         }

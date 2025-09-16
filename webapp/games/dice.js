@@ -1,6 +1,6 @@
-import { getBalance, subBalance, addBalance, updateStats } from '../lib/balance.js';
-import { applyPayout } from '../lib/houseedge.js';
-import { randomInt } from '../lib/rng.js';
+import { getBalance, subBalance, addBalance, updateStats } from '../core/state.js';
+import { applyPayout } from '../core/houseedge.js';
+import { randomInt } from '../core/rng.js';
 
 export const titleKey = 'dice_game_title';
 

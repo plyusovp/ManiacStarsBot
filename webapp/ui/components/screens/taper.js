@@ -1,4 +1,4 @@
-import { addBalance, getBalance, fmt } from '../lib/balance.js';
+import { addBalance, getBalance, fmt } from '../../core/state.js';
 
 export const title = 'Главная';
 

@@ -1,9 +1,10 @@
 const BALANCE_KEY = 'mg.balance';
 const STATS_KEY = 'mg.stats';
+const VISITED_KEY = 'mg.visited'; // <-- НОВОЕ: Ключ для отслеживания первого запуска
 const STARTING_BALANCE = 1000;
 
 /**
- * Initializes balance and stats if they don't exist in localStorage.
+ * Initializes storage keys if they don't exist.
  */
 function initStorage() {
     if (localStorage.getItem(BALANCE_KEY) === null) {
@@ -16,6 +17,10 @@ function initStorage() {
             maxCrashMultiplier: 0,
             topWin: 0,
         }));
+    }
+    // <-- НОВОЕ: Инициализация флага первого визита -->
+    if (localStorage.getItem(VISITED_KEY) === null) {
+        localStorage.setItem(VISITED_KEY, 'false');
     }
 }
 
@@ -100,12 +105,31 @@ export function updateStats(newStats) {
     localStorage.setItem(STATS_KEY, JSON.stringify(updated));
 }
 
+// <-- НОВЫЕ ФУНКЦИИ -->
+/**
+ * Checks if this is the user's first launch.
+ * @returns {boolean}
+ */
+export function isFirstLaunch() {
+    initStorage();
+    return localStorage.getItem(VISITED_KEY) === 'false';
+}
+
+/**
+ * Sets the visited flag to true after the first launch.
+ */
+export function setVisited() {
+    localStorage.setItem(VISITED_KEY, 'true');
+}
+
+
 /**
  * Resets all local data (balance and stats).
  */
 export function resetLocalData() {
     localStorage.removeItem(BALANCE_KEY);
     localStorage.removeItem(STATS_KEY);
+    localStorage.removeItem(VISITED_KEY); // Сбрасываем и флаг визита
     initStorage(); // Re-initialize with default values
 }
 

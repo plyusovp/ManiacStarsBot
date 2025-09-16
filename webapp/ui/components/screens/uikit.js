@@ -32,7 +32,7 @@ export function mount(rootEl) {
     rootElement.innerHTML = `
         <!-- Контейнер для Toast-уведомлений -->
         <div id="toast-container" class="toast-container"></div>
-        
+
         <!-- ✨ НОВОЕ: Демонстрация "вау-эффектов" -->
         <div class="card">
             <h2>"Вау" эффекты</h2>
@@ -111,7 +111,7 @@ export function mount(rootEl) {
 
     window.ManiacGames.effects.applyRippleEffect(demoBtnPrimary);
     window.ManiacGames.effects.applyMagneticEffect(demoBtnPrimary);
-    
+
     window.ManiacGames.effects.applyRippleEffect(demoBtnSecondary);
     window.ManiacGames.effects.applyMagneticEffect(demoBtnSecondary);
 
@@ -158,4 +158,3 @@ export function unmount() {
     rootElement.innerHTML = '';
     rootElement = null;
 }
-

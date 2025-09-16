@@ -1,6 +1,6 @@
-import { getBalance, subBalance, addBalance, updateStats } from '../lib/balance.js';
-import { applyPayout } from '../lib/houseedge.js';
-import { weightedRandom } from '../lib/rng.js';
+import { getBalance, subBalance, addBalance, updateStats } from '../core/state.js';
+import { applyPayout } from '../core/houseedge.js';
+import { weightedRandom } from '../core/rng.js';
 
 export const title = 'Слоты';
 

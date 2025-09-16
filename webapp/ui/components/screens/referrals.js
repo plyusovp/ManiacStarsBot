@@ -90,7 +90,7 @@ export function mount(rootEl) {
 
     const copyBtn = rootElement.querySelector('#copy-ref-link');
     const shareBtn = rootElement.querySelector('#share-ref-link');
-    
+
     copyBtn.addEventListener('click', handleCopyLink);
     shareBtn.addEventListener('click', handleShare);
 
@@ -105,4 +105,3 @@ export function unmount() {
     rootElement.innerHTML = '';
     rootElement = null;
 }
-
