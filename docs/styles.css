@@ -1,5 +1,6 @@
 /* --- 0. Импорт шрифтов --- */
 @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Roboto+Mono:wght@700&display=swap');
 
 /* --- 1. Дизайн-система (Tokens) --- */
 :root {
@@ -38,6 +39,7 @@
 
   /* Шрифты */
   --font-main: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+  --font-mono: 'Roboto Mono', monospace;
   --h1-size: 24px;
   --h2-size: 18px;
   --body-size: 15px;
@@ -908,4 +910,140 @@ p { margin-top: 0; color: var(--text-dim); line-height: 1.6; }
 .tutorial-card p {
     color: var(--text-dim);
     margin-bottom: 25px;
+}
+
+/* --- 15. НОВОЕ: СТИЛИ ДЛЯ ЭКРАНА TAPER --- */
+
+.tapper-wrapper {
+    width: 100%;
+    height: 100%;
+    display: flex;
+    flex-direction: column;
+    justify-content: space-between;
+    align-items: center;
+}
+
+.tapper-balance-container {
+    text-align: center;
+    margin-top: 10%;
+    display: flex;
+    align-items: center;
+    font-family: var(--font-mono);
+    font-size: 2.8rem;
+    font-weight: 700;
+    color: var(--text);
+    perspective: 400px;
+}
+.tapper-balance-icon {
+    margin-right: 12px;
+    font-size: 2.4rem;
+}
+
+/* Flip Counter */
+.flip-char {
+    display: inline-block;
+    position: relative;
+    width: 0.6em; /* Ширина одного символа */
+    height: 1em;
+    line-height: 1em;
+    text-align: center;
+}
+.flip-char-inner {
+    position: absolute;
+    left: 0;
+    top: 0;
+    width: 100%;
+    height: 100%;
+    transition: transform 0.6s cubic-bezier(0.2, 1, 0.3, 1);
+    transform-style: preserve-3d;
+}
+.flip-char.animate .flip-char-inner {
+    transform: rotateX(-180deg);
+}
+.flip-char-front, .flip-char-back {
+    position: absolute;
+    left: 0;
+    top: 0;
+    width: 100%;
+    height: 100%;
+    -webkit-backface-visibility: hidden;
+    backface-visibility: hidden;
+}
+.flip-char-back {
+    transform: rotateX(180deg);
+}
+
+/* 3D Canvas */
+.tapper-canvas-container {
+    width: 100%;
+    flex-grow: 1;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    position: relative;
+    touch-action: none; /* Отключаем стандартное поведение тач-событий */
+}
+
+#tapper-3d-canvas {
+    display: block;
+    width: 100%;
+    height: 100%;
+    cursor: pointer;
+}
+
+.tapper-energy-info {
+    width: 100%;
+    height: 60px; /* Резервируем место */
+}
+
+
+/* Floating +1 Text and Particle Burst */
+.tap-feedback-container {
+    position: fixed;
+    top: 0;
+    left: 0;
+    pointer-events: none;
+    z-index: 100;
+}
+.floating-text-new {
+    position: absolute;
+    font-size: 1.5rem;
+    font-weight: 700;
+    color: var(--text);
+    text-shadow: 0 0 10px var(--primary-1);
+    animation: float-up-and-out 0.7s var(--ease-out) forwards;
+    will-change: transform, opacity;
+}
+@keyframes float-up-and-out {
+    0% {
+        transform: translate(-50%, -50%) scale(0.8);
+        opacity: 1;
+    }
+    30% {
+        transform: translate(-50%, -50%) scale(1.1);
+    }
+    100% {
+        transform: var(--fly-to-x) var(--fly-to-y) scale(0.5);
+        opacity: 0;
+    }
+}
+
+.particle-burst {
+    position: absolute;
+    width: 2px;
+    height: 2px;
+    background: var(--primary-1);
+    border-radius: 50%;
+    animation: particle-explode 0.6s ease-out forwards;
+    will-change: transform, opacity;
+}
+@keyframes particle-explode {
+    from {
+        transform: translate(-50%, -50%) scale(1);
+        opacity: 1;
+    }
+    to {
+        transform: translate(var(--tx), var(--ty)) scale(0);
+        opacity: 0;
+    }
 }

@@ -16,6 +16,16 @@
     <script src="https://telegram.org/js/telegram-web-app.js"></script>
     <!-- ИСПРАВЛЕНО: Добавлена недостающая библиотека для звука Tone.js -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/tone/14.7.77/Tone.js"></script>
+
+    <!-- ДОБАВЛЕНО: Three.js для 3D графики -->
+    <script type="importmap">
+        {
+            "imports": {
+                "three": "https://cdn.jsdelivr.net/npm/three@0.164.1/build/three.module.js",
+                "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.164.1/examples/jsm/"
+            }
+        }
+    </script>
 </head>
 <body>
 

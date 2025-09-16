@@ -41,6 +41,32 @@ const sfx = {
         envelope: { attack: 0.01, decay: 0.2, sustain: 0, release: 0.1 },
         volume: -8,
     }).toDestination(),
+
+    // --- НОВЫЕ ЗВУКИ ---
+    // Кристальный звон при тапе
+    crystalClick: new Tone.MetalSynth({
+        frequency: 300,
+        envelope: { attack: 0.001, decay: 0.1, release: 0.1 },
+        harmonicity: 8.5,
+        modulationIndex: 20,
+        resonance: 4000,
+        octaves: 1.5,
+        volume: -15
+    }).toDestination(),
+
+    // Лёгкий всплеск/свист
+    swoosh: new Tone.NoiseSynth({
+        noise: { type: "pink" },
+        envelope: { attack: 0.001, decay: 0.15, sustain: 0 },
+        volume: -18
+    }).toDestination(),
+
+    // Щелчок счётчика
+    counterTick: new Tone.Synth({
+        oscillator: { type: 'square' },
+        envelope: { attack: 0.005, decay: 0.05, sustain: 0 },
+        volume: -20
+    }).toDestination(),
 };
 
 // --- Основные функции ---
@@ -60,16 +86,15 @@ async function initAudioContext() {
 
 /**
  * Воспроизводит звуковой эффект.
- * @param {string} id - Название звука ('tap', 'win', 'lose', 'spinStart', 'spinStop', 'crash').
+ * @param {string} id - Название звука.
  * @param {object} [options] - Дополнительные параметры.
- * @param {number} [options.volume] - Громкость (переопределяет стандартную).
- * @param {number} [options.rate] - Скорость воспроизведения.
+ * @param {number} [options.delay] - Задержка перед воспроизведением.
  */
 export function play(id, options = {}) {
     if (isMuted) return;
     initAudioContext();
 
-    const now = Tone.now();
+    const now = Tone.now() + (options.delay || 0);
 
     switch (id) {
         case 'tap':
@@ -92,6 +117,19 @@ export function play(id, options = {}) {
         case 'crash':
             sfx.crash.triggerAttackRelease('C4', '8n', now);
             sfx.crash.frequency.rampTo('C3', 0.25, now);
+            break;
+
+        // --- НОВЫЕ ЗВУКИ ---
+        case 'crystalClick':
+            sfx.crystalClick.triggerAttackRelease("C6", "32n", now);
+            break;
+
+        case 'swoosh':
+            sfx.swoosh.triggerAttack(now);
+            break;
+
+        case 'counterTick':
+            sfx.counterTick.triggerAttackRelease('C6', '64n', now);
             break;
 
         default:
