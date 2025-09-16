@@ -1,5 +1,6 @@
-import { getBalance, fmt } from '../../core/state.js';
-import { getUser } from '../../api.js';
+// ИСПРАВЛЕНО: Пути к модулям ядра и API
+import { getBalance, fmt } from '../../../core/state.js';
+import { getUser } from '../../../api.js';
 
 export const titleKey = 'profile_title';
 

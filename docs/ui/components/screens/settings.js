@@ -1,4 +1,5 @@
-import * as audio from '../../core/audio.js';
+// ИСПРАВЛЕНО: Путь к модулю audio
+import * as audio from '../../../core/audio.js';
 
 export const titleKey = 'settings_title';
 

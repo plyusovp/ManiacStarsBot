@@ -1,4 +1,5 @@
-import { addBalance, getBalance, fmt } from '../../core/state.js';
+// ИСПРАВЛЕНО: Путь к модулю state
+import { addBalance, getBalance, fmt } from '../../../core/state.js';
 
 export const title = 'Главная';
 
