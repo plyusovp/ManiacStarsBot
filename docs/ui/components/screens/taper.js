@@ -13,7 +13,7 @@ const STARS_PER_TAP = 1;
 let root, elements, state;
 let three, animationFrameId;
 
-// --- Шейдеры для плазмы ---
+// --- Шейдеры для плазмы (Новая, более надёжная версия) ---
 const plasmaVertexShader = `
   varying vec2 vUv;
   void main() {
@@ -23,49 +23,24 @@ const plasmaVertexShader = `
 `;
 
 const plasmaFragmentShader = `
+  precision mediump float;
   uniform float time;
   uniform vec3 color1;
   uniform vec3 color2;
   varying vec2 vUv;
 
-  // 2D Simplex noise function
-  float snoise(vec2 v) {
-      const vec4 C = vec4(0.211324865405187,  // (3.0-sqrt(3.0))/6.0
-                          0.366025403784439,  // 0.5*(sqrt(3.0)-1.0)
-                         -0.577350269189626,  // -1.0 + 2.0 * C.x
-                          0.024390243902439); // 1.0 / 41.0
-      vec2 i  = floor(v + dot(v, C.yy) );
-      vec2 x0 = v -   i + dot(i, C.xx);
-      vec2 i1;
-      i1 = (x0.x > x0.y) ? vec2(1.0, 0.0) : vec2(0.0, 1.0);
-      vec4 x12 = x0.xyxy + C.xxzz;
-      x12.xy -= i1;
-      i = mod(i, 289.0);
-      vec3 p = permute( permute( i.y + vec3(0.0, i1.y, 1.0 )) + i.x + vec3(0.0, i1.x, 1.0 ));
-      vec3 m = max(0.5 - vec3(dot(x0,x0), dot(x12.xy,x12.xy), dot(x12.zw,x12.zw)), 0.0);
-      m = m*m;
-      m = m*m;
-      vec3 x = 2.0 * fract(p * C.www) - 1.0;
-      vec3 h = abs(x) - 0.5;
-      vec3 ox = floor(x + 0.5);
-      vec3 a0 = x - ox;
-      m *= 1.79284291400159 - 0.85373472095314 * ( a0*a0 + h*h );
-      vec3 g;
-      g.x  = a0.x  * x0.x  + h.x  * x0.y;
-      g.yz = a0.yz * x12.xz + h.yz * x12.yw;
-      return 130.0 * dot(m, g);
-  }
-
-  vec3 permute(vec3 x) { return mod(((x*34.0)+1.0)*x, 289.0); }
-
   void main() {
-    float noise = snoise(vUv * 4.0 + time * 0.2);
-    noise = (snoise(vUv * 8.0 - time * 0.4) + noise) * 0.5;
+    // Более простой и надёжный эффект плазмы на основе синусоид
+    float v1 = sin(vUv.x * 8.0 + time * 0.5);
+    float v2 = sin(vUv.y * 10.0 - time * 0.8);
+    float v3 = sin(length(vUv - 0.5) * 20.0 + time);
+    float value = (v1 + v2 + v3) / 3.0;
 
-    vec3 finalColor = mix(color1, color2, (noise + 1.0) * 0.5);
+    vec3 finalColor = mix(color1, color2, (value + 1.0) * 0.5);
 
-    float edge = smoothstep(0.4, 0.8, length(vUv - 0.5) * 2.0);
-    gl_FragColor = vec4(finalColor, 1.0 - edge);
+    // Плавное затухание по краям для создания объёма
+    float alpha = 1.0 - (length(vUv - 0.5) * 2.0);
+    gl_FragColor = vec4(finalColor, alpha);
   }
 `;
 
@@ -87,9 +62,9 @@ function initThree() {
     container.appendChild(renderer.domElement);
 
     // Lights
-    const ambientLight = new THREE.AmbientLight(0xffffff, 0.5);
+    const ambientLight = new THREE.AmbientLight(0xffffff, 0.7);
     scene.add(ambientLight);
-    const directionalLight = new THREE.DirectionalLight(0xffffff, 2);
+    const directionalLight = new THREE.DirectionalLight(0xffffff, 1.5);
     directionalLight.position.set(5, 5, 5);
     scene.add(directionalLight);
 
@@ -97,20 +72,20 @@ function initThree() {
     const starGroup = new THREE.Group();
     scene.add(starGroup);
 
-    // 1. Outer Crystal
-    const crystalGeom = new THREE.IcosahedronGeometry(1, 1);
-    const crystalMat = new THREE.MeshPhysicalMaterial({
-        roughness: 0.1,
-        transmission: 1.0,
-        thickness: 1.2,
-        ior: 1.8,
-        color: 0xffffff
+    // 1. Outer Crystal (Новый, более надёжный материал)
+    const crystalGeom = new THREE.IcosahedronGeometry(1.2, 1);
+    const crystalMat = new THREE.MeshPhongMaterial({
+        color: 0xffffff,
+        shininess: 100,
+        specular: 0xeeeeff,
+        transparent: true,
+        opacity: 0.4,
     });
     const crystal = new THREE.Mesh(crystalGeom, crystalMat);
     starGroup.add(crystal);
 
     // 2. Inner Plasma
-    const plasmaGeom = new THREE.IcosahedronGeometry(0.9, 3);
+    const plasmaGeom = new THREE.SphereGeometry(0.8, 32, 32);
     const plasmaMat = new THREE.ShaderMaterial({
         uniforms: {
             time: { value: 0 },
@@ -125,13 +100,30 @@ function initThree() {
     const plasma = new THREE.Mesh(plasmaGeom, plasmaMat);
     starGroup.add(plasma);
 
+    // 3. Background Starfield
+    const starVertices = [];
+    for (let i = 0; i < 8000; i++) {
+        const x = THREE.MathUtils.randFloatSpread(100);
+        const y = THREE.MathUtils.randFloatSpread(100);
+        const z = THREE.MathUtils.randFloatSpread(100);
+        if (new THREE.Vector3(x, y, z).length() > 20) { // Keep them in the distance
+             starVertices.push(x, y, z);
+        }
+    }
+    const starGeometry = new THREE.BufferGeometry();
+    starGeometry.setAttribute('position', new THREE.Float32BufferAttribute(starVertices, 3));
+    const starMaterial = new THREE.PointsMaterial({ color: 0x555555, size: 0.1 });
+    const starfield = new THREE.Points(starGeometry, starMaterial);
+    scene.add(starfield);
+
+
     // Post-processing (Glow Effect)
     const composer = new EffectComposer(renderer);
     composer.addPass(new RenderPass(scene, camera));
-    const bloomPass = new UnrealBloomPass(new THREE.Vector2(width, height), 1.0, 0.4, 0.85);
+    const bloomPass = new UnrealBloomPass(new THREE.Vector2(width, height), 0.8, 0.4, 0.6);
     composer.addPass(bloomPass);
 
-    three = { scene, camera, renderer, composer, starGroup, plasmaMat };
+    three = { scene, camera, renderer, composer, starGroup, plasmaMat, starfield };
 
     // Handle Resize
     const onResize = () => {
@@ -157,10 +149,11 @@ function animate() {
     const elapsedTime = clock.getElapsedTime();
 
     if (three) {
-        // State of rest animation
+        // Анимация в состоянии покоя
         three.starGroup.rotation.y = elapsedTime * 0.2;
         three.starGroup.rotation.x = Math.sin(elapsedTime * 0.5) * 0.1;
         three.plasmaMat.uniforms.time.value = elapsedTime;
+        three.starfield.rotation.y = elapsedTime * 0.02;
 
         three.composer.render();
     }
@@ -252,8 +245,10 @@ function showTapEffects(x, y) {
  * Основной обработчик тапа
  */
 function handleTap(event) {
-    const tapX = event.clientX || event.touches[0].clientX;
-    const tapY = event.clientY || event.touches[0].clientY;
+    const tapX = event.clientX || (event.touches && event.touches[0].clientX);
+    const tapY = event.clientY || (event.touches && event.touches[0].clientY);
+
+    if (tapX === undefined) return;
 
     // 1. Обновляем баланс
     const oldBalance = getBalance();
@@ -269,14 +264,15 @@ function handleTap(event) {
     if (three && !state.isStarAnimating) {
         state.isStarAnimating = true;
         const group = three.starGroup;
-        const startScale = group.scale.x;
+        const startScale = 1;
+        group.scale.set(startScale, startScale, startScale); // Сброс на случай
         let elapsed = 0;
         const duration = 300; // 0.3s
 
         function squeeze() {
-            elapsed += 16;
+            elapsed += 16.67; // ~60fps
             const progress = Math.min(elapsed / duration, 1);
-            // Пружинистая анимация: сжимается, потом отскакивает чуть больше, потом в норму
+            // Пружинистая анимация
             const scale = 1 - 0.2 * Math.sin(progress * Math.PI) * Math.exp(-progress * 2);
             group.scale.set(scale, scale, scale);
 
@@ -299,19 +295,15 @@ function handleTap(event) {
  * Обработчик наклона устройства (гироскоп)
  */
 function handleDeviceMotion(event) {
-    if (!three || !event.rotationRate) return;
+    if (!three || !event.gamma || !event.beta) return;
 
-    // Используем gamma (слева-направо) и beta (вперед-назад)
-    const gamma = event.rotationRate.gamma || 0;
-    const beta = event.rotationRate.beta || 0;
+    // Плавное вращение вместо резкого смещения
+    const gamma = THREE.MathUtils.degToRad(event.gamma) * 0.1; // наклон влево-вправо
+    const beta = THREE.MathUtils.degToRad(event.beta) * 0.1;   // наклон вперед-назад
 
-    // Небольшое смещение для параллакс-эффекта
-    const targetX = three.starGroup.position.x - gamma * 0.001;
-    const targetY = three.starGroup.position.y + beta * 0.001;
-
-    // Плавное движение к цели
-    three.starGroup.position.x += (targetX - three.starGroup.position.x) * 0.1;
-    three.starGroup.position.y += (targetY - three.starGroup.position.y) * 0.1;
+    // Плавное движение к целевому вращению
+    const targetRotation = new THREE.Quaternion().setFromEuler(new THREE.Euler(beta, gamma, 0, 'XYZ'));
+    three.starGroup.quaternion.slerp(targetRotation, 0.05);
 }
 
 function requestMotionPermission() {
