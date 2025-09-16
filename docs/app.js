@@ -1,12 +1,18 @@
 // --- ИЗМЕНЕНА СТРУКТУРА ИМПОРТОВ ---
 // Экраны
-// ИСПРАВЛЕНО: Пути к компонентам экранов
 import * as taper from './ui/components/screens/taper.js';
 import * as games from './ui/components/screens/games.js';
 import * as referrals from './ui/components/screens/referrals.js';
 import * as profile from './ui/components/screens/profile.js';
 import * as settings from './ui/components/screens/settings.js';
 import * as uikit from './ui/components/screens/uikit.js';
+
+// Игры (статический импорт для решения проблемы с локальным запуском)
+import * as coinGame from './games/coin.js';
+import * as crashGame from './games/crash.js';
+import * as diceGame from './games/dice.js';
+import * as slotsGame from './games/slots.js';
+
 
 // Ядро
 import { getBalance, fmt, isFirstLaunch, setVisited } from './core/state.js';
@@ -25,6 +31,14 @@ const routes = {
     '/profile': profile,
     '/settings': settings,
     '/uikit': uikit,
+};
+
+// Карта игровых модулей для роутера
+const gameModules = {
+    'coin': coinGame,
+    'crash': crashGame,
+    'dice': diceGame,
+    'slots': slotsGame
 };
 
 let currentView = null;
@@ -80,14 +94,12 @@ const themeManager = {
 };
 
 
-// --- UI-ХЕЛПЕРЫ (без изменений) ---
+// --- UI-ХЕЛПЕРЫ ---
 const updateBalanceDisplay = () => {
     DOMElements.balanceValue.textContent = fmt(getBalance());
 };
 
 const showToast = (message, type = 'info') => {
-    // Эта функция будет заменена на реализацию из uikit.js при его загрузке,
-    // но нужна заглушка на случай вызова до инициализации.
     if (window.ManiacGames && window.ManiacGames.showNotification) {
         window.ManiacGames.showNotification(message, type);
     } else {
@@ -96,10 +108,8 @@ const showToast = (message, type = 'info') => {
 };
 
 
-// --- РОУТЕР (без изменений) ---
-const router = async () => {
-    const hash = window.location.hash || '#/taper';
-    let path = hash.startsWith('#') ? hash.substring(1) : hash;
+// --- ИСПРАВЛЕНО: Новая система навигации ---
+async function navigateTo(path) {
     let gameId = null;
 
     if (path.startsWith('/game/')) {
@@ -107,54 +117,54 @@ const router = async () => {
         path = '/game'; // Общий маршрут для всех игр
     }
 
-
     if (currentView && currentView.unmount) {
         currentView.unmount();
     }
 
-    DOMElements.mainContent.innerHTML = ''; // Очищаем контент
+    DOMElements.mainContent.innerHTML = '';
 
     let viewModule;
     if (gameId) {
-        try {
-            // Динамический импорт для игр
-            viewModule = await import(`../games/${gameId}.js`);
-        } catch (e) {
-            console.error(`Failed to load game module: ${gameId}`, e);
-            window.location.hash = '#/games'; // Редирект на список игр
+        viewModule = gameModules[gameId];
+        if (!viewModule) {
+            console.error(`Game module not found: ${gameId}`);
+            navigateTo('/games'); // Редирект на список игр
             return;
         }
     } else {
         viewModule = routes[path];
     }
 
-
     if (viewModule) {
         currentView = viewModule;
+        // Сохраняем путь для перезагрузки языка
+        currentView.path = path;
         const title = viewModule.titleKey ? i18n.t(viewModule.titleKey) : (viewModule.title || '');
         DOMElements.headerTitle.textContent = title;
         DOMElements.mainContent.className = 'main-content view';
         currentView.mount(DOMElements.mainContent);
     } else {
-        // Фоллбэк на главный экран
-        window.location.hash = '#/taper';
+        navigateTo('/taper'); // Фоллбэк на главный экран
     }
 
     // Обновляем активную иконку в навигации
     document.querySelectorAll('.nav-item').forEach(item => {
-        const itemPath = item.getAttribute('href').substring(1);
-        item.classList.toggle('active', itemPath === path);
+        const itemPath = item.dataset.path;
+        item.classList.toggle('active', itemPath === path || (path === '/game' && itemPath === '/games'));
     });
 };
 
 async function changeLanguage(lang) {
     await i18n.setLanguage(lang);
-    generateNavigation(); // Перерисовываем навигацию с новым языком
-    router(); // Перерисовываем текущий экран
+    generateNavigation();
+    // Перерисовываем текущий экран с новым языком
+    if (currentView && currentView.path) {
+        navigateTo(currentView.path);
+    }
 }
 
 
-// --- ГЕНЕРАЦИЯ НАВИГАЦИИ (без изменений) ---
+// --- ГЕНЕРАЦИЯ НАВИГАЦИИ ---
 function generateNavigation() {
     const navItems = [
         { path: '/taper', icon: 'star', labelKey: 'nav_main' },
@@ -163,7 +173,6 @@ function generateNavigation() {
         { path: '/profile', icon: 'user', labelKey: 'nav_profile' },
         { path: '/settings', icon: 'sliders-horizontal', labelKey: 'nav_settings' },
     ];
-    // Используем SVG иконки из Feather Icons (встроены для простоты)
     const icons = {
         'star': '<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"></polygon></svg>',
         'gamepad-2': '<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="6" y1="12" x2="10" y2="12"></line><line x1="8" y1="10" x2="8" y2="14"></line><line x1="15" y1="13" x2="15.01" y2="13"></line><line x1="18" y1="11" x2="18.01" y2="11"></line><path d="M10 21a9 9 0 0 0-4.42-16.9"></path><path d="M14 3a9 9 0 0 1 4.42 16.9"></path></svg>',
@@ -173,7 +182,7 @@ function generateNavigation() {
     };
 
     DOMElements.navContainer.innerHTML = navItems.map(item => `
-        <a href="#${item.path}" class="nav-item">
+        <a href="#" data-path="${item.path}" class="nav-item">
             ${icons[item.icon]}
             <span>${i18n.t(item.labelKey)}</span>
         </a>
@@ -185,18 +194,16 @@ function bindNavEventListeners() {
     DOMElements.navContainer.querySelectorAll('.nav-item').forEach(item => {
         item.addEventListener('click', (e) => {
             e.preventDefault();
-            const path = item.getAttribute('href');
-            if(window.location.hash !== path) {
-                window.location.hash = path;
-                hapticFeedback('light');
-                audio.play('tap');
-            }
+            const path = item.dataset.path;
+            navigateTo(path);
+            hapticFeedback('light');
+            audio.play('tap');
         });
     });
 }
 
 
-// --- НОВАЯ ФУНКЦИЯ: Показ обучения при первом запуске ---
+// --- ОБУЧЕНИЕ ПРИ ПЕРВОМ ЗАПУСКЕ ---
 function showFirstLaunchTutorial() {
     if (!isFirstLaunch()) {
         return;
@@ -218,7 +225,7 @@ function showFirstLaunchTutorial() {
     document.body.appendChild(tutorialOverlay);
 
     const closeBtn = document.getElementById('tutorial-close-btn');
-    effects.applyRippleEffect(closeBtn); // Добавим эффект на кнопку
+    effects.applyRippleEffect(closeBtn);
 
     closeBtn.addEventListener('click', () => {
         tutorialOverlay.classList.add('fade-out');
@@ -226,31 +233,25 @@ function showFirstLaunchTutorial() {
         audio.play('tap');
         tutorialOverlay.addEventListener('animationend', () => {
             tutorialOverlay.remove();
-            setVisited(); // Отмечаем, что пользователь видел обучение
+            setVisited();
         });
     });
 }
 
 
-// --- ОБНОВЛЕННАЯ ФУНКЦИЯ ИНИЦИАЛИЗАЦИИ ---
+// --- ИНИЦИАЛИЗАЦИЯ ПРИЛОЖЕНИЯ ---
 const initApp = async () => {
     console.log("Maniac Stars: Application Start");
 
-    // Пункт 17.1: Прочитать localStorage (настройки темы и языка)
-    const settingsPromise = i18n.init(); // Асинхронная загрузка переводов
-    themeManager.init(); // Синхронно, чтобы избежать мигания темы
+    const settingsPromise = i18n.init();
+    themeManager.init();
 
-    // Пункт 17.2: Определить производительность
     const lowPerf = isLowPerfDevice();
     if (lowPerf) {
         document.body.classList.add('low-perf');
         console.log("Low performance mode enabled.");
     }
-
-    // Пункт 17.3: Предзагрузить ресурсы (ассеты встроены в код, предзагрузка не требуется)
-    console.log("Assets are code-integrated, no pre-fetch needed.");
-
-    // Инициализация Telegram API и фоновых систем
+    
     try {
         tg = window.Telegram.WebApp;
         tg.ready();
@@ -261,14 +262,12 @@ const initApp = async () => {
     }
 
     particles.init(DOMElements.particleCanvas);
-    if (!lowPerf) { // Запускаем цикл частиц только на мощных устройствах
+    if (!lowPerf) {
         requestAnimationFrame(particles.loop);
     }
-
-    // Дожидаемся загрузки переводов перед отрисовкой
+    
     await settingsPromise;
 
-    // Создаем глобальный объект для доступа из других модулей
     window.ManiacGames = {
         updateBalance: updateBalanceDisplay,
         showNotification: showToast,
@@ -281,23 +280,22 @@ const initApp = async () => {
         getCurrentLanguage: i18n.getCurrentLanguage,
         changeTheme: (theme) => themeManager.applyTheme(theme),
         getCurrentTheme: () => themeManager.getCurrentTheme(),
+        navigateTo, // <-- ВАЖНО: предоставляем доступ к функции навигации
         tg,
     };
 
-    // Пункт 17.4: Отрисовать базу и скрыть сплэш-экран
     DOMElements.splash.style.opacity = '0';
     DOMElements.app.classList.remove('hidden');
     DOMElements.splash.addEventListener('transitionend', () => DOMElements.splash.remove());
 
-    // Пункт 17.5: Активировать роутер
     generateNavigation();
-    window.addEventListener('hashchange', router);
     updateBalanceDisplay();
-    await router(); // Первый вызов для отрисовки начального экрана
+    // ИСПРАВЛЕНО: Запускаем первый экран напрямую
+    navigateTo('/taper');
 
-    // Пункт 17.6: Показать обучение
-    setTimeout(showFirstLaunchTutorial, 400); // Небольшая задержка для плавности
+    setTimeout(showFirstLaunchTutorial, 400);
 };
 
 // --- Точка входа в приложение ---
 document.addEventListener('DOMContentLoaded', initApp);
+

@@ -1,9 +1,8 @@
-export const titleKey = 'games_title'; // <-- Ключ для заголовка
+export const titleKey = 'games_title';
 
 let rootElement = null;
 let selectedGame = null;
 
-// Игры теперь используют ключи для названий
 const games = [
     { id: 'dice', titleKey: 'dice_game_title', rtp: '98.5%', volatility: 'Низкая' },
     { id: 'crash', titleKey: 'crash_game_title', rtp: '96.0%', volatility: 'Высокая' },
@@ -12,8 +11,8 @@ const games = [
 ];
 
 function render() {
-    if (!rootElement) return; // Добавим проверку
-    const t = window.ManiacGames.t; // <-- ИСПРАВЛЕНО: Доступ к t внутри функции
+    if (!rootElement) return;
+    const t = window.ManiacGames.t;
     rootElement.innerHTML = `
         <div class="games-grid">
             ${games.map((game, index) => `
@@ -32,26 +31,7 @@ function render() {
     addEventListeners();
 }
 
-function renderGameListSkeleton() {
-    const skeletonCount = 4;
-    if (!rootElement) return;
-    const t = window.ManiacGames.t; // <-- ИСПРАВЛЕНО: Доступ к t внутри функции
-    rootElement.innerHTML = `
-        <div class="games-grid">
-            ${Array(skeletonCount).fill(0).map((_, index) => `
-                <div class="game-card skeleton" style="--stagger-index: ${index}; aspect-ratio: 1 / 1.1;">
-                </div>
-            `).join('')}
-        </div>
-         <div id="play-bar" class="play-bar">
-            <button id="play-button" class="btn btn-primary">${t('play_button')}</button>
-        </div>
-    `;
-}
-
-
 function getGameIcon(gameId) {
-    // ... (код иконок остаётся без изменений)
     switch (gameId) {
         case 'dice':
             return `<svg width="48" height="48" viewBox="0 0 100 100" fill="none" xmlns="http://www.w3.org/2000/svg"><g filter="url(#filter0_d_8_2)"><rect x="10" y="10" width="80" height="80" rx="15" fill="url(#paint0_linear_8_2)"/><rect x="11.5" y="11.5" width="77" height="77" rx="13.5" stroke="white" stroke-opacity="0.2" stroke-width="3"/></g><circle cx="30" cy="30" r="8" fill="white"/><circle cx="70" cy="30" r="8" fill="white"/><circle cx="50" cy="50" r="8" fill="white"/><circle cx="30" cy="70" r="8" fill="white"/><circle cx="70" cy="70" r="8" fill="white"/><defs><filter id="filter0_d_8_2" x="0" y="0" width="100" height="100" filterUnits="userSpaceOnUse" color-interpolation-filters="sRGB"><feFlood flood-opacity="0" result="BackgroundImageFix"/><feColorMatrix in="SourceAlpha" type="matrix" values="0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 127 0" result="hardAlpha"/><feOffset dy="0"/><feGaussianBlur stdDeviation="5"/><feComposite in2="hardAlpha" operator="out"/><feColorMatrix type="matrix" values="0 0 0 0 0.541667 0 0 0 0 0.4875 0 0 0 0 1 0 0 0 0.3 0"/><feBlend mode="normal" in2="BackgroundImageFix" result="effect1_dropShadow_8_2"/><feBlend mode="normal" in="SourceGraphic" in2="effect1_dropShadow_8_2" result="shape"/></filter><linearGradient id="paint0_linear_8_2" x1="50" y1="10" x2="50" y2="90" gradientUnits="userSpaceOnUse"><stop stop-color="#3A435E"/><stop offset="1" stop-color="#21283C"/></linearGradient></defs></svg>`;
@@ -85,26 +65,19 @@ function addEventListeners() {
         if (selectedGame) {
             window.ManiacGames.playSound('tap');
             window.ManiacGames.hapticFeedback('medium');
-            window.location.hash = `#/game/${selectedGame}`;
+            // ИСПРАВЛЕНО: Используем новую функцию навигации
+            window.ManiacGames.navigateTo(`/game/${selectedGame}`);
         }
     });
 }
 
 export function mount(rootEl) {
     rootElement = rootEl;
-    // 1. Показываем скелет
-    renderGameListSkeleton();
-
-    // 2. Имитируем загрузку данных
-    setTimeout(() => {
-        // 3. После "загрузки" рендерим настоящий контент
-        if (rootElement) {
-            render();
-        }
-    }, 800); // Задержка в 800ms для демонстрации
+    render();
 }
 
 export function unmount() {
     rootElement = null;
     selectedGame = null;
 }
+
