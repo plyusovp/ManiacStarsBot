@@ -1,5 +1,5 @@
-import { getBalance, fmt } from '../../../core/state.js';
-import { getUser } from '../../../api.js';
+import { getBalance, fmt } from '../../../../core/state.js';
+import { getUser } from '../../../../api.js';
 
 export const titleKey = 'profile_title';
 
