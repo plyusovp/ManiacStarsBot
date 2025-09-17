@@ -4,24 +4,26 @@ const LANG_KEY = 'mg.lang';
 let translations = {};
 let currentLang = localStorage.getItem(LANG_KEY) || 'ru'; // По умолчанию русский
 
+// Резервные тексты на случай, если файл не загрузится
+const fallbackTranslations = {
+    "ru": { "nav_main": "Главная", "nav_games": "Игры", "nav_friends": "Друзья", "nav_profile": "Профиль", "nav_settings": "Настройки", "error_loading": "Ошибка загрузки текстов" },
+    "es": { "nav_main": "Principal", "nav_games": "Juegos", "nav_friends": "Amigos", "nav_profile": "Perfil", "nav_settings": "Ajustes", "error_loading": "Error loading texts" }
+};
+
 /**
  * Загружает JSON-файл с переводами.
  */
 async function loadTranslations() {
-    try {
-        // ИСПРАВЛЕНО: Путь сделан относительным для корректной загрузки
+     try {
         const response = await fetch('locales/i18n.json');
         if (!response.ok) {
             throw new Error(`HTTP error! status: ${response.status}`);
         }
         translations = await response.json();
     } catch (error) {
-        console.error("Could not load translations:", error);
-        // ИЗМЕНЕНИЕ ЗДЕСЬ: Добавлены резервные тексты, чтобы приложение не падало
-        translations = {
-             "ru": { "nav_main": "Главная", "nav_games": "Игры", "nav_friends": "Друзья", "nav_profile": "Профиль", "nav_settings": "Настройки", "error_loading": "Ошибка загрузки текстов" },
-             "es": { "nav_main": "Principal", "nav_games": "Juegos", "nav_friends": "Amigos", "nav_profile": "Perfil", "nav_settings": "Ajustes", "error_loading": "Error loading texts" }
-        };
+        console.error("Could not load translations file, using fallback:", error);
+        alert("DEBUG: Could not load i18n.json. Using fallback. Error: " + error.message);
+        translations = fallbackTranslations;
     }
 }
 
@@ -32,8 +34,7 @@ async function loadTranslations() {
 export function setLanguage(lang) {
     if (translations[lang]) {
         currentLang = lang;
-        localStorage.setItem(LANG_KEY, lang);
-        // Устанавливаем атрибут lang для всего документа для CSS и доступности
+       localStorage.setItem(LANG_KEY, lang);
         document.documentElement.lang = lang;
     } else {
         console.warn(`Language "${lang}" not found in translations.`);
@@ -43,17 +44,14 @@ export function setLanguage(lang) {
 /**
  * Возвращает переведенную строку по ключу.
  * @param {string} key - Ключ для поиска в JSON.
- * @param {object} [params] - Объект для замены плейсхолдеров (e.g., { count: 5 }).
+ * @param {object} [params] - Объект для замены плейсхолдеров.
  * @returns {string} - Переведенная строка или сам ключ, если перевод не найден.
  */
 export function t(key, params = {}) {
-    let text = translations[currentLang]?.[key] || key;
-
-    // Замена плейсхолдеров
-    for (const param in params) {
+     let text = translations[currentLang]?.[key] || key;
+     for (const param in params) {
         text = text.replace(new RegExp(`{{${param}}}`, 'g'), params[param]);
-    }
-
+     }
     return text;
 }
 

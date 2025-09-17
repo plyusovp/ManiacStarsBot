@@ -241,8 +241,7 @@ function showFirstLaunchTutorial() {
 
 // --- ИНИЦИАЛИЗАЦИЯ ПРИЛОЖЕНИЯ ---
 const initApp = async () => {
-    // ***** ИЗМЕНЕНИЕ ЗДЕСЬ *****
-    try {
+     try {
         const settingsPromise = i18n.init();
         themeManager.init();
 
@@ -293,8 +292,7 @@ const initApp = async () => {
         navigateTo('/taper');
 
         setTimeout(showFirstLaunchTutorial, 400);
-    } catch (e) {
-        // Если что-то пойдет не так, мы увидим ошибку прямо на экране
+     } catch (e) {
         console.error("Critical error during app initialization:", e);
         document.body.innerHTML = `<div style="color: white; padding: 20px; font-family: monospace; word-break: break-all;">
             <h3>Критическая ошибка</h3>
@@ -304,8 +302,7 @@ const initApp = async () => {
             <p><b>Стек вызовов:</b><br>${e.stack}</p>
         </div>`;
     }
-};
-
-
+ };
+ 
 // --- Точка входа в приложение ---
 document.addEventListener('DOMContentLoaded', initApp);
