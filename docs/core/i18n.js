@@ -9,17 +9,18 @@ let currentLang = localStorage.getItem(LANG_KEY) || 'ru'; // По умолчан
  */
 async function loadTranslations() {
     try {
+        // ИСПРАВЛЕНО: Путь сделан относительным для корректной загрузки
         const response = await fetch('locales/i18n.json');
         if (!response.ok) {
             throw new Error(`HTTP error! status: ${response.status}`);
         }
         translations = await response.json();
     } catch (error) {
-        console.error("Could not load translations file:", error);
-        // ВАЖНО: В случае ошибки загружаем резервный объект, чтобы приложение не падало.
+        console.error("Could not load translations:", error);
+        // ИЗМЕНЕНИЕ ЗДЕСЬ: Добавлены резервные тексты, чтобы приложение не падало
         translations = {
-             "ru": { "error_loading": "Ошибка загрузки текстов", "nav_main": "Главная", "nav_games": "Игры", "nav_friends": "Друзья", "nav_profile": "Профиль", "nav_settings": "Настройки" },
-             "es": { "error_loading": "Error loading texts", "nav_main": "Principal", "nav_games": "Juegos", "nav_friends": "Amigos", "nav_profile": "Perfil", "nav_settings": "Ajustes" }
+             "ru": { "nav_main": "Главная", "nav_games": "Игры", "nav_friends": "Друзья", "nav_profile": "Профиль", "nav_settings": "Настройки", "error_loading": "Ошибка загрузки текстов" },
+             "es": { "nav_main": "Principal", "nav_games": "Juegos", "nav_friends": "Amigos", "nav_profile": "Perfil", "nav_settings": "Ajustes", "error_loading": "Error loading texts" }
         };
     }
 }

@@ -241,61 +241,71 @@ function showFirstLaunchTutorial() {
 
 // --- ИНИЦИАЛИЗАЦИЯ ПРИЛОЖЕНИЯ ---
 const initApp = async () => {
-    console.log("Maniac Stars: Application Start");
-
-    const settingsPromise = i18n.init();
-    themeManager.init();
-
-    const lowPerf = isLowPerfDevice();
-    if (lowPerf) {
-        document.body.classList.add('low-perf');
-        console.log("Low performance mode enabled.");
-    }
-    
+    // ***** ИЗМЕНЕНИЕ ЗДЕСЬ *****
     try {
-        tg = window.Telegram.WebApp;
-        tg.ready();
-        tg.expand();
-        console.log("Telegram WebApp API initialized.");
+        const settingsPromise = i18n.init();
+        themeManager.init();
+
+        const lowPerf = isLowPerfDevice();
+        if (lowPerf) {
+            document.body.classList.add('low-perf');
+            console.log("Low performance mode enabled.");
+        }
+        
+        try {
+            tg = window.Telegram.WebApp;
+            tg.ready();
+            tg.expand();
+            console.log("Telegram WebApp API initialized.");
+        } catch (e) {
+            console.warn("Telegram WebApp API not found. Running in dev mode.");
+        }
+
+        particles.init(DOMElements.particleCanvas);
+        if (!lowPerf) {
+            requestAnimationFrame(particles.loop);
+        }
+        
+        await settingsPromise;
+
+        window.ManiacGames = {
+            updateBalance: updateBalanceDisplay,
+            showNotification: showToast,
+            playSound: audio.play,
+            hapticFeedback,
+            particles,
+            effects,
+            t: i18n.t,
+            changeLanguage,
+            getCurrentLanguage: i18n.getCurrentLanguage,
+            changeTheme: (theme) => themeManager.applyTheme(theme),
+            getCurrentTheme: () => themeManager.getCurrentTheme(),
+            navigateTo,
+            tg,
+        };
+
+        DOMElements.splash.style.opacity = '0';
+        DOMElements.app.classList.remove('hidden');
+        DOMElements.splash.addEventListener('transitionend', () => DOMElements.splash.remove());
+
+        generateNavigation();
+        updateBalanceDisplay();
+        navigateTo('/taper');
+
+        setTimeout(showFirstLaunchTutorial, 400);
     } catch (e) {
-        console.warn("Telegram WebApp API not found. Running in dev mode.");
+        // Если что-то пойдет не так, мы увидим ошибку прямо на экране
+        console.error("Critical error during app initialization:", e);
+        document.body.innerHTML = `<div style="color: white; padding: 20px; font-family: monospace; word-break: break-all;">
+            <h3>Критическая ошибка</h3>
+            <p>Не удалось запустить приложение.</p>
+            <p><b>Сообщение:</b> ${e.message}</p>
+            <hr>
+            <p><b>Стек вызовов:</b><br>${e.stack}</p>
+        </div>`;
     }
-
-    particles.init(DOMElements.particleCanvas);
-    if (!lowPerf) {
-        requestAnimationFrame(particles.loop);
-    }
-    
-    await settingsPromise;
-
-    window.ManiacGames = {
-        updateBalance: updateBalanceDisplay,
-        showNotification: showToast,
-        playSound: audio.play,
-        hapticFeedback,
-        particles,
-        effects,
-        t: i18n.t,
-        changeLanguage,
-        getCurrentLanguage: i18n.getCurrentLanguage,
-        changeTheme: (theme) => themeManager.applyTheme(theme),
-        getCurrentTheme: () => themeManager.getCurrentTheme(),
-        navigateTo, // <-- ВАЖНО: предоставляем доступ к функции навигации
-        tg,
-    };
-
-    DOMElements.splash.style.opacity = '0';
-    DOMElements.app.classList.remove('hidden');
-    DOMElements.splash.addEventListener('transitionend', () => DOMElements.splash.remove());
-
-    generateNavigation();
-    updateBalanceDisplay();
-    // ИСПРАВЛЕНО: Запускаем первый экран напрямую
-    navigateTo('/taper');
-
-    setTimeout(showFirstLaunchTutorial, 400);
 };
+
 
 // --- Точка входа в приложение ---
 document.addEventListener('DOMContentLoaded', initApp);
-
