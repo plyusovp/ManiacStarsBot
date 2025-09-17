@@ -8,6 +8,12 @@ from aiogram.client.default import DefaultBotProperties
 from aiogram.enums import ParseMode
 from aiogram.exceptions import TelegramNetworkError
 from aiogram.fsm.storage.memory import MemoryStorage
+# --- ИЗМЕНЕНИЕ: Добавлены импорты для установки команд ---
+from aiogram.types import (
+    BotCommand,
+    BotCommandScopeChat,
+    BotCommandScopeDefault,
+)
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 
 from config import settings
@@ -70,6 +76,30 @@ async def send_bonus_reminders(bot: Bot):
     logging.info(f"Уведомления о бонусе отправлены. Успешно: {sent_count}.")
 
 
+async def set_bot_commands(bot: Bot):
+    """Устанавливает команды в меню Telegram для разных типов пользователей."""
+    # 1. Команды для обычных пользователей (по умолчанию)
+    user_commands = [
+        BotCommand(command="start", description="🚀 Перезапустить бота"),
+        BotCommand(command="menu", description="🏠 Главное меню"),
+        BotCommand(command="bonus", description="🎁 Ежедневный бонус"),
+    ]
+    await bot.set_my_commands(user_commands, BotCommandScopeDefault())
+
+    # 2. Расширенные команды для администраторов
+    admin_commands = [
+        *user_commands,
+        BotCommand(command="admin", description="🔒 Админ-панель"),
+    ]
+    for admin_id in settings.ADMIN_IDS:
+        # Устанавливаем команды для каждого админа отдельно
+        with suppress(Exception):
+            await bot.set_my_commands(
+                admin_commands, BotCommandScopeChat(chat_id=admin_id)
+            )
+    logging.info("Команды для пользователей и администраторов установлены.")
+
+
 async def main():
     # Настройка логирования
     setup_logging()
@@ -89,11 +119,6 @@ async def main():
 
     # --- РЕГИСТРАЦИЯ MIDDLEWARES ---
     # Порядок важен:
-    # 1. TracingMiddleware - создает trace_id и user_id в data
-    # 2. ErrorHandler - ловит ошибки от всех последующих слоев
-    # 3. MetricsMiddleware - собирает метрики
-    # 4. ThrottlingMiddleware - защита от флуда
-    # 5. LastSeenMiddleware - обновляет last_seen
     dp.update.middleware.register(TracingMiddleware())
     dp.update.middleware.register(ErrorHandler())
     dp.update.middleware.register(MetricsMiddleware())
@@ -113,7 +138,6 @@ async def main():
     logging.info("Планировщик уведомлений и очистки ключей запущен.")
 
     # --- Подключаем все роутеры из папки handlers ---
-    # Важно: более конкретные хендлеры (admin) должны идти раньше общих (user)
     dp.include_router(admin_handlers.router)
     dp.include_router(user_handlers.router)
     dp.include_router(duel_handlers.router)
@@ -122,15 +146,8 @@ async def main():
     dp.include_router(menu_handler.router)
 
     try:
-        # Установка постоянного меню (команды) для пользователей
-        await bot.set_my_commands(
-            [
-                {"command": "start", "description": "🚀 Перезапустить бота"},
-                {"command": "menu", "description": "🏠 Главное меню"},
-                {"command": "bonus", "description": "🎁 Ежедневный бонус"},
-                {"command": "admin", "description": "🔒 Админ-панель"},
-            ]
-        )
+        # --- ИЗМЕНЕНИЕ: Вызываем новую функцию для установки команд ---
+        await set_bot_commands(bot)
 
         # Запуск бота
         await bot.delete_webhook(drop_pending_updates=True)
