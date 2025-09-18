@@ -1,12 +1,13 @@
-# keyboards/reply.py
 from aiogram.types import KeyboardButton, ReplyKeyboardMarkup
+from aiogram.utils.keyboard import ReplyKeyboardBuilder
 
 
-def persistent_menu_keyboard() -> ReplyKeyboardMarkup:
-    """Возвращает клавиатуру с постоянной кнопкой 'Меню'."""
-    keyboard = ReplyKeyboardMarkup(
-        keyboard=[[KeyboardButton(text="Меню")]],
-        resize_keyboard=True,
-        input_field_placeholder="Используйте меню для навигации",
+def get_main_menu_keyboard() -> ReplyKeyboardMarkup:
+    """Генерирует основную клавиатуру с кнопками 'Бонус', 'Старт' и 'Меню'."""
+    builder = ReplyKeyboardBuilder()
+    builder.row(
+        KeyboardButton(text="🎁 Бонус"),
+        KeyboardButton(text="▶️ Старт"),
+        KeyboardButton(text="📖 Меню"),
     )
-    return keyboard
+    return builder.as_markup(resize_keyboard=True)
