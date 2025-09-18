@@ -5,37 +5,36 @@
 /* --- 1. Дизайн-система (Tokens) --- */
 :root {
   /* Фоны */
-  --bg: #0B0E12;          /* Основной фон */
-  --bg-soft: #0E131A;    /* Мягкий фон */
-  --card: #111823;       /* Фон карточек */
+  --bg: #0B0E12;
+  --bg-soft: #0E131A;
+  --card: #111823;
 
   /* Текст */
-  --text: #EAF2FF;        /* Основной текст */
-  --text-dim: #9AA6B2;    /* Приглушённый текст */
-  --muted: #6E7B8A;       /* Второстепенный текст */
+  --text: #EAF2FF;
+  --text-dim: #9AA6B2;
+  --muted: #6E7B8A;
 
   /* Акценты */
-  --primary-1: #8A7CFF;   /* Градиент кнопок (начало) */
-  --primary-2: #F92B75;   /* Градиент кнопок (конец) */
-  --accent: #8A7CFF;     /* Доп. акцентный цвет */
-  --success: #33D6A6;    /* Успех */
-  --danger: #FF6B6B;     /* Ошибка */
-  --warning: #FFC85C;    /* Предупреждение */
+  --primary-1: #8A7CFF;
+  --primary-2: #F92B75;
+  --accent: #8A7CFF;
+  --success: #33D6A6;
+  --danger: #FF6B6B;
+  --warning: #FFC85C;
 
   /* Радиусы и тени */
-  --radius-lg: 22px;     /* Большой радиус скругления */
-  --radius-xl: 28px;     /* Очень большой */
-  --radius-pill: 999px;  /* Для кнопок-пилюль */
-  /* --- Оптимизированная тень --- */
+  --radius-lg: 22px;
+  --radius-xl: 28px;
+  --radius-pill: 999px;
   --shadow-soft: 0 8px 32px rgba(0,0,0,.35);
-  --blur-ambient: 18px;  /* Размытие для фона */
+  --blur-ambient: 18px;
 
   /* Анимации */
-  --dur-fast: 140ms;     /* Быстрая анимация */
-  --dur-md: 240ms;       /* Средняя */
-  --dur-slow: 360ms;     /* Медленная */
-  --ease-out: cubic-bezier(.16,1,.3,1);       /* Плавный выход */
-  --ease-spring: cubic-bezier(.34,1.56,.64,1); /* Пружинистый эффект */
+  --dur-fast: 140ms;
+  --dur-md: 240ms;
+  --dur-slow: 360ms;
+  --ease-out: cubic-bezier(.16,1,.3,1);
+  --ease-spring: cubic-bezier(.34,1.56,.64,1);
 
   /* Шрифты */
   --font-main: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
@@ -68,21 +67,13 @@ body {
         url('data:image/svg+xml,%3Csvg viewBox="0 0 250 250" xmlns="http://www.w3.org/2000/svg"%3E%3Cfilter id="noiseFilter"%3E%3CfeTurbulence type="fractalNoise" baseFrequency="0.8" numOctaves="3" stitchTiles="stitch"/%3E%3C/filter%3E%3Crect width="100%" height="100%" filter="url(%23noiseFilter)" opacity="0.03"/%3E%3C/svg%3E');
 }
 
-.hidden {
-    display: none !important;
-}
+.hidden { display: none !important; }
+body.modal-open { overflow: hidden; }
 
-body.modal-open {
-    overflow: hidden;
-}
-
-/* --- Стили для Canvas частиц и конфетти --- */
+/* Canvas для эффектов */
 #particle-canvas, #confetti-canvas {
     position: fixed;
-    top: 0;
-    left: 0;
-    width: 100%;
-    height: 100%;
+    top: 0; left: 0; width: 100%; height: 100%;
     z-index: 9999;
     pointer-events: none;
 }
@@ -90,9 +81,7 @@ body.modal-open {
 /* --- 3. Загрузочный экран --- */
 .splash-screen {
     position: fixed;
-    top: 0; left: 0;
-    width: 100%;
-    height: 100%;
+    top: 0; left: 0; width: 100%; height: 100%;
     background: var(--bg);
     display: flex;
     flex-direction: column;
@@ -102,20 +91,13 @@ body.modal-open {
     transition: opacity var(--dur-slow) var(--ease-out);
     will-change: opacity;
 }
-
 .splash-logo {
     width: 120px;
     height: 120px;
     margin-bottom: 25px;
     filter: drop-shadow(0 0 25px var(--accent));
 }
-
-.splash-text {
-    font-size: 1.5em;
-    font-weight: 600;
-    color: var(--text);
-    text-align: center;
-}
+.splash-text { font-size: 1.5em; font-weight: 600; }
 
 /* --- 4. Основная структура приложения --- */
 .app-container {
@@ -123,34 +105,25 @@ body.modal-open {
     flex-direction: column;
     height: 100vh;
     height: 100dvh;
-    /* --- Адаптивность: Центрирование и ограничение ширины --- */
     margin: 0 auto;
     width: 100%;
-    max-width: 560px; /* Ограничиваем макс. ширину на десктопах */
+    max-width: 560px;
     position: relative;
-    box-shadow: 0 0 50px rgba(0,0,0,0.6); /* Тень для "десктопного" вида */
+    box-shadow: 0 0 50px rgba(0,0,0,0.6);
 }
-
 .app-header {
     flex-shrink: 0;
     padding: 10px 15px;
     padding-top: calc(10px + var(--safe-area-inset-top));
     background: rgba(11, 14, 18, 0.75);
     backdrop-filter: blur(var(--blur-ambient));
-    -webkit-backdrop-filter: blur(var(--blur-ambient));
     border-bottom: 1px solid rgba(255, 255, 255, 0.08);
     display: flex;
     justify-content: space-between;
     align-items: center;
     z-index: 100;
 }
-
-.app-header h1 {
-    margin: 0;
-    font-size: 1.2rem;
-    font-weight: 600;
-}
-
+.app-header h1 { margin: 0; font-size: 1.2rem; font-weight: 600; }
 .balance {
     font-size: 1rem;
     font-weight: 600;
@@ -159,21 +132,14 @@ body.modal-open {
     border-radius: var(--radius-pill);
     box-shadow: inset 0 0 0 1px rgba(255,255,255,.04);
 }
-
 .main-content {
     flex-grow: 1;
     overflow-y: auto;
-    -webkit-overflow-scrolling: touch;
     padding: 15px;
     padding-bottom: calc(75px + var(--safe-area-inset-bottom));
     position: relative;
 }
-
-/* Анимации смены экранов */
-.view {
-    animation: view-enter var(--dur-slow) var(--ease-out) 60ms both;
-}
-
+.view { animation: view-enter var(--dur-slow) var(--ease-out) 60ms both; }
 @keyframes view-enter {
     from { opacity: 0; transform: translateY(15px); }
     to { opacity: 1; transform: translateY(0); }
@@ -186,17 +152,15 @@ body.modal-open {
     justify-content: space-around;
     background: rgba(11, 14, 18, 0.75);
     backdrop-filter: blur(var(--blur-ambient));
-    -webkit-backdrop-filter: blur(var(--blur-ambient));
     border-top: 1px solid rgba(255, 255, 255, 0.08);
     padding: 5px 0;
     padding-bottom: calc(5px + var(--safe-area-inset-bottom));
-    position: absolute; /* Changed from fixed to stay inside the container */
+    position: absolute;
     bottom: 0;
     width: 100%;
-    box-sizing: border-box; /* Ensure padding is included in width */
+    box-sizing: border-box;
     z-index: 100;
 }
-
 .nav-item {
     display: flex;
     flex-direction: column;
@@ -208,842 +172,119 @@ body.modal-open {
     padding: 4px 8px;
     transition: color var(--dur-md), transform var(--dur-md);
     border-radius: var(--radius-lg);
-    will-change: transform, color;
 }
-
-/* --- ИЗМЕНЕНИЕ: Стили для SVG иконок в навигации --- */
-.nav-item svg {
-    width: 24px;
-    height: 24px;
-    stroke-width: 1.75px;
-    margin-bottom: 3px;
-}
-
-.nav-item.active {
-    color: var(--accent);
-    transform: translateY(-2px);
-}
+.nav-item svg { width: 24px; height: 24px; stroke-width: 1.75px; margin-bottom: 3px; }
+.nav-item.active { color: var(--accent); transform: translateY(-2px); }
 
 /* --- 5. UI-Библиотека --- */
-
-/* 5.1 Карточка (Card) */
-@keyframes card-appear {
-  from {
-    opacity: 0;
-    transform: translateY(6px);
-  }
-  to {
-    opacity: 1;
-    transform: translateY(0);
-  }
-}
-
 .card {
     background: var(--card);
     border-radius: var(--radius-lg);
     padding: 20px;
     margin-bottom: 15px;
     box-shadow: var(--shadow-soft), inset 0 0 0 1px rgba(255,255,255,.04);
-    transition: transform var(--dur-md) var(--ease-out),
-                box-shadow var(--dur-md) var(--ease-out);
-    animation: card-appear var(--dur-slow) var(--ease-out) both;
-    will-change: transform;
 }
-.card:hover {
-    transform: translateY(-2px) scale(1.01);
-}
-.card:focus-within {
-    outline: 1px solid rgba(250, 250, 255, .08);
-}
-
-h1 { font-size: var(--h1-size); font-weight: 700; }
-h2 { margin-top: 0; font-size: var(--h2-size); font-weight: 600; color: var(--text); }
+h2 { margin-top: 0; font-size: var(--h2-size); font-weight: 600; }
 p { margin-top: 0; color: var(--text-dim); line-height: 1.6; }
 
-/* 5.2 Кнопка (Button) */
 .btn {
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    width: 100%;
-    box-sizing: border-box;
-    padding: 14px 20px;
-    margin: 8px 0;
-    border: none;
-    border-radius: var(--radius-pill);
-    font-family: var(--font-main);
-    font-size: 1rem;
-    font-weight: 600;
-    text-align: center;
-    cursor: pointer;
-    transition: all var(--dur-md) var(--ease-out);
-    position: relative;
-    overflow: hidden;
-    -webkit-tap-highlight-color: transparent;
-    will-change: transform, box-shadow, filter;
+    display: flex; align-items: center; justify-content: center;
+    width: 100%; box-sizing: border-box; padding: 14px 20px;
+    margin: 8px 0; border: none; border-radius: var(--radius-pill);
+    font-family: var(--font-main); font-size: 1rem; font-weight: 600;
+    cursor: pointer; transition: all var(--dur-md) var(--ease-out);
+    position: relative; overflow: hidden; -webkit-tap-highlight-color: transparent;
 }
-.btn:disabled {
-    opacity: 0.5;
-    cursor: not-allowed;
-    transform: none !important;
-    filter: none;
-}
+.btn:disabled { opacity: 0.5; cursor: not-allowed; }
 .btn-primary {
     color: white;
     filter: drop-shadow(0 4px 20px rgba(138, 124, 255, 0.45));
-    /* --- ✨ НОВОЕ: Анимированный градиент --- */
     background: linear-gradient(135deg, var(--primary-1), var(--primary-2), var(--primary-1));
     background-size: 200% auto;
     animation: gradient-animation 4s ease infinite;
 }
+@keyframes gradient-animation { 0% { background-position: 0% 50%; } 50% { background-position: 100% 50%; } 100% { background-position: 0% 50%; } }
+.btn-secondary { background: rgba(255, 255, 255, .06); color: var(--text); box-shadow: inset 0 0 0 1px rgba(255,255,255,.04); }
+.btn:active:not(:disabled) { transform: scale(0.96); }
 
-@keyframes gradient-animation {
-    0% { background-position: 0% 50%; }
-    50% { background-position: 100% 50%; }
-    100% { background-position: 0% 50%; }
-}
-
-.btn-secondary {
-    background: rgba(255, 255, 255, .06);
-    backdrop-filter: blur(12px);
-    -webkit-backdrop-filter: blur(12px);
-    color: var(--text);
-    box-shadow: inset 0 0 0 1px rgba(255,255,255,.04);
-}
-.btn:active:not(:disabled) {
-    transform: scale(0.96);
-    transition-duration: var(--dur-fast);
-}
-
-/* 5.3 Переключатель (Switch/Toggle) */
-.switch {
-    position: relative;
-    display: inline-block;
-    width: 50px;
-    height: 28px;
-}
-.switch input { opacity: 0; width: 0; height: 0; }
-.switch-track {
-    position: absolute;
-    cursor: pointer;
-    top: 0; left: 0; right: 0; bottom: 0;
-    background: rgba(255, 255, 255, .06);
-    backdrop-filter: blur(12px);
-    -webkit-backdrop-filter: blur(12px);
-    border-radius: var(--radius-pill);
-    transition: background-color var(--dur-md) var(--ease-out);
-    box-shadow: inset 0 0 0 1px rgba(255,255,255,.04);
-}
-.switch-thumb {
-    position: absolute;
-    content: '';
-    height: 22px; width: 22px;
-    left: 3px; bottom: 3px;
-    background: linear-gradient(135deg, #ddd, #fff);
-    border-radius: 50%;
-    transition: transform var(--dur-slow) var(--ease-spring);
-}
-.switch input:checked + .switch-track {
-    background: linear-gradient(135deg, var(--primary-1), var(--primary-2));
-}
-.switch input:checked + .switch-track .switch-thumb {
-    transform: translateX(22px);
-}
-
-/* 5.4 Модальное окно (Modal/Sheet) */
-.modal-backdrop {
-    position: fixed;
-    top: 0; left: 0;
-    width: 100%; height: 100%;
-    background: rgba(0, 0, 0, .55);
-    backdrop-filter: blur(4px);
-    -webkit-backdrop-filter: blur(4px);
-    z-index: 1000;
-    opacity: 0;
-    visibility: hidden;
-    transition: opacity var(--dur-md) ease-out, visibility var(--dur-md) ease-out;
-}
-.modal-sheet {
-    position: fixed;
-    bottom: 0; left: 0;
-    width: 100%;
-    max-width: 560px; /* Ensure modal respects container width */
-    left: 50%;
-    transform: translateX(-50%) translateY(100%);
-    background: var(--card);
-    border-top-left-radius: var(--radius-xl);
-    border-top-right-radius: var(--radius-xl);
-    padding: 24px;
-    padding-bottom: calc(24px + var(--safe-area-inset-bottom));
-    z-index: 1001;
-    box-sizing: border-box;
-    transition: transform var(--dur-slow) var(--ease-out);
-    border-top: 1px solid rgba(255,255,255,0.08);
-    will-change: transform;
-}
-.modal-backdrop.is-visible {
-    opacity: 1;
-    visibility: visible;
-}
-.modal-backdrop.is-visible .modal-sheet {
-    transform: translateX(-50%) translateY(0);
-}
-
-/* 5.5 Уведомления (Toasts) */
-.toast-container {
-    position: fixed;
-    top: calc(15px + var(--safe-area-inset-top));
-    left: 50%;
-    transform: translateX(-50%);
-    width: calc(100% - 30px);
-    max-width: 530px; /* max-width - padding */
-    z-index: 2000;
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    pointer-events: none;
-}
-@keyframes toast-in {
-  from {
-    opacity: 0;
-    transform: translateY(-20px);
-  }
-  to {
-    opacity: 1;
-    transform: translateY(0);
-  }
-}
-@keyframes toast-out {
-  from {
-    opacity: 1;
-    transform: translateY(0);
-  }
-  to {
-    opacity: 0;
-    transform: translateY(-20px);
-  }
-}
-.toast {
-    background: var(--card);
-    color: var(--text);
-    padding: 12px 18px;
-    border-radius: var(--radius-pill);
-    margin-bottom: 10px;
-    box-shadow: var(--shadow-soft);
-    font-size: 0.9rem;
-    font-weight: 600;
-    animation: toast-in 0.5s var(--ease-out) forwards;
-    border-left: 4px solid var(--accent);
-}
-.toast.success { border-left-color: var(--success); }
-.toast.error { border-left-color: var(--danger); }
-.toast.warning { border-left-color: var(--warning); }
-
-
-/* --- 6. Стили Экрана "Игры" (4.1) --- */
-.games-grid {
-    display: grid;
-    /* --- Адаптивность: Сетка карточек --- */
-    grid-template-columns: repeat(2, 1fr);
-    gap: 14px;
-}
-
-/* --- Адаптивность: Сетка для очень маленьких экранов --- */
-@media (max-width: 340px) {
-    .games-grid {
-        grid-template-columns: 1fr; /* Перестраиваем в одну колонку */
-    }
-}
-
-
-@keyframes game-card-appear {
-    from {
-        opacity: 0;
-        transform: translateY(20px) scale(0.98);
-    }
-    to {
-        opacity: 1;
-        transform: translateY(0) scale(1);
-    }
-}
-
-.game-card {
-    background: var(--card);
-    border-radius: var(--radius-lg);
-    padding: 15px;
-    aspect-ratio: 1 / 1.1;
-    display: flex;
-    flex-direction: column;
-    justify-content: center;
-    align-items: center;
-    text-align: center;
-    cursor: pointer;
-    transition: transform var(--dur-md) var(--ease-out),
-                box-shadow var(--dur-md) var(--ease-out);
-    animation: game-card-appear var(--dur-slow) var(--ease-out) both;
-    animation-delay: calc(var(--stagger-index) * 40ms);
-    box-shadow: inset 0 0 0 1px rgba(255,255,255,.04);
-    will-change: transform, box-shadow;
-}
-/* --- ИЗМЕНЕНИЕ: Стили для SVG иллюстраций в карточках игр --- */
-.game-card-icon {
-    height: 48px;
-    width: 48px;
-    margin-bottom: 10px;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-}
-.game-card-icon svg {
-    width: 100%;
-    height: 100%;
-}
-
-.game-card-title {
-    font-weight: 600;
-    color: var(--text);
-}
-.game-card-info {
-    font-size: 0.8rem;
-    color: var(--muted);
-}
-.game-card:hover {
-    transform: translateY(-4px);
-    box-shadow: 0 0 20px rgba(138, 124, 255, 0.2), inset 0 0 0 1px rgba(255,255,255,.04);
-}
-.game-card.selected {
-    transform: translateY(-4px);
-    box-shadow: 0 0 30px rgba(138, 124, 255, 0.5), inset 0 0 0 1px var(--accent);
-}
-
-.play-bar {
-    position: absolute; /* Changed from fixed */
-    bottom: calc(65px + var(--safe-area-inset-bottom));
-    left: 15px;
-    right: 15px;
-    transform: translateY(150%);
-    transition: transform var(--dur-slow) var(--ease-out);
-    z-index: 50;
-    will-change: transform;
-}
-.play-bar.visible {
-    transform: translateY(0);
-}
-
-/* --- 7. Стили Экрана "Рефералы" (4.2) --- */
-.glassmorphism-card {
-    background: rgba(255, 255, 255, .06);
-    backdrop-filter: blur(12px);
-    -webkit-backdrop-filter: blur(12px);
-    box-shadow: inset 0 0 0 1px rgba(255,255,255,.04);
-}
-
-.ref-link-container {
-    background: var(--bg-soft);
-    border-radius: var(--radius-pill);
-    padding: 5px;
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    margin-top: 20px;
-}
-.ref-link-text {
-    padding-left: 15px;
-    font-family: monospace;
-    color: var(--text-dim);
-}
-.ref-buttons {
-    display: flex;
-    gap: 5px;
-}
-.btn-icon {
-    background: var(--card);
-    border: none;
-    width: 44px;
-    height: 44px;
-    border-radius: 50%;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    color: var(--text);
-    cursor: pointer;
-    transition: background-color var(--dur-md), box-shadow var(--dur-md);
-}
-.btn-icon:hover {
-    background-color: var(--accent);
-    box-shadow: 0 0 15px var(--accent);
-}
-
-.friends-list {
-    display: flex;
-    flex-direction: column;
-    gap: 15px;
-}
-.friend-item {
-    display: flex;
-    align-items: center;
-    gap: 12px;
-}
-.friend-avatar {
-    font-size: 1.5rem;
-}
-.friend-name {
-    flex-grow: 1;
-    font-weight: 600;
-}
-.friend-bonus {
-    font-weight: 600;
-}
-.friend-bonus.success { color: var(--success); }
-.friend-bonus.pending { color: var(--muted); }
-
-/* --- 8. Стили Экрана "Профиль" (4.3) --- */
-.profile-header {
-    text-align: center;
-    margin-bottom: 25px;
-}
-.profile-avatar-wrapper {
-    position: relative;
-    width: 100px;
-    height: 100px;
-    margin: 0 auto 15px;
-}
-.profile-avatar {
-    width: 100%;
-    height: 100%;
-    border-radius: 50%;
-    box-shadow: 0 0 25px rgba(138, 124, 255, 0.6);
-}
-.profile-name {
-    font-size: 1.5rem;
-    font-weight: 700;
-    margin: 0 0 8px 0;
-}
-.profile-level {
-    color: var(--text-dim);
-}
-.progress-bar-sm {
-    width: 120px;
-    height: 6px;
-    background: var(--bg-soft);
-    border-radius: var(--radius-pill);
-    overflow: hidden;
-    margin: 5px auto 0;
-}
-.progress-bar-inner-sm {
-    height: 100%;
-    background: linear-gradient(135deg, var(--primary-1), var(--primary-2));
-    border-radius: var(--radius-pill);
-}
-
-.balance-container {
-    text-align: center;
-}
-.balance-value-large {
-    font-size: 2.8rem;
-    font-weight: 700;
-    line-height: 1;
-}
-.balance-currency {
-    font-size: 2rem;
-    color: var(--muted);
-}
-
-.achievements-grid {
-    display: grid;
-    grid-template-columns: repeat(auto-fill, minmax(50px, 1fr));
-    gap: 15px;
-    justify-content: center;
-}
-.achievement {
-    width: 50px;
-    height: 50px;
-    border-radius: 50%;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    font-size: 1.8rem;
-    background: var(--bg-soft);
-    filter: grayscale(100%) blur(2px);
-    opacity: 0.5;
-    transition: all var(--dur-md);
-}
-.achievement.unlocked {
-    filter: none;
-    opacity: 1;
-    background: var(--card);
-    box-shadow: 0 0 15px rgba(138, 124, 255, 0.2), inset 0 0 0 1px var(--accent);
-}
-
-.history-list { display: flex; flex-direction: column; gap: 12px; }
-.history-item { display: flex; justify-content: space-between; align-items: center; }
-.history-type { font-weight: 600; }
-.history-details { text-align: right; }
-.history-amount { display: block; font-weight: 700; }
-.history-date { font-size: 0.8rem; color: var(--muted); }
-
-/* --- 9. Стили Экрана "Настройки" (4.4) --- */
-.settings-list {
-    display: flex;
-    flex-direction: column;
-    gap: 20px;
-}
-.setting-item {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-}
-.setting-item label:first-child {
-    font-weight: 600;
-}
-
-.segmented-control {
-    display: flex;
-    background: var(--bg-soft);
-    border-radius: var(--radius-pill);
-    padding: 4px;
-}
-.segmented-control button {
-    background: transparent;
-    border: none;
-    color: var(--text-dim);
-    padding: 6px 16px;
-    border-radius: var(--radius-pill);
-    font-weight: 600;
-    cursor: pointer;
-    transition: all var(--dur-md);
-}
-.segmented-control button.active {
-    background: var(--card);
-    color: var(--text);
-    box-shadow: 0 2px 5px rgba(0,0,0,0.2);
-}
-.segmented-control button:disabled {
-    color: var(--muted);
-    cursor: not-allowed;
-}
-
-.settings-links {
-    display: flex;
-    flex-direction: column;
-    gap: 15px;
-}
-.settings-links a {
-    color: var(--accent);
-    text-decoration: none;
-    font-weight: 600;
-}
-
-
-/* --- 10. ✨ НОВЫЕ СТИЛИ ДЛЯ ВАУ-ЭФФЕКТОВ --- */
-
-/* 10.1 Волны от клика (Ripple) */
-.ripple-effect {
-    position: absolute;
-    border-radius: 50%;
-    background-color: rgba(255, 255, 255, 0.4);
-    transform: scale(0);
-    animation: ripple-animation 0.6s ease-out;
-    pointer-events: none;
-}
-
-@keyframes ripple-animation {
-    to {
-        transform: scale(4);
-        opacity: 0;
-    }
-}
-
-
-/* 10.2 Удаляем старый стиль конфетти (он теперь на canvas) */
-/* .confetti { ... } - этот блок удален */
-
-
-/* --- 11. РЕЖИМ НИЗКОЙ ПРОИЗВОДИТЕЛЬНОСТИ --- */
-
-/* Отключаем дорогой эффект размытия */
-.low-perf .app-header,
-.low-perf .bottom-nav,
-.low-perf .glassmorphism-card,
-.low-perf .btn-secondary,
-.low-perf .switch-track,
-.low-perf .modal-backdrop {
-    backdrop-filter: none !important;
-    -webkit-backdrop-filter: none !important;
-}
-
-.low-perf .app-header,
-.low-perf .bottom-nav {
-    background-color: rgba(11, 14, 18, 0.92);
-}
-
-/* Упрощаем тени и свечение */
-.low-perf .card,
-.low-perf .splash-logo,
-.low-perf .btn-primary,
-.low-perf .game-card:hover,
-.low-perf .game-card.selected,
-.low-perf .profile-avatar,
-.low-perf .achievement.unlocked {
-    box-shadow: 0 4px 12px rgba(0,0,0,.3), inset 0 0 0 1px rgba(255,255,255,.04);
-    filter: none;
-}
-
-/* Значительно сокращаем или отключаем все анимации и переходы */
-.low-perf *,
-.low-perf *::before,
-.low-perf *::after {
-    transition-duration: 0.01ms !important;
-    animation-duration: 0.01ms !important;
-    animation-iteration-count: 1 !important;
-}
-/* Отключаем анимацию градиента */
-.low-perf .btn-primary {
-    animation: none;
-}
-
-
-/* --- 13. Скелет-загрузки (Skeletons) --- */
-.skeleton {
-    background-color: var(--bg-soft);
-    position: relative;
-    overflow: hidden;
-}
-
-.skeleton::after {
-    content: '';
-    position: absolute;
-    top: 0;
-    left: 0;
-    right: 0;
-    bottom: 0;
-    transform: translateX(-100%);
-    background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.05), transparent);
-    animation: skeleton-shimmer 1.5s infinite;
-}
-
-@keyframes skeleton-shimmer {
-    100% {
-        transform: translateX(100%);
-    }
-}
-
-.skeleton-pulse {
-    background-color: var(--bg-soft);
-    animation: skeleton-pulse 1.2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
-}
-
-@keyframes skeleton-pulse {
-    50% {
-        opacity: 0.85;
-    }
-}
-
-/* --- 14. НОВОЕ: Обучение при первом запуске --- */
-.tutorial-overlay {
-    position: fixed;
-    top: 0;
-    left: 0;
-    width: 100%;
-    height: 100%;
-    background: rgba(0, 0, 0, 0.6);
-    backdrop-filter: blur(8px);
-    -webkit-backdrop-filter: blur(8px);
-    z-index: 5000;
-    display: flex;
-    justify-content: center;
-    align-items: center;
-    padding: 20px;
-    box-sizing: border-box;
-    opacity: 1;
-    animation: fade-in 0.4s var(--ease-out);
-}
-
-.tutorial-overlay.fade-out {
-    animation: fade-out 0.3s var(--ease-out) forwards;
-}
-
-.tutorial-card {
-    background: var(--card);
-    border-radius: var(--radius-xl);
-    padding: 30px 25px;
-    text-align: center;
-    max-width: 320px;
-    box-shadow: var(--shadow-soft);
-    border: 1px solid rgba(255, 255, 255, 0.08);
-    transform: scale(0.95);
-    opacity: 0;
-    animation: card-pop-in 0.5s var(--ease-spring) 0.2s forwards;
-}
-
-@keyframes fade-in {
-    from { opacity: 0; }
-    to { opacity: 1; }
-}
-@keyframes fade-out {
-    from { opacity: 1; }
-    to { opacity: 0; }
-}
-
-@keyframes card-pop-in {
-    from { transform: scale(0.95); opacity: 0; }
-    to { transform: scale(1); opacity: 1; }
-}
-
-.tutorial-icon {
-    font-size: 3rem;
-    line-height: 1;
-    margin-bottom: 15px;
-    animation: icon-bounce 2s infinite ease-in-out;
-}
-
-@keyframes icon-bounce {
-    0%, 100% { transform: translateY(0); }
-    50% { transform: translateY(-10px); }
-}
-
-.tutorial-card h2 {
-    margin-bottom: 10px;
-    font-size: 1.4rem;
-}
-
-.tutorial-card p {
-    color: var(--text-dim);
-    margin-bottom: 25px;
-}
-
-/* --- 15. НОВОЕ: СТИЛИ ДЛЯ ЭКРАНА TAPER --- */
-
+/* --- 15. СТИЛИ ДЛЯ ЭКРАНА TAPER (2D-версия) --- */
 .tapper-wrapper {
-    width: 100%;
-    height: 100%;
-    display: flex;
-    flex-direction: column;
-    justify-content: space-between;
-    align-items: center;
+    width: 100%; height: 100%; display: flex; flex-direction: column;
+    justify-content: space-between; align-items: center;
 }
-
 .tapper-balance-container {
-    text-align: center;
-    margin-top: 10%;
-    display: flex;
-    align-items: center;
-    font-family: var(--font-mono);
-    font-size: 2.8rem;
-    font-weight: 700;
-    color: var(--text);
-    perspective: 400px;
+    text-align: center; margin-top: 10%; display: flex; align-items: center;
+    font-family: var(--font-mono); font-size: 2.8rem; font-weight: 700;
 }
-.tapper-balance-icon {
-    margin-right: 12px;
-    font-size: 2.4rem;
-}
+.tapper-balance-icon { margin-right: 12px; font-size: 2.4rem; }
+.flip-char { display: inline-block; position: relative; width: 0.6em; height: 1em; line-height: 1em; }
+.flip-char-inner { position: absolute; width: 100%; height: 100%; transition: transform 0.6s cubic-bezier(0.2, 1, 0.3, 1); transform-style: preserve-3d; }
+.flip-char.animate .flip-char-inner { transform: rotateX(-180deg); }
+.flip-char-front, .flip-char-back { position: absolute; width: 100%; height: 100%; backface-visibility: hidden; }
+.flip-char-back { transform: rotateX(180deg); }
 
-/* Flip Counter */
-.flip-char {
-    display: inline-block;
-    position: relative;
-    width: 0.6em; /* Ширина одного символа */
-    height: 1em;
-    line-height: 1em;
-    text-align: center;
-}
-.flip-char-inner {
-    position: absolute;
-    left: 0;
-    top: 0;
-    width: 100%;
-    height: 100%;
-    transition: transform 0.6s cubic-bezier(0.2, 1, 0.3, 1);
-    transform-style: preserve-3d;
-}
-.flip-char.animate .flip-char-inner {
-    transform: rotateX(-180deg);
-}
-.flip-char-front, .flip-char-back {
-    position: absolute;
-    left: 0;
-    top: 0;
-    width: 100%;
-    height: 100%;
-    -webkit-backface-visibility: hidden;
-    backface-visibility: hidden;
-}
-.flip-char-back {
-    transform: rotateX(180deg);
-}
-
-/* 3D Canvas */
-.tapper-canvas-container {
-    width: 100%;
-    flex-grow: 1;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    position: relative;
-    touch-action: none; /* Отключаем стандартное поведение тач-событий */
-}
-
-#tapper-3d-canvas {
-    display: block;
-    width: 100%;
-    height: 100%;
+.tapper-star-container {
+    width: 100%; flex-grow: 1; display: flex;
+    align-items: center; justify-content: center;
+    position: relative; user-select: none;
     cursor: pointer;
 }
-
-.tapper-energy-info {
-    width: 100%;
-    height: 60px; /* Резервируем место */
+.star-2d {
+    width: 250px;
+    height: 250px;
+    background: radial-gradient(circle, #ffd700 0%, #ffb700 100%);
+    clip-path: polygon(50% 0%, 61% 35%, 98% 35%, 68% 57%, 79% 91%, 50% 70%, 21% 91%, 32% 57%, 2% 35%, 39% 35%);
+    filter: drop-shadow(0 0 35px rgba(255, 190, 0, 0.6));
+    transition: transform 0.15s cubic-bezier(0.22, 1, 0.36, 1);
 }
-
-
-/* Floating +1 Text and Particle Burst */
-.tap-feedback-container {
-    position: fixed;
-    top: 0;
-    left: 0;
-    pointer-events: none;
-    z-index: 100;
+.star-2d.tapped {
+    transform: scale(0.92);
 }
+.tapper-energy-info { width: 100%; height: 60px; }
+
+/* Эффекты тапа */
+.tap-feedback-container { position: fixed; top: 0; left: 0; pointer-events: none; z-index: 100; }
 .floating-text-new {
-    position: absolute;
-    font-size: 1.5rem;
-    font-weight: 700;
-    color: var(--text);
+    position: absolute; font-size: 2rem; font-weight: 700; color: var(--text);
     text-shadow: 0 0 10px var(--primary-1);
-    animation: float-up-and-out 0.7s var(--ease-out) forwards;
-    will-change: transform, opacity;
+    animation: float-up-and-out 1s var(--ease-out) forwards;
 }
 @keyframes float-up-and-out {
-    0% {
-        transform: translate(-50%, -50%) scale(0.8);
-        opacity: 1;
-    }
-    30% {
-        transform: translate(-50%, -50%) scale(1.1);
-    }
-    100% {
-        transform: var(--fly-to-x) var(--fly-to-y) scale(0.5);
-        opacity: 0;
-    }
+    0% { transform: translate(-50%, -50%) scale(1); opacity: 1; }
+    100% { transform: translate(-50%, -200px) scale(1); opacity: 0; }
 }
 
-.particle-burst {
-    position: absolute;
-    width: 2px;
-    height: 2px;
-    background: var(--primary-1);
-    border-radius: 50%;
-    animation: particle-explode 0.6s ease-out forwards;
-    will-change: transform, opacity;
+/* --- Остальные стили для UI Kit и других экранов (без изменений) --- */
+.games-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 14px; }
+@media (max-width: 340px) { .games-grid { grid-template-columns: 1fr; } }
+.game-card {
+    background: var(--card); border-radius: var(--radius-lg); padding: 15px; aspect-ratio: 1 / 1.1;
+    display: flex; flex-direction: column; justify-content: center; align-items: center;
+    text-align: center; cursor: pointer; transition: transform var(--dur-md), box-shadow var(--dur-md);
+    box-shadow: inset 0 0 0 1px rgba(255,255,255,.04);
 }
-@keyframes particle-explode {
-    from {
-        transform: translate(-50%, -50%) scale(1);
-        opacity: 1;
-    }
-    to {
-        transform: translate(var(--tx), var(--ty)) scale(0);
-        opacity: 0;
-    }
+.game-card-icon { height: 48px; width: 48px; margin-bottom: 10px; display: flex; align-items: center; justify-content: center; }
+.game-card-icon svg { width: 100%; height: 100%; }
+.game-card-title { font-weight: 600; }
+.game-card-info { font-size: 0.8rem; color: var(--muted); }
+.game-card:hover { transform: translateY(-4px); box-shadow: 0 0 20px rgba(138, 124, 255, 0.2); }
+.game-card.selected { transform: translateY(-4px); box-shadow: 0 0 30px rgba(138, 124, 255, 0.5), inset 0 0 0 1px var(--accent); }
+.play-bar { position: absolute; bottom: calc(65px + var(--safe-area-inset-bottom)); left: 15px; right: 15px; transform: translateY(150%); transition: transform var(--dur-slow) var(--ease-out); }
+.play-bar.visible { transform: translateY(0); }
+.tutorial-overlay {
+    position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+    background: rgba(0, 0, 0, 0.6); backdrop-filter: blur(8px);
+    z-index: 5000; display: flex; justify-content: center; align-items: center;
+    padding: 20px; animation: fade-in 0.4s var(--ease-out);
 }
+.tutorial-overlay.fade-out { animation: fade-out 0.3s var(--ease-out) forwards; }
+.tutorial-card {
+    background: var(--card); border-radius: var(--radius-xl); padding: 30px 25px;
+    text-align: center; max-width: 320px; box-shadow: var(--shadow-soft);
+    transform: scale(0.95); opacity: 0; animation: card-pop-in 0.5s var(--ease-spring) 0.2s forwards;
+}
+@keyframes fade-in { from { opacity: 0; } to { opacity: 1; } }
+@keyframes fade-out { from { opacity: 1; } to { opacity: 0; } }
+@keyframes card-pop-in { from { transform: scale(0.95); opacity: 0; } to { transform: scale(1); opacity: 1; } }
+.tutorial-icon { font-size: 3rem; margin-bottom: 15px; animation: icon-bounce 2s infinite ease-in-out; }
+@keyframes icon-bounce { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(-10px); } }

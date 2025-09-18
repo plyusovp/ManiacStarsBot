@@ -1,5 +1,4 @@
-// --- ИЗМЕНЕНА СТРУКТУРА ИМПОРТОВ ---
-// Экраны
+// --- Экраны ---
 import * as taper from './ui/components/screens/taper.js';
 import * as games from './ui/components/screens/games.js';
 import * as referrals from './ui/components/screens/referrals.js';
@@ -7,14 +6,14 @@ import * as profile from './ui/components/screens/profile.js';
 import * as settings from './ui/components/screens/settings.js';
 import * as uikit from './ui/components/screens/uikit.js';
 
-// Игры (статический импорт для решения проблемы с локальным запуском)
+// --- Игры (статический импорт для надежности) ---
 import * as coinGame from './games/coin.js';
 import * as crashGame from './games/crash.js';
 import * as diceGame from './games/dice.js';
 import * as slotsGame from './games/slots.js';
 
 
-// Ядро
+// --- Ядро ---
 import { getBalance, fmt, isFirstLaunch, setVisited } from './core/state.js';
 import * as audio from './core/audio.js';
 import { hapticFeedback } from './core/utils.js';
@@ -23,7 +22,7 @@ import { isLowPerfDevice } from './core/performance.js';
 import * as i18n from './core/i18n.js';
 import * as effects from './core/effects.js';
 
-// --- КОНФИГУРАЦИЯ ---
+// --- Конфигурация ---
 const routes = {
     '/taper': taper,
     '/games': games,
@@ -33,7 +32,6 @@ const routes = {
     '/uikit': uikit,
 };
 
-// Карта игровых модулей для роутера
 const gameModules = {
     'coin': coinGame,
     'crash': crashGame,
@@ -59,25 +57,16 @@ const DOMElements = {
 const themeManager = {
     THEME_KEY: 'mg.theme',
     currentTheme: 'dark',
-
     init() {
         this.currentTheme = localStorage.getItem(this.THEME_KEY) || 'dark';
         this.applyTheme(this.currentTheme);
-
-        window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', e => {
-            if (this.currentTheme === 'system') {
-                this._applyActualTheme(this.getSystemTheme());
-            }
-        });
     },
-
     applyTheme(theme) {
         this.currentTheme = theme;
         localStorage.setItem(this.THEME_KEY, theme);
         let themeToApply = theme === 'system' ? this.getSystemTheme() : theme;
         this._applyActualTheme(themeToApply);
     },
-
     _applyActualTheme(theme) {
         document.documentElement.setAttribute('data-theme', theme);
         if(window.ManiacGames && window.ManiacGames.tg) {
@@ -85,16 +74,13 @@ const themeManager = {
              window.ManiacGames.tg.setBackgroundColor(theme === 'dark' ? '#0B0E12' : '#F0F2F5');
         }
     },
-
     getSystemTheme() {
         return window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
     },
-
     getCurrentTheme() { return this.currentTheme; }
 };
 
-
-// --- UI-ХЕЛПЕРЫ ---
+// --- UI-Хелперы ---
 const updateBalanceDisplay = () => {
     DOMElements.balanceValue.textContent = fmt(getBalance());
 };
@@ -107,14 +93,13 @@ const showToast = (message, type = 'info') => {
     }
 };
 
-
-// --- ИСПРАВЛЕНО: Новая система навигации ---
+// --- Система навигации ---
 async function navigateTo(path) {
     let gameId = null;
 
     if (path.startsWith('/game/')) {
         gameId = path.split('/')[2];
-        path = '/game'; // Общий маршрут для всех игр
+        path = '/game';
     }
 
     if (currentView && currentView.unmount) {
@@ -128,7 +113,7 @@ async function navigateTo(path) {
         viewModule = gameModules[gameId];
         if (!viewModule) {
             console.error(`Game module not found: ${gameId}`);
-            navigateTo('/games'); // Редирект на список игр
+            navigateTo('/games');
             return;
         }
     } else {
@@ -137,17 +122,15 @@ async function navigateTo(path) {
 
     if (viewModule) {
         currentView = viewModule;
-        // Сохраняем путь для перезагрузки языка
         currentView.path = path;
         const title = viewModule.titleKey ? i18n.t(viewModule.titleKey) : (viewModule.title || '');
         DOMElements.headerTitle.textContent = title;
         DOMElements.mainContent.className = 'main-content view';
         currentView.mount(DOMElements.mainContent);
     } else {
-        navigateTo('/taper'); // Фоллбэк на главный экран
+        navigateTo('/taper'); // Фоллбэк
     }
 
-    // Обновляем активную иконку в навигации
     document.querySelectorAll('.nav-item').forEach(item => {
         const itemPath = item.dataset.path;
         item.classList.toggle('active', itemPath === path || (path === '/game' && itemPath === '/games'));
@@ -157,14 +140,12 @@ async function navigateTo(path) {
 async function changeLanguage(lang) {
     await i18n.setLanguage(lang);
     generateNavigation();
-    // Перерисовываем текущий экран с новым языком
     if (currentView && currentView.path) {
         navigateTo(currentView.path);
     }
 }
 
-
-// --- ГЕНЕРАЦИЯ НАВИГАЦИИ ---
+// --- Генерация навигации ---
 function generateNavigation() {
     const navItems = [
         { path: '/taper', icon: 'star', labelKey: 'nav_main' },
@@ -202,17 +183,13 @@ function bindNavEventListeners() {
     });
 }
 
-
-// --- ОБУЧЕНИЕ ПРИ ПЕРВОМ ЗАПУСКЕ ---
+// --- Обучение при первом запуске ---
 function showFirstLaunchTutorial() {
-    if (!isFirstLaunch()) {
-        return;
-    }
+    if (!isFirstLaunch()) return;
 
     const tutorialOverlay = document.createElement('div');
     tutorialOverlay.id = 'tutorial-overlay';
     tutorialOverlay.className = 'tutorial-overlay';
-
     tutorialOverlay.innerHTML = `
         <div class="tutorial-card">
             <div class="tutorial-icon">⭐</div>
@@ -221,12 +198,9 @@ function showFirstLaunchTutorial() {
             <button id="tutorial-close-btn" class="btn btn-primary">Понятно!</button>
         </div>
     `;
-
     document.body.appendChild(tutorialOverlay);
-
     const closeBtn = document.getElementById('tutorial-close-btn');
     effects.applyRippleEffect(closeBtn);
-
     closeBtn.addEventListener('click', () => {
         tutorialOverlay.classList.add('fade-out');
         hapticFeedback('medium');
@@ -238,24 +212,21 @@ function showFirstLaunchTutorial() {
     });
 }
 
-
-// --- ИНИЦИАЛИЗАЦИЯ ПРИЛОЖЕНИЯ ---
+// --- Инициализация приложения ---
 const initApp = async () => {
      try {
-        const settingsPromise = i18n.init();
+        await i18n.init(); // Ждем загрузки переводов
         themeManager.init();
 
         const lowPerf = isLowPerfDevice();
         if (lowPerf) {
             document.body.classList.add('low-perf');
-            console.log("Low performance mode enabled.");
         }
-        
+
         try {
             tg = window.Telegram.WebApp;
             tg.ready();
             tg.expand();
-            console.log("Telegram WebApp API initialized.");
         } catch (e) {
             console.warn("Telegram WebApp API not found. Running in dev mode.");
         }
@@ -264,8 +235,6 @@ const initApp = async () => {
         if (!lowPerf) {
             requestAnimationFrame(particles.loop);
         }
-        
-        await settingsPromise;
 
         window.ManiacGames = {
             updateBalance: updateBalanceDisplay,
@@ -294,15 +263,12 @@ const initApp = async () => {
         setTimeout(showFirstLaunchTutorial, 400);
      } catch (e) {
         console.error("Critical error during app initialization:", e);
-        document.body.innerHTML = `<div style="color: white; padding: 20px; font-family: monospace; word-break: break-all;">
-            <h3>Критическая ошибка</h3>
-            <p>Не удалось запустить приложение.</p>
-            <p><b>Сообщение:</b> ${e.message}</p>
-            <hr>
-            <p><b>Стек вызовов:</b><br>${e.stack}</p>
-        </div>`;
+        DOMElements.app.innerHTML = `<div style="color: white; padding: 20px; font-family: monospace; word-break: break-all;">
+            <h3>Критическая ошибка</h3><p>Не удалось запустить приложение. Проверьте консоль разработчика (F12) для деталей.</p><p><b>Ошибка:</b> ${e.message}</p></div>`;
+        DOMElements.splash.remove();
+        DOMElements.app.classList.remove('hidden');
     }
  };
- 
-// --- Точка входа в приложение ---
+
+// --- Точка входа ---
 document.addEventListener('DOMContentLoaded', initApp);
