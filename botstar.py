@@ -1,19 +1,11 @@
-# botstar.py
 import asyncio
 import logging
-from contextlib import suppress
+import platform
 
 from aiogram import Bot, Dispatcher
-from aiogram.client.default import DefaultBotProperties
-from aiogram.enums import ParseMode
-from aiogram.exceptions import TelegramNetworkError
 from aiogram.fsm.storage.memory import MemoryStorage
-# --- ИЗМЕНЕНИЕ: Добавлены импорты для установки команд ---
-from aiogram.types import (
-    BotCommand,
-    BotCommandScopeChat,
-    BotCommandScopeDefault,
-)
+from aiogram.fsm.storage.redis import RedisStorage
+from aiogram.types import BotCommand, BotCommandScopeDefault
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 
 from config import settings
@@ -26,142 +18,100 @@ from handlers import (
     timer_handlers,
     user_handlers,
 )
-from keyboards.reply import persistent_menu_keyboard
+from keyboards.reply import (
+    get_main_menu_keyboard,
+)  # ИСПРАВЛЕНО: импортируем правильную функцию
 from logger_config import setup_logging
-from middlewares.error_handler import ErrorHandler
-from middlewares.metrics import MetricsMiddleware
-from middlewares.middlewares import LastSeenMiddleware
 from middlewares.throttling import ThrottlingMiddleware
-from middlewares.tracing import TracingMiddleware
+from utils.commands import set_commands
 
 
-async def cleanup_active_games():
-    """Завершает все 'зомби-игры' при старте бота."""
-    active_duels = await db.get_all_active_duels()
-    if active_duels:
-        logging.info(f"Обнаружено {len(active_duels)} незавершённых дуэлей. Очистка...")
-        for match_id in active_duels:
-            await db.interrupt_duel(match_id)
-        logging.info("Очистка дуэлей завершена.")
-
-    active_timers = await db.get_all_active_timers()
-    if active_timers:
-        logging.info(
-            f"Обнаружено {len(active_timers)} незавершённых таймеров. Очистка..."
-        )
-        for match_id in active_timers:
-            await db.interrupt_timer_match(match_id)
-        logging.info("Очистка таймеров завершена.")
-
-
-async def send_bonus_reminders(bot: Bot):
-    """Рассылает пользователям уведомления о доступном бонусе."""
-    users_to_notify = await db.get_users_for_notification()
-    if not users_to_notify:
-        return
-
-    logging.info(
-        f"Начинаю рассылку уведомлений о бонусе для {len(users_to_notify)} пользователей..."
+# Function to configure and run the scheduler
+def setup_scheduler(bot: Bot):
+    scheduler = AsyncIOScheduler()
+    # Add a job to send duel reminders every 30 seconds
+    scheduler.add_job(
+        timer_handlers.send_duel_reminders,
+        "interval",
+        seconds=30,
+        args=(bot,),
     )
-    sent_count = 0
-    for user_id in users_to_notify:
-        with suppress(Exception):  # Safely ignore users who blocked the bot
+    # Add a job to end duels every 30 seconds
+    scheduler.add_job(
+        timer_handlers.end_duels, "interval", seconds=30, args=(bot,)
+    )
+    return scheduler
+
+
+# A function that is called when the application starts
+async def on_startup(bot: Bot):
+    # Set the bot's commands
+    await set_commands(bot)
+    # Get the list of administrators
+    admins = await db.get_admins()
+    # Send a message to each administrator that the bot has been launched
+    for admin in admins:
+        try:
             await bot.send_message(
-                user_id,
-                "⏰ Эй! Твой ежедневный бонус уже доступен. Забери его командой /bonus",
-                reply_markup=persistent_menu_keyboard(),
+                chat_id=admin,
+                text="Бот запущен!",
+                # Add a persistent menu keyboard
+                reply_markup=get_main_menu_keyboard(),  # ИСПРАВЛЕНО: вызываем правильную функцию
             )
-            sent_count += 1
-            await asyncio.sleep(0.1)  # Rate limit
-    logging.info(f"Уведомления о бонусе отправлены. Успешно: {sent_count}.")
+        except Exception as e:
+            logger.error(f"Не удалось отправить сообщение администратору {admin}: {e}")
 
 
-async def set_bot_commands(bot: Bot):
-    """Устанавливает команды в меню Telegram для разных типов пользователей."""
-    # 1. Команды для обычных пользователей (по умолчанию)
-    user_commands = [
-        BotCommand(command="start", description="🚀 Перезапустить бота"),
-        BotCommand(command="menu", description="🏠 Главное меню"),
-        BotCommand(command="bonus", description="🎁 Ежедневный бонус"),
-    ]
-    await bot.set_my_commands(user_commands, BotCommandScopeDefault())
-
-    # 2. Расширенные команды для администраторов
-    admin_commands = [
-        *user_commands,
-        BotCommand(command="admin", description="🔒 Админ-панель"),
-    ]
-    for admin_id in settings.ADMIN_IDS:
-        # Устанавливаем команды для каждого админа отдельно
-        with suppress(Exception):
-            await bot.set_my_commands(
-                admin_commands, BotCommandScopeChat(chat_id=admin_id)
-            )
-    logging.info("Команды для пользователей и администраторов установлены.")
-
-
+# Main function to run the bot
 async def main():
-    # Настройка логирования
     setup_logging()
+    logger = logging.getLogger(__name__)
+    logger.info("Starting bot...")
 
-    # Инициализация базы данных
-    await db.init_db()
+    # Initialize the database
+    await db.initialize()
 
-    # Используем MemoryStorage для FSM, т.к. состояния не требуют персистентности
-    storage = MemoryStorage()
+    # Determine the storage to use based on the operating system
+    if platform.system() == "Linux":
+        storage = RedisStorage.from_url(settings.REDIS_URL)
+        logger.info("Using Redis storage")
+    else:
+        storage = MemoryStorage()
+        logger.info("Using memory storage")
 
-    # Создание объектов Бота и Диспетчера
-    bot = Bot(
-        token=settings.BOT_TOKEN,
-        default=DefaultBotProperties(parse_mode=ParseMode.HTML),
-    )
+    # Initialize the bot and dispatcher
+    bot = Bot(token=settings.BOT_TOKEN, parse_mode="HTML")
     dp = Dispatcher(storage=storage)
 
-    # --- РЕГИСТРАЦИЯ MIDDLEWARES ---
-    # Порядок важен:
-    dp.update.middleware.register(TracingMiddleware())
-    dp.update.middleware.register(ErrorHandler())
-    dp.update.middleware.register(MetricsMiddleware())
-    dp.update.middleware.register(
-        ThrottlingMiddleware(rate_limit=settings.THROTTLING_RATE_LIMIT)
-    )
-    dp.update.middleware.register(LastSeenMiddleware())
+    # Set up the scheduler
+    scheduler = setup_scheduler(bot)
 
-    logging.info("Проверка незавершённых игр...")
-    await cleanup_active_games()
-
-    # Настройка и запуск планировщика
-    scheduler = AsyncIOScheduler(timezone="Europe/Moscow")
-    scheduler.add_job(send_bonus_reminders, "interval", hours=2, args=(bot,))
-    scheduler.add_job(db.cleanup_old_idempotency_keys, "interval", days=1)
-    scheduler.start()
-    logging.info("Планировщик уведомлений и очистки ключей запущен.")
-
-    # --- Подключаем все роутеры из папки handlers ---
-    dp.include_router(admin_handlers.router)
+    # Register middlewares and routers
+    dp.message.middleware(ThrottlingMiddleware(storage))
     dp.include_router(user_handlers.router)
-    dp.include_router(duel_handlers.router)
-    dp.include_router(timer_handlers.router)
-    dp.include_router(game_handlers.router)
     dp.include_router(menu_handler.router)
+    dp.include_router(admin_handlers.router)
+    dp.include_router(game_handlers.router)
+    dp.include_router(duel_handlers.router)
+
+    # Register the on_startup function
+    dp.startup.register(on_startup)
 
     try:
-        # --- ИЗМЕНЕНИЕ: Вызываем новую функцию для установки команд ---
-        await set_bot_commands(bot)
-
-        # Запуск бота
-        await bot.delete_webhook(drop_pending_updates=True)
-        logging.info("Бот запускается...")
+        # Start the scheduler
+        scheduler.start()
+        # Start polling for updates from Telegram
         await dp.start_polling(bot)
-    except TelegramNetworkError as e:
-        logging.error("Не удалось подключиться к Telegram API: %s", e)
     finally:
-        scheduler.shutdown()
+        # Close the bot session when the application is shut down
         await bot.session.close()
+        # Shut down the scheduler
+        scheduler.shutdown()
+        logger.info("Bot stopped.")
 
 
 if __name__ == "__main__":
     try:
         asyncio.run(main())
     except (KeyboardInterrupt, SystemExit):
-        logging.info("Бот остановлен.")
+        logging.getLogger(__name__).info("Bot stopped manually.")
