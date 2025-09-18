@@ -73,7 +73,8 @@ async def main():
     logger.info("Starting bot...")
 
     # Initialize the database
-    await db.initialize()
+    # ИСПРАВЛЕНИЕ: Вызываем create_tables() вместо initialize()
+    await db.create_tables()
 
     # Determine the storage to use based on the operating system
     if platform.system() == "Linux":
@@ -119,3 +120,4 @@ if __name__ == "__main__":
         asyncio.run(main())
     except (KeyboardInterrupt, SystemExit):
         logging.getLogger(__name__).info("Bot stopped manually.")
+
