@@ -23,9 +23,10 @@ from keyboards.reply import (
 )
 from logger_config import setup_logging
 from middlewares.throttling import ThrottlingMiddleware
-from utils.commands import set_commands
+# ИСПРАВЛЕНИЕ: Импортируем правильную функцию
+from utils.commands import set_bot_commands
 
-# ИСПРАВЛЕНО: Определяем логгер в глобальной области видимости
+# Определяем логгер в глобальной области видимости
 logger = logging.getLogger(__name__)
 
 
@@ -49,7 +50,8 @@ def setup_scheduler(bot: Bot):
 # A function that is called when the application starts
 async def on_startup(bot: Bot):
     # Set the bot's commands
-    await set_commands(bot)
+    # ИСПРАВЛЕНИЕ: Вызываем правильную функцию
+    await set_bot_commands(bot)
     # Get the list of administrators
     admins = await db.get_admins()
     # Send a message to each administrator that the bot has been launched
@@ -117,4 +119,3 @@ if __name__ == "__main__":
         asyncio.run(main())
     except (KeyboardInterrupt, SystemExit):
         logging.getLogger(__name__).info("Bot stopped manually.")
-
