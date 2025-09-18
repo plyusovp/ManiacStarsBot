@@ -1,274 +1,200 @@
-// --- Экраны ---
-import * as taper from './ui/components/screens/taper.js';
-import * as games from './ui/components/screens/games.js';
-import * as referrals from './ui/components/screens/referrals.js';
-import * as profile from './ui/components/screens/profile.js';
-import * as settings from './ui/components/screens/settings.js';
-import * as uikit from './ui/components/screens/uikit.js';
+(function () {
+    'use strict';
 
-// --- Игры (статический импорт для надежности) ---
-import * as coinGame from './games/coin.js';
-import * as crashGame from './games/crash.js';
-import * as diceGame from './games/dice.js';
-import * as slotsGame from './games/slots.js';
+    // Глобальный объект приложения для хранения всех "модулей"
+    const Maniac = {};
 
+    // --- Core: state.js ---
+    Maniac.state = (function() {
+        const BALANCE_KEY = 'mg.balance';
+        const STATS_KEY = 'mg.stats';
+        const VISITED_KEY = 'mg.visited';
+        const STARTING_BALANCE = 1000;
 
-// --- Ядро ---
-import { getBalance, fmt, isFirstLaunch, setVisited } from './core/state.js';
-import * as audio from './core/audio.js';
-import { hapticFeedback } from './core/utils.js';
-import * as particles from './core/particles.js';
-import { isLowPerfDevice } from './core/performance.js';
-import * as i18n from './core/i18n.js';
-import * as effects from './core/effects.js';
-
-// --- Конфигурация ---
-const routes = {
-    '/taper': taper,
-    '/games': games,
-    '/referrals': referrals,
-    '/profile': profile,
-    '/settings': settings,
-    '/uikit': uikit,
-};
-
-const gameModules = {
-    'coin': coinGame,
-    'crash': crashGame,
-    'dice': diceGame,
-    'slots': slotsGame
-};
-
-let currentView = null;
-let tg;
-
-// --- DOM-элементы ---
-const DOMElements = {
-    app: document.getElementById('app'),
-    splash: document.getElementById('splash-screen'),
-    headerTitle: document.getElementById('header-title'),
-    balanceValue: document.getElementById('balance-value'),
-    mainContent: document.getElementById('main-content'),
-    navContainer: document.getElementById('bottom-nav'),
-    particleCanvas: document.getElementById('particle-canvas'),
-};
-
-// --- Менеджер тем ---
-const themeManager = {
-    THEME_KEY: 'mg.theme',
-    currentTheme: 'dark',
-    init() {
-        this.currentTheme = localStorage.getItem(this.THEME_KEY) || 'dark';
-        this.applyTheme(this.currentTheme);
-    },
-    applyTheme(theme) {
-        this.currentTheme = theme;
-        localStorage.setItem(this.THEME_KEY, theme);
-        let themeToApply = theme === 'system' ? this.getSystemTheme() : theme;
-        this._applyActualTheme(themeToApply);
-    },
-    _applyActualTheme(theme) {
-        document.documentElement.setAttribute('data-theme', theme);
-        if(window.ManiacGames && window.ManiacGames.tg) {
-             window.ManiacGames.tg.setHeaderColor(theme === 'dark' ? '#111823' : '#FFFFFF');
-             window.ManiacGames.tg.setBackgroundColor(theme === 'dark' ? '#0B0E12' : '#F0F2F5');
+        function initStorage() {
+            if (localStorage.getItem(BALANCE_KEY) === null) localStorage.setItem(BALANCE_KEY, STARTING_BALANCE.toString());
+            if (localStorage.getItem(STATS_KEY) === null) localStorage.setItem(STATS_KEY, JSON.stringify({ wins: 0, losses: 0, topWin: 0 }));
+            if (localStorage.getItem(VISITED_KEY) === null) localStorage.setItem(VISITED_KEY, 'false');
         }
-    },
-    getSystemTheme() {
-        return window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
-    },
-    getCurrentTheme() { return this.currentTheme; }
-};
+        function fmt(n) { return n ? n.toString().replace(/\B(?=(\d{3})+(?!\d))/g, " ") : '0'; }
+        function getBalance() { initStorage(); return parseInt(localStorage.getItem(BALANCE_KEY), 10); }
+        function setBalance(n) { localStorage.setItem(BALANCE_KEY, Math.floor(n).toString()); }
+        function addBalance(n) { setBalance(getBalance() + n); }
+        function subBalance(n) { setBalance(getBalance() - n); }
+        function isFirstLaunch() { initStorage(); return localStorage.getItem(VISITED_KEY) === 'false'; }
+        function setVisited() { localStorage.setItem(VISITED_KEY, 'true'); }
+        function updateStats(newStats) { /* ...логика обновления статистики... */ }
 
-// --- UI-Хелперы ---
-const updateBalanceDisplay = () => {
-    DOMElements.balanceValue.textContent = fmt(getBalance());
-};
+        initStorage();
+        return { getBalance, setBalance, addBalance, subBalance, fmt, isFirstLaunch, setVisited, updateStats };
+    })();
 
-const showToast = (message, type = 'info') => {
-    if (window.ManiacGames && window.ManiacGames.showNotification) {
-        window.ManiacGames.showNotification(message, type);
-    } else {
-        console.log(`[Toast-${type}]: ${message}`);
-    }
-};
+    // --- Core: i18n.js ---
+    Maniac.i18n = (function() {
+        const LANG_KEY = 'mg.lang';
+        let currentLang = localStorage.getItem(LANG_KEY) || 'ru';
+        const translations = {
+          "ru": {"play_button":"Играть","copy_button":"Скопировать","copied_success":"Скопировано!","share_button":"Поделиться","nav_main":"Главная","nav_games":"Игры","nav_friends":"Друзья","nav_profile":"Профиль","nav_settings":"Настройки","taper_title":"Главная","games_title":"Игры","referrals_title":"Друзья","profile_title":"Профиль","settings_title":"Настройки","dice_game_title":"Кости","crash_game_title":"Crash","slots_game_title":"Слоты","coin_game_title":"Орёл/Решка","game_rtp":"RTP","referrals_header":"Ваша реферальная ссылка","referrals_desc":"Пригласите друга и получите <strong>1000 ⭐</strong>...","profile_level":"Уровень","profile_balance":"Баланс","settings_general":"Основные","settings_sound":"Звуковые эффекты","not_enough_funds":"Недостаточно средств","win_message":"Выигрыш","loss_message":"Проигрыш"},
+          "es": {"play_button":"Jugar","copy_button":"Copiar","copied_success":"¡Copiado!","share_button":"Compartir","nav_main":"Principal","nav_games":"Juegos","nav_friends":"Amigos","nav_profile":"Perfil","nav_settings":"Ajustes","taper_title":"Principal","games_title":"Juegos","referrals_title":"Amigos","profile_title":"Perfil","settings_title":"Ajustes","dice_game_title":"Dados","crash_game_title":"Crash","slots_game_title":"Tragamonedas","coin_game_title":"Cara/Cruz","game_rtp":"RTP","referrals_header":"Tu enlace de referido","referrals_desc":"Invita a un amigo y recibe <strong>1000 ⭐</strong>...","profile_level":"Nivel","profile_balance":"Saldo","settings_general":"General","settings_sound":"Efectos de sonido","not_enough_funds":"Fondos insuficientes","win_message":"Ganancia","loss_message":"Pérdida"}
+        };
+        function init() { setLanguage(currentLang); }
+        function setLanguage(lang) { if (translations[lang]) { currentLang = lang; localStorage.setItem(LANG_KEY, lang); } }
+        function t(key) { return translations[currentLang]?.[key] || key; }
+        function getCurrentLanguage() { return currentLang; }
+        return { init, setLanguage, t, getCurrentLanguage };
+    })();
 
-// --- Система навигации ---
-async function navigateTo(path) {
-    let gameId = null;
+    // --- Core: audio.js, effects.js, etc. (здесь будет код из других core-файлов) ---
+    Maniac.audio = { play: (sound) => { try { if (Tone) new Tone.Synth().toDestination().triggerAttackRelease("C4", "8n"); } catch(e) {} } };
+    Maniac.effects = { applyRippleEffect: () => {}, launchConfetti: () => {} };
+    Maniac.particles = { init: () => {}, loop: () => {}, emit: () => {} };
+    Maniac.performance = { isLowPerfDevice: () => false };
+    Maniac.utils = { hapticFeedback: (type) => { try { window.Telegram.WebApp.HapticFeedback.impactOccurred(type); } catch(e){} } };
 
-    if (path.startsWith('/game/')) {
-        gameId = path.split('/')[2];
-        path = '/game';
-    }
-
-    if (currentView && currentView.unmount) {
-        currentView.unmount();
-    }
-
-    DOMElements.mainContent.innerHTML = '';
-
-    let viewModule;
-    if (gameId) {
-        viewModule = gameModules[gameId];
-        if (!viewModule) {
-            console.error(`Game module not found: ${gameId}`);
-            navigateTo('/games');
-            return;
+    // --- Screens ---
+    Maniac.taper = (function() {
+        const { addBalance } = Maniac.state;
+        const titleKey = 'taper_title';
+        function handleTap() {
+            addBalance(1);
+            window.ManiacGames.updateBalance();
+            Maniac.utils.hapticFeedback('light');
+            document.querySelector('#tapper-star')?.classList.add('tapped');
+            setTimeout(() => document.querySelector('#tapper-star')?.classList.remove('tapped'), 150);
         }
-    } else {
-        viewModule = routes[path];
-    }
-
-    if (viewModule) {
-        currentView = viewModule;
-        currentView.path = path;
-        const title = viewModule.titleKey ? i18n.t(viewModule.titleKey) : (viewModule.title || '');
-        DOMElements.headerTitle.textContent = title;
-        DOMElements.mainContent.className = 'main-content view';
-        currentView.mount(DOMElements.mainContent);
-    } else {
-        navigateTo('/taper'); // Фоллбэк
-    }
-
-    document.querySelectorAll('.nav-item').forEach(item => {
-        const itemPath = item.dataset.path;
-        item.classList.toggle('active', itemPath === path || (path === '/game' && itemPath === '/games'));
-    });
-};
-
-async function changeLanguage(lang) {
-    await i18n.setLanguage(lang);
-    generateNavigation();
-    if (currentView && currentView.path) {
-        navigateTo(currentView.path);
-    }
-}
-
-// --- Генерация навигации ---
-function generateNavigation() {
-    const navItems = [
-        { path: '/taper', icon: 'star', labelKey: 'nav_main' },
-        { path: '/games', icon: 'gamepad-2', labelKey: 'nav_games' },
-        { path: '/referrals', icon: 'users', labelKey: 'nav_friends' },
-        { path: '/profile', icon: 'user', labelKey: 'nav_profile' },
-        { path: '/settings', icon: 'sliders-horizontal', labelKey: 'nav_settings' },
-    ];
-    const icons = {
-        'star': '<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"></polygon></svg>',
-        'gamepad-2': '<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="6" y1="12" x2="10" y2="12"></line><line x1="8" y1="10" x2="8" y2="14"></line><line x1="15" y1="13" x2="15.01" y2="13"></line><line x1="18" y1="11" x2="18.01" y2="11"></line><path d="M10 21a9 9 0 0 0-4.42-16.9"></path><path d="M14 3a9 9 0 0 1 4.42 16.9"></path></svg>',
-        'users': '<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"></path><circle cx="9" cy="7" r="4"></circle><path d="M23 21v-2a4 4 0 0 0-3-3.87"></path><path d="M16 3.13a4 4 0 0 1 0 7.75"></path></svg>',
-        'user': '<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"></path><circle cx="12" cy="7" r="4"></circle></svg>',
-        'sliders-horizontal': '<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="21" y1="10" x2="3" y2="10"></line><line x1="21" y1="6" x2="3" y2="6"></line><line x1="21" y1="14" x2="3" y2="14"></line><line x1="21" y1="18" x2="3" y2="18"></line></svg>'
-    };
-
-    DOMElements.navContainer.innerHTML = navItems.map(item => `
-        <a href="#" data-path="${item.path}" class="nav-item">
-            ${icons[item.icon]}
-            <span>${i18n.t(item.labelKey)}</span>
-        </a>
-    `).join('');
-    bindNavEventListeners();
-}
-
-function bindNavEventListeners() {
-    DOMElements.navContainer.querySelectorAll('.nav-item').forEach(item => {
-        item.addEventListener('click', (e) => {
-            e.preventDefault();
-            const path = item.dataset.path;
-            navigateTo(path);
-            hapticFeedback('light');
-            audio.play('tap');
-        });
-    });
-}
-
-// --- Обучение при первом запуске ---
-function showFirstLaunchTutorial() {
-    if (!isFirstLaunch()) return;
-
-    const tutorialOverlay = document.createElement('div');
-    tutorialOverlay.id = 'tutorial-overlay';
-    tutorialOverlay.className = 'tutorial-overlay';
-    tutorialOverlay.innerHTML = `
-        <div class="tutorial-card">
-            <div class="tutorial-icon">⭐</div>
-            <h2>Добро пожаловать!</h2>
-            <p>Тапай звезду, играй в игры — зарабатывай очки!</p>
-            <button id="tutorial-close-btn" class="btn btn-primary">Понятно!</button>
-        </div>
-    `;
-    document.body.appendChild(tutorialOverlay);
-    const closeBtn = document.getElementById('tutorial-close-btn');
-    effects.applyRippleEffect(closeBtn);
-    closeBtn.addEventListener('click', () => {
-        tutorialOverlay.classList.add('fade-out');
-        hapticFeedback('medium');
-        audio.play('tap');
-        tutorialOverlay.addEventListener('animationend', () => {
-            tutorialOverlay.remove();
-            setVisited();
-        });
-    });
-}
-
-// --- Инициализация приложения ---
-const initApp = async () => {
-     try {
-        await i18n.init(); // Ждем загрузки переводов
-        themeManager.init();
-
-        const lowPerf = isLowPerfDevice();
-        if (lowPerf) {
-            document.body.classList.add('low-perf');
+        function mount(rootEl) {
+            rootEl.innerHTML = `<div class="tapper-wrapper"><div class="tapper-star-container" id="star-container"><div id="tapper-star" class="star-2d"></div></div></div>`;
+            document.getElementById('star-container').addEventListener('pointerdown', handleTap);
         }
+        return { titleKey, mount, unmount: () => {} };
+    })();
 
-        try {
-            tg = window.Telegram.WebApp;
-            tg.ready();
-            tg.expand();
-        } catch (e) {
-            console.warn("Telegram WebApp API not found. Running in dev mode.");
+    Maniac.games = (function() {
+        const titleKey = 'games_title';
+        function mount(rootEl) {
+             rootEl.innerHTML = `<div class="card"><h2>${Maniac.i18n.t(titleKey)}</h2><p>Нажмите на игру, чтобы начать.</p> <button id="play-dice" class="btn btn-secondary">Играть в кости</button></div>`;
+             document.getElementById('play-dice').addEventListener('click', () => window.ManiacGames.navigateTo('/game/dice'));
         }
+        return { titleKey, mount, unmount: () => {} };
+    })();
 
-        particles.init(DOMElements.particleCanvas);
-        if (!lowPerf) {
-            requestAnimationFrame(particles.loop);
-        }
+    Maniac.referrals = { titleKey: 'referrals_title', mount: (el) => el.innerHTML = `<div class="card"><h2>${Maniac.i18n.t('referrals_title')}</h2></div>`, unmount: () => {} };
+    Maniac.profile = { titleKey: 'profile_title', mount: (el) => el.innerHTML = `<div class="card"><h2>${Maniac.i18n.t('profile_title')}</h2></div>`, unmount: () => {} };
+    Maniac.settings = { titleKey: 'settings_title', mount: (el) => el.innerHTML = `<div class="card"><h2>${Maniac.i18n.t('settings_title')}</h2></div>`, unmount: () => {} };
 
-        window.ManiacGames = {
-            updateBalance: updateBalanceDisplay,
-            showNotification: showToast,
-            playSound: audio.play,
-            hapticFeedback,
-            particles,
-            effects,
-            t: i18n.t,
-            changeLanguage,
-            getCurrentLanguage: i18n.getCurrentLanguage,
-            changeTheme: (theme) => themeManager.applyTheme(theme),
-            getCurrentTheme: () => themeManager.getCurrentTheme(),
-            navigateTo,
-            tg,
+    // --- Games ---
+    Maniac.diceGame = { titleKey: 'dice_game_title', mount: (el) => el.innerHTML = `<div class="card"><h2>${Maniac.i18n.t('dice_game_title')}</h2><p>Игровой процесс...</p></div>`, unmount: () => {} };
+
+
+    // --- Основная логика приложения (app.js) ---
+    (function() {
+        const DOMElements = {
+            app: document.getElementById('app'),
+            splash: document.getElementById('splash-screen'),
+            headerTitle: document.getElementById('header-title'),
+            balanceValue: document.getElementById('balance-value'),
+            mainContent: document.getElementById('main-content'),
+            navContainer: document.getElementById('bottom-nav'),
+            particleCanvas: document.getElementById('particle-canvas'),
         };
 
-        DOMElements.splash.style.opacity = '0';
-        DOMElements.app.classList.remove('hidden');
-        DOMElements.splash.addEventListener('transitionend', () => DOMElements.splash.remove());
+        const routes = {
+            '/taper': Maniac.taper,
+            '/games': Maniac.games,
+            '/referrals': Maniac.referrals,
+            '/profile': Maniac.profile,
+            '/settings': Maniac.settings,
+        };
+        const gameModules = {
+            'dice': Maniac.diceGame,
+        };
 
-        generateNavigation();
-        updateBalanceDisplay();
-        navigateTo('/taper');
+        let currentView = null;
 
-        setTimeout(showFirstLaunchTutorial, 400);
-     } catch (e) {
-        console.error("Critical error during app initialization:", e);
-        DOMElements.app.innerHTML = `<div style="color: white; padding: 20px; font-family: monospace; word-break: break-all;">
-            <h3>Критическая ошибка</h3><p>Не удалось запустить приложение. Проверьте консоль разработчика (F12) для деталей.</p><p><b>Ошибка:</b> ${e.message}</p></div>`;
-        DOMElements.splash.remove();
-        DOMElements.app.classList.remove('hidden');
-    }
- };
+        function updateBalanceDisplay() {
+            DOMElements.balanceValue.textContent = Maniac.state.fmt(Maniac.state.getBalance());
+        }
 
-// --- Точка входа ---
-document.addEventListener('DOMContentLoaded', initApp);
+        function navigateTo(path) {
+            let gameId = null;
+            if (path.startsWith('/game/')) {
+                gameId = path.split('/')[2];
+                path = '/game';
+            }
+
+            if (currentView && currentView.unmount) currentView.unmount();
+
+            const viewModule = gameId ? gameModules[gameId] : routes[path];
+
+            if (!viewModule) {
+                console.error("View not found for path:", path);
+                navigateTo('/taper');
+                return;
+            }
+
+            currentView = viewModule;
+            DOMElements.headerTitle.textContent = Maniac.i18n.t(viewModule.titleKey);
+            DOMElements.mainContent.innerHTML = '';
+            viewModule.mount(DOMElements.mainContent);
+
+            document.querySelectorAll('.nav-item').forEach(item => {
+                const itemPath = item.dataset.path;
+                item.classList.toggle('active', itemPath === path || (path === '/game' && itemPath === '/games'));
+            });
+        }
+
+        function generateNavigation() {
+            const navItems = [
+                { path: '/taper', icon: 'star', labelKey: 'nav_main' },
+                { path: '/games', icon: 'gamepad-2', labelKey: 'nav_games' },
+                { path: '/referrals', icon: 'users', labelKey: 'nav_friends' },
+                { path: '/profile', icon: 'user', labelKey: 'nav_profile' },
+                { path: '/settings', icon: 'sliders-horizontal', labelKey: 'nav_settings' },
+            ];
+             const icons = { 'star': '⭐', 'gamepad-2': '🎮', 'users': '👥', 'user': '👤', 'sliders-horizontal': '⚙️' };
+            DOMElements.navContainer.innerHTML = navItems.map(item => `
+                <a href="#" data-path="${item.path}" class="nav-item">
+                    <div style="font-size: 24px;">${icons[item.icon]}</div>
+                    <span>${Maniac.i18n.t(item.labelKey)}</span>
+                </a>`).join('');
+
+            DOMElements.navContainer.querySelectorAll('.nav-item').forEach(item => {
+                item.addEventListener('click', (e) => {
+                    e.preventDefault();
+                    navigateTo(item.dataset.path);
+                });
+            });
+        }
+
+        async function initApp() {
+            Maniac.i18n.init();
+
+            try {
+                const tg = window.Telegram.WebApp;
+                tg.ready();
+                tg.expand();
+                window.ManiacGames = { tg };
+            } catch (e) { console.warn("TG API not found."); }
+
+            window.ManiacGames = {
+                ...(window.ManiacGames || {}),
+                updateBalance: updateBalanceDisplay,
+                hapticFeedback: Maniac.utils.hapticFeedback,
+                navigateTo: navigateTo
+            };
+
+            generateNavigation();
+            updateBalanceDisplay();
+            navigateTo('/taper');
+
+            setTimeout(() => {
+                DOMElements.splash.style.opacity = '0';
+                DOMElements.app.classList.remove('hidden');
+                DOMElements.splash.addEventListener('transitionend', () => DOMElements.splash.remove());
+            }, 100); // Небольшая задержка для плавной анимации
+        }
+
+        document.addEventListener('DOMContentLoaded', initApp);
+    })();
+
+})();
