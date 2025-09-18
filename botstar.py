@@ -20,10 +20,13 @@ from handlers import (
 )
 from keyboards.reply import (
     get_main_menu_keyboard,
-)  # ИСПРАВЛЕНО: импортируем правильную функцию
+)
 from logger_config import setup_logging
 from middlewares.throttling import ThrottlingMiddleware
 from utils.commands import set_commands
+
+# ИСПРАВЛЕНО: Определяем логгер в глобальной области видимости
+logger = logging.getLogger(__name__)
 
 
 # Function to configure and run the scheduler
@@ -56,7 +59,7 @@ async def on_startup(bot: Bot):
                 chat_id=admin,
                 text="Бот запущен!",
                 # Add a persistent menu keyboard
-                reply_markup=get_main_menu_keyboard(),  # ИСПРАВЛЕНО: вызываем правильную функцию
+                reply_markup=get_main_menu_keyboard(),
             )
         except Exception as e:
             logger.error(f"Не удалось отправить сообщение администратору {admin}: {e}")
@@ -65,7 +68,6 @@ async def on_startup(bot: Bot):
 # Main function to run the bot
 async def main():
     setup_logging()
-    logger = logging.getLogger(__name__)
     logger.info("Starting bot...")
 
     # Initialize the database
@@ -115,3 +117,4 @@ if __name__ == "__main__":
         asyncio.run(main())
     except (KeyboardInterrupt, SystemExit):
         logging.getLogger(__name__).info("Bot stopped manually.")
+
