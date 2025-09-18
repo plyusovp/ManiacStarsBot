@@ -5,22 +5,29 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
     <title>Maniac Stars</title>
 
+    <!-- Иконки и манифест для PWA -->
     <link rel="apple-touch-icon" sizes="180x180" href="apple-touch-icon.png">
     <link rel="icon" type="image/png" sizes="32x32" href="favicon-32x32.png">
     <link rel="icon" type="image/png" sizes="16x16" href="favicon-16x16.png">
     <link rel="manifest" href="site.webmanifest">
+    <meta name="msapplication-TileColor" content="#da532c">
     <meta name="theme-color" content="#ffffff">
+
+    <!-- Стили и скрипты -->
     <link rel="stylesheet" href="styles.css">
     <script src="https://telegram.org/js/telegram-web-app.js"></script>
+    <!-- Библиотека для звуковых эффектов -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/tone/14.7.77/Tone.js"></script>
 </head>
 <body>
 
+    <!-- Экран загрузки -->
     <div id="splash-screen" class="splash-screen">
         <img src="assets/logo.png" alt="Maniac Stars Logo" class="splash-logo">
         <div class="splash-text">Maniac Stars</div>
     </div>
 
+    <!-- Основной контейнер приложения -->
     <div id="app" class="app-container hidden">
         <header id="app-header" class="app-header">
             <h1 id="header-title"></h1>
@@ -32,11 +39,12 @@
         <nav id="bottom-nav" class="bottom-nav"></nav>
     </div>
 
+    <!-- Canvas для эффектов (если понадобятся) -->
     <canvas id="particle-canvas"></canvas>
     <canvas id="confetti-canvas"></canvas>
 
-    <!-- ИЗМЕНЕНО: Убран type="module". Это критически важно для работы объединенного скрипта. -->
-    <script src="app.js"></script>
+    <!-- Главный скрипт приложения, который импортирует все остальные -->
+    <script src="app.js" type="module"></script>
 
 </body>
 </html>
