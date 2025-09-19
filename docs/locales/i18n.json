@@ -20,6 +20,9 @@
     "crash_game_title": "Crash",
     "slots_game_title": "Слоты",
     "coin_game_title": "Орёл/Решка",
+    "coin_heads": "Орёл",
+    "coin_tails": "Решка",
+    "coin_bet_size": "Размер ставки",
 
     "game_rtp": "RTP",
     "low_volatility": "Низкая",
@@ -98,6 +101,9 @@
     "crash_game_title": "Crash",
     "slots_game_title": "Tragamonedas",
     "coin_game_title": "Cara/Cruz",
+    "coin_heads": "Cara",
+    "coin_tails": "Cruz",
+    "coin_bet_size": "Monto de la apuesta",
 
     "game_rtp": "RTP",
     "low_volatility": "Baja",
