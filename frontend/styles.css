@@ -1,0 +1,113 @@
+/* --- СТИЛЬ ВОЗВРАЩЕН К ПРЕДЫДУЩЕЙ ВЕРСИИ --- */
+
+/* Определяем цветовую палитру и другие переменные */
+:root {
+    --primary-bg: #1a1a2e;
+    --secondary-bg: #16213e;
+    --accent-color: #0f3460;
+    --primary-text: #e94560;
+    --secondary-text: #ffffff;
+    --border-radius: 12px;
+    --shadow: 0 4px 15px rgba(0, 0, 0, 0.2);
+}
+
+/* Общий сброс стилей и настройка шрифта */
+* {
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+}
+
+body {
+    font-family: 'Poppins', sans-serif;
+    background-color: var(--primary-bg);
+    color: var(--secondary-text);
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    min-height: 100vh;
+    padding: 20px;
+}
+
+/* Главный контейнер приложения */
+.container {
+    width: 100%;
+    max-width: 900px;
+    background-color: var(--secondary-bg);
+    border-radius: var(--border-radius);
+    box-shadow: var(--shadow);
+    overflow: hidden;
+}
+
+/* Стилизация хедера (адаптировано под класс .header) */
+.header {
+    background-color: var(--accent-color);
+    padding: 20px 30px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    border-bottom: 2px solid var(--primary-text);
+}
+
+.logo {
+    color: var(--primary-text);
+    font-weight: 700;
+    font-size: 24px;
+}
+
+/* Стилизация навигации (адаптировано под класс .navigation) */
+.navigation {
+    display: flex;
+    gap: 25px;
+}
+
+.navigation a {
+    color: var(--secondary-text);
+    text-decoration: none;
+    font-weight: 500;
+    position: relative;
+    transition: color 0.3s ease;
+}
+
+.navigation a::after {
+    content: '';
+    position: absolute;
+    width: 0;
+    height: 2px;
+    bottom: -5px;
+    left: 50%;
+    transform: translateX(-50%);
+    background-color: var(--primary-text);
+    transition: width 0.3s ease;
+}
+
+.navigation a:hover,
+.navigation a.active {
+    color: var(--primary-text);
+}
+
+.navigation a:hover::after,
+.navigation a.active::after {
+    width: 100%;
+}
+
+/* Область для контента страниц */
+#app {
+    padding: 40px;
+    min-height: 400px;
+    text-align: center;
+}
+
+#app h1 {
+    font-size: 36px;
+    color: var(--primary-text);
+    margin-bottom: 15px;
+}
+
+#app p {
+    font-size: 18px;
+    color: var(--secondary-text);
+    max-width: 600px;
+    margin: 0 auto; /* Центрируем параграф */
+    line-height: 1.7;
+}
