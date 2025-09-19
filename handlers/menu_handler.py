@@ -1,15 +1,14 @@
 # handlers/menu_handler.py
 import logging
-from typing import List, Optional
+from typing import Optional
 
 from aiogram import Bot, F, Router
-from aiogram.exceptions import TelegramBadRequest
+from aiogram.filters import Command
 from aiogram.fsm.context import FSMContext
-from aiogram.types import CallbackQuery, InputMediaPhoto
+from aiogram.types import CallbackQuery, InputMediaPhoto, Message
 
 from config import settings
 from database import db
-from gifts import GIFTS_CATALOG
 from handlers.utils import (
     clean_junk_message,
     generate_referral_link,
@@ -30,7 +29,7 @@ from keyboards.inline import (
     resources_keyboard,
     top_users_keyboard,
 )
-from lexicon.texts import LEXICON, LEXICON_ERRORS
+from lexicon.texts import LEXICON
 
 router = Router()
 logger = logging.getLogger(__name__)
@@ -80,6 +79,43 @@ async def show_main_menu(
     # Always update the state to reflect the current view
     if state:
         await state.update_data(current_view="main_menu")
+
+
+# ИСПРАВЛЕНИЕ: Регистрируем один обработчик для команды и текста через разные декораторы
+@router.message(Command("menu"))
+@router.message(F.text == "📖 Меню")
+async def menu_handler(message: Message, state: FSMContext, bot: Bot):
+    """Handler for the /menu command and '📖 Меню' button."""
+    if message.chat.type == "private":
+        try:
+            # Удаляем сообщение пользователя (команду или текст), чтобы чат был чище
+            await message.delete()
+        except Exception as e:
+            logger.warning(f"Could not delete message {message.message_id}: {e}")
+        # Отправляем меню новым сообщением
+        await show_main_menu(bot, message.chat.id, state=state)
+
+
+# ИСПРАВЛЕНИЕ: Аналогично для бонуса
+@router.message(Command("bonus"))
+@router.message(F.text == "🎁 Бонус")
+async def bonus_handler(message: Message):
+    """Handler for the /bonus command and '🎁 Бонус' button."""
+    if not message.from_user:
+        return
+
+    result = await db.get_daily_bonus(message.from_user.id)
+    status = result.get("status")
+    if status == "success":
+        reward = result.get("reward", 0)
+        await message.answer(f"🎁 Вы получили {reward} ⭐ дневного бонуса!")
+    elif status == "wait":
+        seconds = result.get("seconds_left", 0)
+        hours = seconds // 3600
+        minutes = (seconds % 3600) // 60
+        await message.answer(f"⏳ Бонус будет доступен через {hours} ч {minutes} м.")
+    else:
+        await message.answer("❌ Не удалось получить бонус. Попробуйте позже.")
 
 
 @router.callback_query(MenuCallback.filter(F.name == "main_menu"))
@@ -403,4 +439,3 @@ async def achievement_info_handler(
         )
         await state.update_data(current_view="achievement_info")
     await callback.answer()
-

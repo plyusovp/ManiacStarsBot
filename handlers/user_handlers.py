@@ -69,6 +69,12 @@ async def command_start(message: Message, state: FSMContext):
     )
 
 
+@router.message(F.text == "▶️ Старт")
+async def text_start(message: Message, state: FSMContext):
+    """Handler for the '▶️ Старт' button."""
+    await command_start(message, state)
+
+
 @router.message(Command("promo"))
 async def promo_command(message: Message, state: FSMContext):
     await state.set_state(PromoCodeStates.waiting_for_promo_code)
