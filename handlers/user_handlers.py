@@ -1,23 +1,22 @@
-# handlers/user_handlers.py
 import logging
 import uuid
 
 from aiogram import F, Router
-from aiogram.filters import CommandStart
+from aiogram.filters import Command, CommandStart, StateFilter
 from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import State, StatesGroup
 from aiogram.types import Message
 
 from config import settings
 from database import db
-from handlers.menu_handler import show_main_menu
-from handlers.utils import clean_junk_message, safe_delete
 from keyboards.inline import promo_back_keyboard
 from keyboards.reply import get_main_menu_keyboard
-from lexicon.texts import LEXICON, LEXICON_ERRORS
 
-router = Router()
+# ИСПРАВЛЕНИЕ: Импортируем словарь LEXICON, а не несуществующий класс Lexicon
+from lexicon.texts import LEXICON
+
 logger = logging.getLogger(__name__)
+router = Router()
 
 
 class PromoCodeStates(StatesGroup):
@@ -25,134 +24,112 @@ class PromoCodeStates(StatesGroup):
 
 
 @router.message(CommandStart())
-async def start_command(message: Message, state: FSMContext):
-    """Handler for the /start command. Handles user registration and referrals."""
+async def command_start(message: Message, state: FSMContext):
+    await state.clear()
     if not message.from_user:
         return
 
-    await state.clear()
-    args = message.text.split()
-    referrer_id = None
-    if len(args) > 1:
-        try:
-            referrer_id = int(args[1])
-            if referrer_id == message.from_user.id:
-                referrer_id = None
-        except ValueError:
-            referrer_id = None
-            logger.warning(
-                f"Invalid referrer ID provided for user {message.from_user.id}"
-            )
+    user_id = message.from_user.id
+    username = message.from_user.username or f"user_{user_id}"
+    full_name = message.from_user.full_name
+    logger.info(f"/start command received from user {user_id} ({username})")
 
-    is_new_user = await db.add_user(
-        user_id=message.from_user.id,
-        full_name=message.from_user.full_name,
-        username=message.from_user.username,
-        referrer_id=referrer_id,
-    )
+    args = message.text.split() if message.text else []
+    referrer_id = None
+    if len(args) > 1 and args[1].startswith("ref_"):
+        referrer_id_str = args[1][4:]
+        if referrer_id_str.isdigit() and int(referrer_id_str) != user_id:
+            referrer_id = int(referrer_id_str)
+
+    is_new_user = await db.add_user(user_id, username, full_name, referrer_id)
 
     if is_new_user and referrer_id:
-        # ИСПРАВЛЕНО: Заменено на add_balance, так как update_balance не существует
-        await db.add_balance(
-            referrer_id,
-            settings.REFERRAL_BONUS,
-            transaction_type="referral",
-            idem_key=f"ref-{message.from_user.id}-{referrer_id}",
-        )
-        # ИСПРАВЛЕНО: Заменено на increment_referral_count (в единственном числе)
-        await db.increment_referral_count(referrer_id)
-        if message.bot:
-            try:
-                await message.bot.send_message(
-                    referrer_id,
-                    f"🎉 У вас новый реферал! Вы получили {settings.REFERRAL_BONUS} ⭐",
-                )
-            except Exception as e:
-                logger.error(
-                    f"Could not notify referrer {referrer_id} about new referral: {e}"
-                )
+        try:
+            idem_key = f"ref-{user_id}-{referrer_id}"
+            await db.add_balance_with_checks(
+                referrer_id, settings.REFERRAL_BONUS, "referral_bonus", idem_key
+            )
+            # ИСПРАВЛЕНИЕ: Используем правильный синтаксис для доступа к словарю и верный ключ
+            await message.bot.send_message(
+                referrer_id,
+                LEXICON["referral_success_notification"].format(
+                    bonus=settings.REFERRAL_BONUS, username=username
+                ),
+            )
+            logger.info(
+                f"Referral bonus {settings.REFERRAL_BONUS} sent to {referrer_id} for new user {user_id}"
+            )
+        except Exception as e:
+            logger.error(f"Failed to send referral bonus to {referrer_id}: {e}")
 
-        # This sends the reply keyboard.
-        await message.answer(
-            "👇 Внизу появилось меню для удобной навигации",
-            reply_markup=get_main_menu_keyboard(),
-        )
-        # This sends the inline menu.
-        await show_main_menu(message.bot, message.from_user.id, state=state)
+    # ИСПРАВЛЕНИЕ: Используем правильный ключ "start_message" и переменную full_name
+    await message.answer(
+        LEXICON["start_message"].format(full_name=message.from_user.full_name),
+        reply_markup=get_main_menu_keyboard(),
+    )
 
 
-@router.message(F.text.in_(["📖 Меню", "▶️ Старт"]))
-async def menu_text_handler(message: Message, state: FSMContext):
-    """Handler for the 'Menu' and 'Start' reply buttons."""
-    if message.from_user:
-        await show_main_menu(message.bot, message.from_user.id, state=state)
+@router.message(Command("promo"))
+async def promo_command(message: Message, state: FSMContext):
+    await state.set_state(PromoCodeStates.waiting_for_promo_code)
+    # ИСПРАВЛЕНИЕ: Используем правильный ключ "promo_prompt"
+    await message.answer(LEXICON["promo_prompt"], reply_markup=promo_back_keyboard())
 
 
-@router.message(F.text == "🎁 Бонус")
-async def bonus_text_handler(message: Message):
-    """Обработчик для кнопки 'Бонус'."""
+@router.message(F.text, StateFilter(PromoCodeStates.waiting_for_promo_code))
+async def process_promo_code(message: Message, state: FSMContext):
+    await state.clear()
+    promo_code = message.text or ""
     if not message.from_user:
         return
-
-    result = await db.get_daily_bonus(message.from_user.id)
-    status = result.get("status")
-    if status == "success":
-        reward = result.get("reward", 0)
-        await message.answer(f"🎁 Вы получили {reward} ⭐ дневного бонуса!")
-    elif status == "wait":
-        seconds = result.get("seconds_left", 0)
-        hours = seconds // 3600
-        minutes = (seconds % 3600) // 60
-        await message.answer(f"⏳ Бонус будет доступен через {hours} ч {minutes} м.")
-    else:
-        await message.answer("❌ Не удалось получить бонус. Попробуйте позже.")
-
-
-@router.message(F.text)
-async def unknown_command(message: Message):
-    """Handler for unknown text commands."""
-    await message.delete()
-
-
-async def process_promo_code(message: Message, state: FSMContext):
-    """Processes the entered promo code."""
-    if not message.text or not message.from_user:
-        return
-
-    code = message.text.strip()
     user_id = message.from_user.id
-    # Исправлено: добавлен обязательный аргумент idem_key
-    result = await db.activate_promo(code, user_id, idem_key=str(uuid.uuid4()))
-    data = await state.get_data()
-    prompt_msg_id = data.get("promo_prompt_msg")
+    idem_key = f"promo-{user_id}-{promo_code}-{uuid.uuid4()}"
 
-    if prompt_msg_id:
-        await safe_delete(message.bot, message.chat.id, prompt_msg_id)
+    try:
+        # В db.activate_promo возвращается кортеж, а не одно значение.
+        # Возвращает: "not_found", "already_activated", "error" или amount
+        result = await db.activate_promo(user_id, promo_code, idem_key)
 
-    if result["status"] == "success":
-        reward_text = f"и {result['reward']} ⭐" if result.get("reward", 0) > 0 else ""
-        response_text = (
-            f"✅ Промокод '{code}' успешно активирован! Вы получили {reward_text}."
+        if isinstance(result, int):  # Успешная активация, если вернулось число
+            await message.answer(
+                # ИСПРАВЛЕНИЕ: Используем новый ключ "promo_success"
+                LEXICON["promo_success"].format(amount=result),
+                reply_markup=get_main_menu_keyboard(),
+            )
+        else:  # Если вернулась строка с ошибкой
+            await message.answer(
+                # ИСПРАВЛЕНИЕ: Используем новый ключ "promo_fail"
+                LEXICON["promo_fail"].format(reason=result),
+                reply_markup=get_main_menu_keyboard(),
+            )
+    except Exception as e:
+        logger.error(
+            f"Error processing promo code '{promo_code}' for user {user_id}: {e}"
         )
-    elif result["status"] == "not_found":
-        response_text = LEXICON_ERRORS["promo_not_found"]
-    elif result["status"] == "expired":
-        response_text = LEXICON_ERRORS["promo_expired"]
-    elif result["status"] == "already_used":
-        response_text = LEXICON_ERRORS["promo_already_used"]
-    else:
-        response_text = LEXICON_ERRORS["promo_failed"]
+        await message.answer(
+            LEXICON["promo_fail"].format(reason="Произошла внутренняя ошибка."),
+            reply_markup=get_main_menu_keyboard(),
+        )
 
-    await message.answer(response_text)
-    await clean_junk_message(state, message.bot)
+
+@router.message(F.text == "❌ Отмена")
+async def cancel_handler(message: Message, state: FSMContext):
+    current_state = await state.get_state()
+    if current_state is None:
+        return
     await state.clear()
-    await show_main_menu(message.bot, message.chat.id, state=state)
+    await message.answer("Действие отменено.", reply_markup=get_main_menu_keyboard())
 
 
-async def enter_promo_code(message, state: FSMContext):
-    """Asks the user to enter a promo code."""
-    prompt_msg = await message.answer(
-        LEXICON["enter_promo"], reply_markup=promo_back_keyboard()
+@router.message(Command("id"))
+async def get_id(message: Message):
+    if not message.from_user:
+        return
+    user_id = message.from_user.id
+    username = message.from_user.username
+    chat_id = message.chat.id
+    await message.answer(
+        f"Твой ID: <code>{user_id}</code>\n"
+        f"Твой юзернейм: @{username}\n"
+        f"ID чата: <code>{chat_id}</code>"
     )
-    await state.set_state(PromoCodeStates.waiting_for_promo_code)
-    await state.update_data(promo_prompt_msg=prompt_msg.message_id)

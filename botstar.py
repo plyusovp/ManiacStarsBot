@@ -1,9 +1,10 @@
 import asyncio
 import logging
-import platform
 
 from aiogram import Bot, Dispatcher
+from aiogram.client.default import DefaultBotProperties
 from aiogram.fsm.storage.memory import MemoryStorage
+
 # Если используешь Redis на сервере, раскомментируй следующую строку
 # from aiogram.fsm.storage.redis import RedisStorage
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
@@ -61,7 +62,9 @@ async def on_startup(bot: Bot):
                 reply_markup=get_main_menu_keyboard(),
             )
         except Exception as e:
-            logger.error(f"Не удалось отправить сообщение администратору {admin_id}: {e}")
+            logger.error(
+                f"Не удалось отправить сообщение администратору {admin_id}: {e}"
+            )
 
 
 # Main function to run the bot
@@ -88,9 +91,8 @@ async def main():
     #     logger.error(f"Failed to connect to Redis: {e}. Falling back to memory storage.")
     #     storage = MemoryStorage()
 
-
     # Инициализируем бота и диспетчер
-    bot = Bot(token=settings.BOT_TOKEN, parse_mode="HTML")
+    bot = Bot(token=settings.BOT_TOKEN, default=DefaultBotProperties(parse_mode="HTML"))
     dp = Dispatcher(storage=storage)
 
     # Настраиваем планировщик
