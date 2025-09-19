@@ -1,16 +1,11 @@
-// --- ИЗМЕНЕНО ---
-// Добавляем импорт и экспорт модуля 'taper', чтобы он был доступен в main.js.
+import { GamesScreen } from './games.js';
+import { referralsScreen } from './referrals.js'; // Теперь импорт должен работать
+import { taperScreen } from './taper.js';
+import { profileScreen } from './profile.js';
 
-import * as games from './games.js';
-import * as referrals from './referrals.js';
-import * as profile from './profile.js';
-import * as settings from './settings.js';
-import * as taper from './taper.js';
-
-export {
-  games,
-  referrals,
-  profile,
-  settings,
-  taper
+export const screens = {
+    GamesScreen,
+    referralsScreen,
+    taperScreen,
+    profileScreen,
 };

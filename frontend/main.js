@@ -1,64 +1,47 @@
-import * as screens from './ui/components/screens/index.js';
+import { renderNav } from './ui/components/nav.js';
+import { navigate, getRoute } from './core/router.js';
+import { playTap, initAudio } from './core/audio.js';
+import { initI18n } from './core/i18n.js';
 
-// --- ИЗМЕНЕНО ---
-// Я добавил маршрут для '/taper', чтобы он правильно обрабатывался.
-const routes = {
-  '/': screens.games,
-  '/referrals': screens.referrals,
-  '/profile': screens.profile,
-  '/settings': screens.settings,
-  '/taper': screens.taper,
-};
+/**
+ * Главная функция инициализации приложения.
+ * Она будет вызвана только после полной загрузки DOM.
+ */
+function initializeApp() {
+    // Сначала инициализируем систему перевода (i18n)
+    initI18n().then(() => {
+        // После успешной загрузки переводов, отрисовываем навигацию
+        renderNav();
 
-const navigate = (path) => {
-  // Проверяем, что мы не пытаемся перейти на ту же страницу
-  if (window.location.pathname === path) {
-    return;
-  }
-  window.history.pushState({}, path, window.location.origin + path);
-  router();
-};
+        // Выполняем первоначальную навигацию на основе URL или на главную страницу
+        navigate(getRoute() || '/games');
+    });
 
-const router = async () => {
-  const path = window.location.pathname;
-  const screen = routes[path] || routes['/']; // Если путь не найден, переходим на главную
+    // Добавляем глобальный обработчик кликов для звука нажатия и инициализации аудио
+    document.body.addEventListener('click', (e) => {
+        // При первом клике пользователя инициализируем AudioContext.
+        // Функция сама проверит, нужно ли ей выполняться.
+        initAudio();
 
-  // Находим и очищаем контейнер приложения
-  const app = document.getElementById('app');
-  if (app) {
-    // Вызываем функцию init для отрисовки нового экрана
-    await screen.init(app);
-    updateActiveLink(path);
-  } else {
-    console.error("Элемент с id 'app' не найден!");
-  }
-};
-
-// Функция для обновления активной ссылки в навигации
-const updateActiveLink = (path) => {
-    document.querySelectorAll('nav a').forEach(link => {
-        link.classList.remove('active');
-        if (link.getAttribute('href') === path) {
-            link.classList.add('active');
+        // Воспроизводим звук только если клик был по кнопке или ссылке
+        if (e.target.closest('button, a')) {
+            playTap();
         }
     });
-};
 
-
-// --- КЛЮЧЕВОЕ ИСПРАВЛЕНИЕ ---
-// Оборачиваем весь код в 'DOMContentLoaded'.
-// Это гарантирует, что HTML-документ полностью загрузится перед тем,
-// как JavaScript попытается найти и изменить его элементы.
-// Это решает ошибку "Cannot set properties of null".
-window.addEventListener('DOMContentLoaded', () => {
-  document.body.addEventListener('click', (e) => {
-    // Убеждаемся, что клик был по ссылке с атрибутом data-link
-    if (e.target.matches('[data-link]')) {
-      e.preventDefault(); // Предотвращаем стандартный переход по ссылке
-      navigate(e.target.getAttribute('href'));
+    // Добавляем обработчик для кнопок навигации
+    const navContainer = document.getElementById('bottom-nav');
+    if (navContainer) {
+        navContainer.addEventListener('click', (event) => {
+            const navButton = event.target.closest('.nav-btn');
+            if (navButton && navButton.dataset.route) {
+                navigate(navButton.dataset.route);
+            }
+        });
+    } else {
+        console.error('Navigation container #bottom-nav not found during initialization!');
     }
-  });
+}
 
-  // Первый запуск роутера при загрузке страницы
-  router();
-});
+// Ждем, пока весь HTML-документ не будет готов, и только после этого запускаем наше приложение.
+document.addEventListener('DOMContentLoaded', initializeApp);

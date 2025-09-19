@@ -1,138 +1,79 @@
-// --- Высокопроизводительная система частиц на Canvas ---
-
-let MAX_PARTICLES = 150; // Максимальное кол-во частиц на экране
-const particlePool = [];
-const activeParticles = [];
 let canvas, ctx;
-let lastTime = 0;
-let isLowPerf = false; // <-- Флаг низкой производительности
 
-/**
- * Инициализирует систему частиц.
- * @param {HTMLCanvasElement} canvasElement - Элемент canvas для отрисовки.
- */
-export function init(canvasElement) {
-    if (!canvasElement) {
-        console.error("Particle system requires a canvas element.");
-        return;
-    }
-    canvas = canvasElement;
+const particleColors = ["#C373F2", "#8A2BE2", "#FFFFFF", "#DDA0DD"];
+
+function initParticleCanvas() {
+    if (document.getElementById('particle-canvas')) return;
+
+    canvas = document.createElement('canvas');
+    canvas.id = 'particle-canvas';
+    canvas.className = 'particles';
+    document.getElementById('app').prepend(canvas);
     ctx = canvas.getContext('2d');
 
-    // --- Оптимизация: Проверяем режим низкой производительности ---
-    isLowPerf = document.body.classList.contains('low-perf');
-    if (isLowPerf) {
-        MAX_PARTICLES = 40; // Значительно уменьшаем лимит
-    }
+    const resizeCanvas = () => {
+        canvas.width = window.innerWidth;
+        canvas.height = window.innerHeight;
+    };
 
-    // --- Инициализация пула частиц ---
-    for (let i = 0; i < MAX_PARTICLES; i++) {
-        particlePool.push({ active: false /* ... other properties */ });
-    }
-
-    resize();
-    window.addEventListener('resize', resize);
+    window.addEventListener('resize', resizeCanvas);
+    resizeCanvas();
 }
 
-function resize() {
-    if(!canvas) return;
-    const dpr = window.devicePixelRatio || 1;
-    canvas.width = window.innerWidth * dpr;
-    canvas.height = window.innerHeight * dpr;
-    canvas.style.width = `${window.innerWidth}px`;
-    canvas.style.height = `${window.innerHeight}px`;
-    ctx.scale(dpr, dpr);
-}
 
-/**
- * Создает "эмиттер" - источник частиц.
- * @param {number} x - Начальная координата X.
- * @param {number} y - Начальная координата Y.
- * @param {object} options - Конфигурация частиц.
- */
-export function emit(x, y, options = {}) {
-    let count = options.count || 10;
+let particles = [];
 
-    // --- Оптимизация: уменьшаем количество частиц в режиме low-perf ---
-    if (isLowPerf) {
-        count = Math.floor(count / 3);
+class Particle {
+    constructor(x, y) {
+        this.x = x;
+        this.y = y;
+        this.size = Math.random() * 5 + 2; // size between 2 and 7
+        this.speedX = Math.random() * 4 - 2; // -2 to 2
+        this.speedY = Math.random() * 4 - 2; // -2 to 2
+        this.color = particleColors[Math.floor(Math.random() * particleColors.length)];
+        this.life = 1; // 100%
+        this.decay = Math.random() * 0.04 + 0.01; // decay rate
     }
 
-    for (let i = 0; i < count; i++) {
-        if (activeParticles.length >= MAX_PARTICLES) return;
-
-        let p = particlePool.find(p => !p.active);
-        if (!p) p = {}; // Fallback if pool is somehow smaller than MAX
-
-        p.active = true;
-        p.x = x;
-        p.y = y;
-
-        const angle = (Math.random() * (options.angle ?? Math.PI * 2)) + (options.angleOffset || 0);
-        const speed = Math.random() * (options.speed || 2);
-
-        p.vx = Math.cos(angle) * speed;
-        p.vy = Math.sin(angle) * speed;
-
-        p.ay = options.gravity || 0;
-
-        p.maxLife = p.life = (options.life || 60) + Math.random() * 20 - 10;
-        p.alpha = 1;
-        p.size = Math.max(0.5, (options.size || 2) + Math.random() * 1.5);
-        p.friction = options.friction || 0.98;
-
-        if (Array.isArray(options.color)) {
-            p.color = options.color[Math.floor(Math.random() * options.color.length)];
-        } else {
-            p.color = options.color || '#FFFFFF';
-        }
-
-        activeParticles.push(p);
+    update() {
+        this.x += this.speedX;
+        this.y += this.speedY;
+        this.life -= this.decay;
+        this.size *= 0.98; // shrink
     }
-}
 
-function update(delta) {
-    const effectiveDelta = Math.min(delta, 1/30) * 60;
-
-    for (let i = activeParticles.length - 1; i >= 0; i--) {
-        const p = activeParticles[i];
-
-        p.life -= effectiveDelta;
-
-        if (p.life <= 0 || p.alpha < 0.05) {
-            p.active = false;
-            activeParticles.splice(i, 1);
-            continue;
-        }
-
-        p.vy += p.ay * effectiveDelta;
-        p.x += p.vx * effectiveDelta;
-        p.y += p.vy * effectiveDelta;
-
-        p.alpha = p.life / p.maxLife;
-    }
-}
-
-function draw() {
-    if (!ctx || !canvas) return;
-    ctx.clearRect(0, 0, canvas.width, canvas.height);
-
-    for (const p of activeParticles) {
+    draw() {
+        ctx.globalAlpha = this.life;
         ctx.beginPath();
-        ctx.arc(p.x, p.y, p.size, 0, Math.PI * 2, false);
-        ctx.fillStyle = p.color;
-        ctx.globalAlpha = p.alpha;
+        ctx.arc(this.x, this.y, this.size, 0, Math.PI * 2);
+        ctx.fillStyle = this.color;
         ctx.fill();
+        ctx.globalAlpha = 1;
     }
-    ctx.globalAlpha = 1.0;
 }
 
-export function loop(timestamp) {
-    const delta = (timestamp - (lastTime || timestamp)) / 1000;
-    lastTime = timestamp;
-
-    update(delta);
-    draw();
-
-    requestAnimationFrame(loop);
+function animateParticles() {
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    for (let i = particles.length - 1; i >= 0; i--) {
+        const p = particles[i];
+        p.update();
+        p.draw();
+        if (p.life <= 0 || p.size <= 0.5) {
+            particles.splice(i, 1);
+        }
+    }
+    requestAnimationFrame(animateParticles);
 }
+
+export function createParticles(x, y, count = 10) {
+    if (!ctx) return;
+    for (let i = 0; i < count; i++) {
+        particles.push(new Particle(x, y));
+    }
+}
+
+// Ensure canvas is ready and animation loop starts
+document.addEventListener('DOMContentLoaded', () => {
+    initParticleCanvas();
+    animateParticles();
+});

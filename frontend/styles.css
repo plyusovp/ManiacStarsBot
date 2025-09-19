@@ -1,113 +1,247 @@
-/* --- СТИЛЬ ВОЗВРАЩЕН К ПРЕДЫДУЩЕЙ ВЕРСИИ --- */
-
-/* Определяем цветовую палитру и другие переменные */
 :root {
-    --primary-bg: #1a1a2e;
-    --secondary-bg: #16213e;
-    --accent-color: #0f3460;
-    --primary-text: #e94560;
-    --secondary-text: #ffffff;
-    --border-radius: 12px;
-    --shadow: 0 4px 15px rgba(0, 0, 0, 0.2);
+    --background: #0D1117;
+    --background-secondary: #161B22;
+    --text: #C9D1D9;
+    --text-secondary: #8B949E;
+    --primary: #58A6FF;
+    --primary-glow: rgba(88, 166, 255, 0.5);
+    --accent: #1F6FEB;
+    --green: #3FB950;
+    --red: #F85149;
+    --neon-cyan: #00f0ff;
 }
 
-/* Общий сброс стилей и настройка шрифта */
 * {
+    box-sizing: border-box;
     margin: 0;
     padding: 0;
-    box-sizing: border-box;
 }
 
 body {
-    font-family: 'Poppins', sans-serif;
-    background-color: var(--primary-bg);
-    color: var(--secondary-text);
-    display: flex;
-    justify-content: center;
-    align-items: center;
-    min-height: 100vh;
-    padding: 20px;
+    font-family: 'Inter', sans-serif;
+    background-color: var(--background);
+    color: var(--text);
+    background-image: radial-gradient(at 0% 0%, hsla(253, 80%, 20%, 0.7) 0px, transparent 50%),
+                      radial-gradient(at 90% 10%, hsla(180, 90%, 30%, 0.6) 0px, transparent 50%),
+                      radial-gradient(at 50% 80%, hsla(300, 75%, 25%, 0.5) 0px, transparent 50%);
+    background-attachment: fixed;
+    overscroll-behavior-y: contain;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
 }
 
-/* Главный контейнер приложения */
-.container {
-    width: 100%;
-    max-width: 900px;
-    background-color: var(--secondary-bg);
-    border-radius: var(--border-radius);
-    box-shadow: var(--shadow);
-    overflow: hidden;
-}
-
-/* Стилизация хедера (адаптировано под класс .header) */
-.header {
-    background-color: var(--accent-color);
-    padding: 20px 30px;
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    border-bottom: 2px solid var(--primary-text);
-}
-
-.logo {
-    color: var(--primary-text);
-    font-weight: 700;
-    font-size: 24px;
-}
-
-/* Стилизация навигации (адаптировано под класс .navigation) */
-.navigation {
-    display: flex;
-    gap: 25px;
-}
-
-.navigation a {
-    color: var(--secondary-text);
-    text-decoration: none;
-    font-weight: 500;
-    position: relative;
-    transition: color 0.3s ease;
-}
-
-.navigation a::after {
-    content: '';
-    position: absolute;
-    width: 0;
-    height: 2px;
-    bottom: -5px;
-    left: 50%;
-    transform: translateX(-50%);
-    background-color: var(--primary-text);
-    transition: width 0.3s ease;
-}
-
-.navigation a:hover,
-.navigation a.active {
-    color: var(--primary-text);
-}
-
-.navigation a:hover::after,
-.navigation a.active::after {
-    width: 100%;
-}
-
-/* Область для контента страниц */
 #app {
-    padding: 40px;
-    min-height: 400px;
+    display: flex;
+    flex-direction: column;
+    height: 100vh;
+    max-width: 480px;
+    margin: 0 auto;
+    border-left: 1px solid #222;
+    border-right: 1px solid #222;
+}
+
+#screen-container {
+    flex-grow: 1;
+    padding: 20px 15px;
+    overflow-y: auto;
+}
+
+.screen {
+    animation: fadeIn 0.3s ease-in-out;
+}
+
+@keyframes fadeIn {
+    from { opacity: 0; transform: translateY(10px); }
+    to { opacity: 1; transform: translateY(0); }
+}
+
+.card {
+    background-color: var(--background-secondary);
+    padding: 20px;
+    border-radius: 12px;
+    width: 100%;
+}
+
+/* --- Visual Effects: Dark Neon + Glass --- */
+
+.glass-card {
+    background: rgba(30, 30, 42, 0.6);
+    -webkit-backdrop-filter: blur(12px);
+    backdrop-filter: blur(12px);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    box-shadow: 0 4px 30px rgba(0, 0, 0, 0.2);
+    border-radius: 16px;
+}
+
+.neon-accent {
+    border: 1px solid rgba(0, 240, 255, 0.3);
+    box-shadow: 0 0 15px rgba(0, 240, 255, 0.1),
+                inset 0 0 8px rgba(0, 240, 255, 0.1);
+}
+
+.inner-glow {
+    box-shadow: inset 0 2px 10px 0 rgba(0, 240, 255, 0.2);
+}
+
+/* --- Buttons --- */
+.btn, button {
+    background-color: var(--primary);
+    color: white;
+    border: none;
+    padding: 12px 20px;
+    border-radius: 8px;
+    font-size: 16px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.2s ease-in-out;
+    box-shadow: 0 0 8px rgba(0, 0, 0, 0.0);
+}
+
+.btn:hover, button:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 0 12px var(--primary-glow), 0 0 20px var(--primary-glow);
+}
+
+.btn:active, button:active {
+    transform: translateY(0);
+    box-shadow: 0 0 5px var(--primary-glow);
+}
+
+.btn-secondary {
+    background-color: var(--background-secondary);
+    color: var(--text);
+    border: 1px solid var(--text-secondary);
+}
+
+/* --- Settings Screen Toggle Switch --- */
+.setting-item {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 15px 0;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+}
+.setting-item:last-child {
+    border-bottom: none;
+}
+
+.switch {
+  position: relative;
+  display: inline-block;
+  width: 60px;
+  height: 34px;
+}
+
+.switch input {
+  opacity: 0;
+  width: 0;
+  height: 0;
+}
+
+.slider {
+  position: absolute;
+  cursor: pointer;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background-color: #333;
+  transition: .4s;
+}
+
+.slider:before {
+  position: absolute;
+  content: "";
+  height: 26px;
+  width: 26px;
+  left: 4px;
+  bottom: 4px;
+  background-color: white;
+  transition: .4s;
+}
+
+input:checked + .slider {
+  background-color: var(--primary);
+  box-shadow: 0 0 8px var(--primary);
+}
+
+input:focus + .slider {
+  box-shadow: 0 0 1px var(--primary);
+}
+
+input:checked + .slider:before {
+  transform: translateX(26px);
+}
+
+.slider.round {
+  border-radius: 34px;
+}
+
+.slider.round:before {
+  border-radius: 50%;
+}
+
+/* --- Games Screen --- */
+.games-grid {
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    gap: 15px;
+}
+
+.game-card {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    padding: 20px;
+    cursor: pointer;
     text-align: center;
+    transition: transform 0.2s ease, box-shadow 0.2s ease;
 }
 
-#app h1 {
-    font-size: 36px;
-    color: var(--primary-text);
-    margin-bottom: 15px;
+.game-card:hover {
+    transform: translateY(-5px);
+    box-shadow: 0 10px 20px rgba(0, 240, 255, 0.2);
 }
 
-#app p {
-    font-size: 18px;
-    color: var(--secondary-text);
-    max-width: 600px;
-    margin: 0 auto; /* Центрируем параграф */
-    line-height: 1.7;
+.game-icon {
+    width: 64px;
+    height: 64px;
+    margin-bottom: 10px;
+}
+
+.game-name {
+    font-weight: 500;
+}
+
+/* --- Navigation --- */
+#bottom-nav {
+    display: flex;
+    justify-content: space-around;
+    padding: 10px 0;
+    background: rgba(10, 10, 15, 0.7);
+    backdrop-filter: blur(10px);
+    border-top: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.nav-btn {
+    background: none;
+    border: none;
+    color: var(--text-secondary);
+    cursor: pointer;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 4px;
+    padding: 5px;
+    border-radius: 8px;
+    transition: color 0.2s, background-color 0.2s;
+}
+
+.nav-btn.active {
+    color: var(--primary);
+}
+
+.nav-btn:hover {
+    background-color: rgba(255, 255, 255, 0.1);
 }
