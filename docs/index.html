@@ -1,39 +1,22 @@
 <!DOCTYPE html>
-<html lang="ru">
+<html lang="en">
 <head>
-    <meta charset="UTF-8" />
-    <link rel="icon" type="image/svg+xml" href="/ManiacStarsBot/assets/favicon-BljoW0gD.svg" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>TAPER App</title>
-
-    <!-- --- ИЗМЕНЕНО --- -->
-    <!-- 1. Подключил красивый шрифт 'Poppins' из Google Fonts. -->
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>TON GAME</title>
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600;700&display=swap" rel="stylesheet">
-
-    <!-- 2. Ссылка на наш обновленный файл стилей. -->
-  <script type="module" crossorigin src="/ManiacStarsBot/assets/index-B23p15iA.js"></script>
-  <link rel="stylesheet" crossorigin href="/ManiacStarsBot/assets/index-BFr4j8np.css">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/tone/14.7.77/Tone.js"></script>
+  <script type="module" crossorigin src="/ManiacStarsBot/assets/index-BItZMBSL.js"></script>
+  <link rel="stylesheet" crossorigin href="/ManiacStarsBot/assets/index-D9s09qWz.css">
 </head>
 <body>
-    <!-- 3. Создал более четкую структуру для удобства стилизации. -->
-    <div class="container">
-        <header class="header">
-            <div class="logo">TAPER</div>
-            <nav class="navigation">
-                <a href="/" data-link class="active">Games</a>
-                <a href="/referrals" data-link>Referrals</a>
-                <a href="/profile" data-link>Profile</a>
-                <a href="/settings" data-link>Settings</a>
-                <a href="/taper" data-link>Taper</a>
-            </nav>
-        </header>
-
-        <!-- Основной контент будет загружаться сюда -->
-        <main id="app"></main>
+    <div id="app">
+        <div id="screen-container"></div>
+        <nav id="bottom-nav">
+            <!-- Navigation buttons will be injected here by JS -->
+        </nav>
     </div>
-
-    <!-- Скрипт подключается в конце, как и положено -->
 </body>
 </html>
