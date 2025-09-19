@@ -10,32 +10,54 @@ import { initI18n } from './core/i18n.js';
 function initializeApp() {
     // Сначала инициализируем систему перевода (i18n)
     initI18n().then(() => {
+        const navContainer = document.getElementById('bottom-nav');
+        const currentRoute = getRoute() || 'games';
+
         // После успешной загрузки переводов, отрисовываем навигацию
-        renderNav();
+        renderNav(navContainer, currentRoute);
 
         // Выполняем первоначальную навигацию на основе URL или на главную страницу
-        navigate(getRoute() || '/games');
+        navigate(currentRoute);
     });
 
-    // Добавляем глобальный обработчик кликов для звука нажатия и инициализации аудио
-    document.body.addEventListener('click', (e) => {
-        // При первом клике пользователя инициализируем AudioContext.
-        // Функция сама проверит, нужно ли ей выполняться.
+    /**
+     * Обработчик для самого первого клика пользователя.
+     * Инициализирует аудио и заменяет себя на более простой обработчик.
+     */
+    const handleFirstClick = (e) => {
+        // 1. Инициализируем аудио
         initAudio();
 
-        // Воспроизводим звук только если клик был по кнопке или ссылке
+        // 2. Воспроизводим звук, если это был клик по кнопке или ссылке
         if (e.target.closest('button, a')) {
             playTap();
         }
-    });
+
+        // 3. Удаляем этот обработчик, чтобы он больше никогда не выполнялся
+        document.body.removeEventListener('click', handleFirstClick);
+
+        // 4. Вешаем новый, более простой обработчик, который отвечает только за звуки
+        document.body.addEventListener('click', (event) => {
+            if (event.target.closest('button, a')) {
+                playTap();
+            }
+        });
+    };
+
+    // Добавляем глобальный обработчик для ПЕРВОГО клика
+    document.body.addEventListener('click', handleFirstClick);
 
     // Добавляем обработчик для кнопок навигации
     const navContainer = document.getElementById('bottom-nav');
     if (navContainer) {
         navContainer.addEventListener('click', (event) => {
-            const navButton = event.target.closest('.nav-btn');
-            if (navButton && navButton.dataset.route) {
-                navigate(navButton.dataset.route);
+            const navLink = event.target.closest('.nav-link');
+            // Проверяем, что кликнули именно по ссылке навигации
+            if (navLink && navLink.hash) {
+                event.preventDefault(); // Предотвращаем стандартное поведение ссылки
+                const route = navLink.hash.substring(1); // Получаем маршрут из href (убираем #)
+                navigate(route);
+                renderNav(navContainer, route); // Перерисовываем навигацию для подсветки активной кнопки
             }
         });
     } else {

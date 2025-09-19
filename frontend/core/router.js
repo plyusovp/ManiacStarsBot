@@ -1,50 +1,45 @@
 import { screens } from '../ui/components/screens/index.js';
 
-export const getRoute = () => window.location.pathname || '/games';
+// Эта функция теперь будет смотреть на URL после знака #
+export const getRoute = () => window.location.hash.substring(1);
 
-export const navigate = (path, replace = false) => {
+export const navigate = (route) => {
     const screenContainer = document.getElementById('screen-container');
     if (!screenContainer) {
         console.error('Screen container #screen-container not found!');
         return;
     }
 
-    const route = screens.find(s => {
-        if (s.path.includes(':')) {
-            const pathRegex = new RegExp(`^${s.path.replace(/:\w+/g, '([^/]+)')}$`);
-            return pathRegex.test(path);
-        }
-        return s.path === path;
-    });
+    // Находим нужный компонент экрана по его ID
+    const screenComponent = Object.values(screens).find(s => s.id === route);
 
-    if (route) {
-        if (replace) {
-            window.history.replaceState({}, '', path);
-        } else {
-            window.history.pushState({}, '', path);
-        }
+    if (screenComponent) {
+        // Устанавливаем новый хэш в URL, чтобы страница обновлялась
+        window.location.hash = route;
 
-        // Clear previous screen
+        // Очищаем предыдущий экран
         while (screenContainer.firstChild) {
             screenContainer.removeChild(screenContainer.firstChild);
         }
 
-        // Render new screen
-        const screenElement = route.component();
-        screenContainer.appendChild(screenElement);
+        // Вызываем функцию init нового экрана
+        if (typeof screenComponent.init === 'function') {
+            screenComponent.init(screenContainer);
+        } else {
+            console.error(`Screen component for "${route}" has no init function!`);
+        }
 
-        // Dispatch a custom event to notify other parts of the app (like nav)
-        document.dispatchEvent(new CustomEvent('navigate', { detail: { path } }));
     } else {
-        console.error(`No route found for path: ${path}`);
-        // Optionally, navigate to a 404 page or a default page
-        if (path !== '/games') {
-             navigate('/games');
+        console.error(`No screen found for route: ${route}`);
+        // Если маршрут не найден, переходим на экран "taper" по умолчанию
+        if (route !== 'taper') {
+             navigate('taper');
         }
     }
 };
 
-window.addEventListener('popstate', () => {
-    const currentPath = getRoute();
-    navigate(currentPath, true);
+// Обрабатываем изменение хэша (например, при использовании кнопок "назад/вперед" в браузере)
+window.addEventListener('hashchange', () => {
+    const currentRoute = getRoute() || 'taper';
+    navigate(currentRoute);
 });
