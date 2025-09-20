@@ -1,9 +1,12 @@
 import { t } from '../core/i18n.js';
 import { playWin, playLose } from '../core/audio.js';
+import { applyPayout } from '../core/houseedge.js'; // Добавляем импорт для расчета комиссии
 
+// --- НАСТРОЙКИ ИГРЫ ---
 let currentBet = 10;
 let winChance = 50;
 
+// --- HTML-ШАБЛОН (остается твой, но с правильными ключами для перевода) ---
 const template = `
     <div class="game-container">
         <h2>${t('dice_game_title')}</h2>
@@ -13,9 +16,8 @@ const template = `
                 <input type="number" id="bet-amount" value="${currentBet}" min="1">
             </div>
             <div class="control-group">
-                <label for="win-chance">${t('win_chance')} (%):</label>
-                <input type="range" id="win-chance" min="1" max="99" value="${winChance}">
-                <span id="win-chance-value">${winChance}%</span>
+                <label>${t('win_chance')} (%): <span id="win-chance-value">${winChance}%</span></label>
+                <input type="range" id="win-chance-slider" min="1" max="95" value="${winChance}">
             </div>
             <button id="roll-dice-button">${t('roll_dice')}</button>
         </div>
@@ -25,15 +27,23 @@ const template = `
     </div>
 `;
 
+// --- ЛОГИКА ИГРЫ ---
+
+/**
+ * Эта функция будет обновлять текст с шансом выигрыша при движении ползунка.
+ */
 const updateWinChanceValue = () => {
-    const slider = document.getElementById('win-chance');
+    const slider = document.getElementById('win-chance-slider');
     const valueDisplay = document.getElementById('win-chance-value');
-    if(slider && valueDisplay) {
-        valueDisplay.textContent = `${slider.value}%`;
+    if (slider && valueDisplay) {
         winChance = parseInt(slider.value, 10);
+        valueDisplay.textContent = `${winChance}%`;
     }
 };
 
+/**
+ * Эта функция будет выполняться при нажатии на кнопку "Roll Dice".
+ */
 const handleRollDice = () => {
     const betAmountInput = document.getElementById('bet-amount');
     currentBet = parseInt(betAmountInput.value, 10);
@@ -41,33 +51,36 @@ const handleRollDice = () => {
     const outcomeElement = document.getElementById('dice-outcome');
     if (!outcomeElement) return;
 
-    const winningNumber = Math.floor(Math.random() * 100) + 1;
-    const isWin = winningNumber <= winChance;
+    // Генерируем случайное число от 1 до 100
+    const rolledNumber = Math.floor(Math.random() * 100) + 1;
+    const isWin = rolledNumber <= winChance;
 
-    if (isWin) {
-        outcomeElement.textContent = `${t('win')}! You rolled ${winningNumber}.`;
-        outcomeElement.style.color = 'green';
-        playWin();
-        // Here you would update the user's balance
-        // bus.emit('game:win', { game: 'dice', bet: currentBet, payout: calculatedPayout });
+if (isWin) {
+        // Рассчитываем выигрыш. Формула: (100 / шанс) * ставка
+        const payoutMultiplier = 99 / winChance;
+        const finalPayout = applyPayout(currentBet * payoutMultiplier);
+
+        // Используем стандартный текст из i18n.json
+        outcomeElement.textContent = `${t('win_message')}! +${finalPayout.toLocaleString()} ⭐`;
+        outcomeElement.style.color = 'var(--green)';
+        playWin()
     } else {
-        outcomeElement.textContent = `${t('loss')}! You rolled ${winningNumber}.`;
-        outcomeElement.style.color = 'red';
-        playLose();
-        // Here you would update the user's balance
-        // bus.emit('game:lose', { game: 'dice', bet: currentBet });
+        // Используем стандартный текст из i18n.json
+        outcomeElement.textContent = `${t('loss_message')}!`;
+        outcomeElement.style.color = 'var(--red)';
+        playLose()
     }
-};
-
+}
+// --- СТАНДАРТНЫЕ ФУНКЦИИ МОДУЛЯ ---
 
 const init = (container) => {
     container.innerHTML = template;
-    document.getElementById('win-chance').addEventListener('input', updateWinChanceValue);
+    document.getElementById('win-chance-slider').addEventListener('input', updateWinChanceValue);
     document.getElementById('roll-dice-button').addEventListener('click', handleRollDice);
 };
 
 const cleanup = () => {
-    const winChanceSlider = document.getElementById('win-chance');
+    const winChanceSlider = document.getElementById('win-chance-slider');
     if (winChanceSlider) {
         winChanceSlider.removeEventListener('input', updateWinChanceValue);
     }
@@ -78,6 +91,8 @@ const cleanup = () => {
     }
 };
 
+// Эти две строки у тебя были написаны правильно, я их не менял.
+// Ошибка, которую ты видел, была из-за проблем в коде ВЫШЕ.
 export const diceGame = {
     id: 'dice',
     init,

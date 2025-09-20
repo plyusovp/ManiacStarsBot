@@ -1,14 +1,17 @@
 import { t } from '../core/i18n.js';
 import { playWin, playLose } from '../core/audio.js';
+import { applyPayout } from '../core/houseedge.js'; // Импортируем для расчета комиссии
 
+// --- НАСТРОЙКИ ИГРЫ ---
 let currentBet = 10;
 let multiplier = 1.0;
-let gameState = 'waiting'; // waiting, running, crashed
-let gameLoopInterval;
+let gameState = 'waiting'; // 'waiting', 'running', 'crashed'
+let gameLoopInterval = null;
 
+// --- HTML-ШАБЛОН ---
 const template = `
-    <div class="game-container">
-        <h2>${t('crash_game_title')}</h2>
+    <div class="game-container crash-game">
+        <h2 class="game-title">${t('crash_game_title')}</h2>
         <div class="crash-graph">
             <p id="multiplier-display">x1.00</p>
         </div>
@@ -17,7 +20,7 @@ const template = `
                 <label for="crash-bet-amount">${t('bet_amount')}:</label>
                 <input type="number" id="crash-bet-amount" value="${currentBet}" min="1">
             </div>
-            <button id="crash-button">${t('place_bet')}</button>
+            <button id="crash-button">${t('crash_place_bet')}</button>
         </div>
         <div class="crash-result">
             <p id="crash-outcome"></p>
@@ -25,64 +28,123 @@ const template = `
     </div>
 `;
 
+// --- ЛОГИКА ИГРЫ ---
+
+/**
+ * Рассчитывает точку краша по более честной формуле.
+ * @returns {number} Множитель, на котором произойдет краш.
+ */
+const calculateCrashPoint = () => {
+    // Эта формула дает более справедливое распределение результатов,
+    // где высокие множители выпадают реже, что делает игру интереснее.
+    const e = 2 ** 32;
+    const h = Math.floor(Math.random() * e);
+    // Устанавливаем house edge для краша в 3% (соответствует applyPayout)
+    const houseEdge = 0.97;
+    
+    // Если выпадает 0, это мгновенный краш на x1.00
+    if (h % (1 / (1 - houseEdge)) === 0) {
+        return 1.00;
+    }
+
+    const crashPoint = Math.floor((100 * e - h) / (e - h)) / 100;
+    return Math.max(1.01, crashPoint);
+};
+
+
 const resetGame = () => {
     multiplier = 1.0;
     gameState = 'waiting';
-    document.getElementById('multiplier-display').textContent = `x${multiplier.toFixed(2)}`;
-    document.getElementById('multiplier-display').style.color = 'white';
-    document.getElementById('crash-button').textContent = t('place_bet');
-    document.getElementById('crash-button').disabled = false;
-    document.getElementById('crash-outcome').textContent = '';
+    if(gameLoopInterval) clearInterval(gameLoopInterval);
+    
+    const multiplierDisplay = document.getElementById('multiplier-display');
+    const crashButton = document.getElementById('crash-button');
+    const outcomeElement = document.getElementById('crash-outcome');
+
+    if (multiplierDisplay) {
+        multiplierDisplay.textContent = `x${multiplier.toFixed(2)}`;
+        multiplierDisplay.style.color = 'white';
+    }
+    if (crashButton) {
+        crashButton.textContent = t('crash_place_bet');
+        crashButton.disabled = false;
+    }
+    if(outcomeElement) outcomeElement.textContent = '';
 };
 
 const startGameLoop = () => {
     gameState = 'running';
-    document.getElementById('crash-button').textContent = t('cash_out');
-
-    // Determine crash point
-    const crashPoint = 1 + Math.random() * 99; // Crash somewhere between 1.00 and 100.00
+    document.getElementById('crash-button').textContent = t('crash_take');
+    
+    const crashPoint = calculateCrashPoint();
 
     gameLoopInterval = setInterval(() => {
-        multiplier += 0.01;
-        document.getElementById('multiplier-display').textContent = `x${multiplier.toFixed(2)}`;
+        // Замедление роста множителя со временем для драматичности
+        const increment = 0.01 + (multiplier / 500);
+        multiplier += increment;
+        
+        const multiplierDisplay = document.getElementById('multiplier-display');
+        if (multiplierDisplay) {
+            multiplierDisplay.textContent = `x${multiplier.toFixed(2)}`;
+        }
 
         if (multiplier >= crashPoint) {
             clearInterval(gameLoopInterval);
             gameState = 'crashed';
-            document.getElementById('multiplier-display').style.color = 'red';
-            document.getElementById('crash-button').textContent = t('crashed');
-            document.getElementById('crash-button').disabled = true;
-            document.getElementById('crash-outcome').textContent = `${t('crashed_at')} x${multiplier.toFixed(2)}`;
+            
+            const crashButton = document.getElementById('crash-button');
+            const outcomeElement = document.getElementById('crash-outcome');
+            
+            if (multiplierDisplay) multiplierDisplay.style.color = 'var(--red)';
+            if (crashButton) {
+                crashButton.textContent = t('crash_crashed');
+                crashButton.disabled = true;
+            }
+            if (outcomeElement) outcomeElement.textContent = `${t('crash_crashed')} x${crashPoint.toFixed(2)}`;
+            
             playLose();
             setTimeout(resetGame, 3000);
         }
-    }, 50); // Speed of the multiplier increase
+    }, 100); // Интервал обновления
 };
 
 const handleCrashButton = () => {
     if (gameState === 'waiting') {
         const betAmountInput = document.getElementById('crash-bet-amount');
-        currentBet = parseInt(betAmount-input.value, 10);
+        // ИСПРАВЛЕНО: Убрана опечатка 'betAmount-input'
+        currentBet = parseInt(betAmountInput.value, 10);
         startGameLoop();
     } else if (gameState === 'running') {
         clearInterval(gameLoopInterval);
         gameState = 'cashed_out';
-        const winAmount = (currentBet * multiplier).toFixed(2);
-        document.getElementById('crash-outcome').textContent = `${t('cashed_out_at')} x${multiplier.toFixed(2)}! ${t('you_won')} ${winAmount}`;
-        document.getElementById('crash-button').disabled = true;
+
+        // ИСПРАВЛЕНО: Выигрыш рассчитывается с учетом комиссии
+        const winAmount = applyPayout(currentBet * multiplier);
+        
+        const outcomeElement = document.getElementById('crash-outcome');
+        if(outcomeElement) {
+             outcomeElement.textContent = `${t('crash_take')} x${multiplier.toFixed(2)}! ${t('win_message')} +${winAmount.toLocaleString()}`;
+        }
+       
+        const crashButton = document.getElementById('crash-button');
+        if (crashButton) crashButton.disabled = true;
+        
         playWin();
-        // bus.emit('game:win', { game: 'crash', bet: currentBet, payout: winAmount });
         setTimeout(resetGame, 3000);
     }
 };
 
+// --- СТАНДАРТНЫЕ ФУНКЦИИ МОДУЛЯ ---
 const init = (container) => {
     container.innerHTML = template;
+    resetGame(); // Сбрасываем состояние при инициализации
     document.getElementById('crash-button').addEventListener('click', handleCrashButton);
 };
 
 const cleanup = () => {
-    clearInterval(gameLoopInterval);
+    if (gameLoopInterval) {
+        clearInterval(gameLoopInterval);
+    }
     const crashButton = document.getElementById('crash-button');
     if (crashButton) {
         crashButton.removeEventListener('click', handleCrashButton);

@@ -242,3 +242,4 @@ async def cash_out(callback: CallbackQuery, bot: Bot, state: FSMContext):
         callback.message.message_id,
         reply_markup=coinflip_play_again_keyboard(),
     )
+    

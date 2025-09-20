@@ -121,3 +121,4 @@ async def clean_junk_message(state: FSMContext, bot: Bot):
             current_data = await state.get_data()
             current_data.pop("junk_message_id", None)
             await state.set_data(current_data)
+            

@@ -1,5 +1,6 @@
 import { t } from '../core/i18n.js';
 import { playWin, playLose } from '../core/audio.js';
+import { applyPayout } from '../core/houseedge.js'; // <-- 1. ИМПОРТИРУЕМ ФУНКЦИЮ
 
 let currentBet = 10;
 
@@ -52,14 +53,15 @@ const handleFlip = (playerChoice) => {
             coin.classList.add(result === 'heads' ? 'is-heads' : 'is-tails');
 
             if (playerChoice === result) {
-                outcomeElement.textContent = `${t('win')}! It was ${t(result)}.`;
+                const payout = applyPayout(currentBet * 2); // <-- 2. РАССЧИТЫВАЕМ ВЫИГРЫШ С КОМИССИЕЙ
+                outcomeElement.textContent = `${t('win')}! It was ${t(result)}. You won ${payout} ⭐`;
                 outcomeElement.style.color = 'green';
-                playWin();
-                // bus.emit('game:win', { game: 'coin', bet: currentBet, payout: currentBet * 2 });
+                playWin(); // <-- 3. ИСПОЛЬЗУЕМ СТАНДАРТНЫЙ ЗВУК
+                // bus.emit('game:win', { game: 'coin', bet: currentBet, payout: payout });
             } else {
                 outcomeElement.textContent = `${t('loss')}! It was ${t(result)}.`;
                 outcomeElement.style.color = 'red';
-                playLose();
+                playLose(); // <-- 3. ИСПОЛЬЗУЕМ СТАНДАРТНЫЙ ЗВУК
                 // bus.emit('game:lose', { game: 'coin', bet: currentBet });
             }
 

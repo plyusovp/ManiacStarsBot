@@ -1,73 +1,73 @@
-let audioContext;
-let masterGain;
+// Этот модуль - наш "музыкальный центр". Он загружает все звуки при старте
+// и позволяет легко проигрывать их по короткому имени (ID).
 
-// Pre-create empty buffers for different sounds
-// This avoids loading sounds from URLs, which can be problematic.
-// Instead, we'll generate simple sounds programmatically.
-const soundBuffers = {
-    tap: null,
-    win: null,
-    lose: null,
+// --- Карта всех звуковых эффектов в приложении ---
+// Ключ - это ID звука, значение - путь к файлу.
+const SOUND_MAP = {
+    tap: './assets/sfx/tap.mp3',
+    win: './assets/sfx/win.mp3',
+    lose: './assets/sfx/lose.mp3',
+    crash_bust: './assets/sfx/crash_bust.mp3',
+    slots_spin: './assets/sfx/slots_spin.mp3',
+    slots_stop: './assets/sfx/slots_stop.mp3',
+    bigwin: './assets/sfx/bigwin.mp3',
+    // TODO: Добавь сюда остальные звуки, когда они у тебя появятся
 };
 
-// Creates a simple oscillator-based sound and returns an AudioBuffer
-const createTone = (freq, duration, type = 'sine') => {
-    if (!audioContext) return null;
-    const sampleRate = audioContext.sampleRate;
-    const frameCount = sampleRate * duration;
-    const buffer = audioContext.createBuffer(1, frameCount, sampleRate);
-    const data = buffer.getChannelData(0);
-    for (let i = 0; i < frameCount; i++) {
-        const time = i / sampleRate;
-        data[i] = Math.sin(freq * 2 * Math.PI * time) * Math.exp(-time * 5); // Simple decay
-    }
-    return buffer;
-};
+const audioContext = new (window.AudioContext || window.webkitAudioContext)();
+const sounds = {};
+let isMuted = false;
 
-// Function to initialize the AudioContext on user interaction
-export const initAudio = () => {
-    if (!audioContext) {
+/**
+ * Загружает все звуковые файлы, указанные в SOUND_MAP.
+ * Эту функцию нужно вызвать один раз при старте приложения.
+ */
+async function loadAllSounds() {
+    console.log('[Audio] Загрузка звуков...');
+    for (const id in SOUND_MAP) {
         try {
-            audioContext = new (window.AudioContext || window.webkitAudioContext)();
-            masterGain = audioContext.createGain();
-            masterGain.gain.value = 0.5; // Set volume to 50%
-            masterGain.connect(audioContext.destination);
-
-            // Generate programmatic sounds
-            soundBuffers.tap = createTone(440, 0.1, 'triangle'); // A short 'blip'
-            soundBuffers.win = createTone(880, 0.2, 'sine');    // A higher 'win' sound
-            soundBuffers.lose = createTone(220, 0.3, 'square');  // A lower 'lose' sound
-
-            console.log("Audio initialized successfully.");
-        } catch (e) {
-            console.error("Web Audio API is not supported in this browser.", e);
+            const response = await fetch(SOUND_MAP[id]);
+            const arrayBuffer = await response.arrayBuffer();
+            const audioBuffer = await audioContext.decodeAudioData(arrayBuffer);
+            sounds[id] = audioBuffer;
+        } catch (error) {
+            console.error(`Не удалось загрузить звук "${id}":`, error);
         }
     }
-};
+    console.log('[Audio] Все звуки успешно загружены!');
+}
 
-// Generic function to play a sound from our buffer cache
-const playSound = (buffer) => {
-    if (!audioContext || !buffer || masterGain.gain.value === 0) {
-        // Resume context if it was suspended
-        if (audioContext && audioContext.state === 'suspended') {
-            audioContext.resume();
-        }
-        return;
+/**
+ * Проигрывает звук по его ID.
+ * @param {string} id - ID звука из SOUND_MAP (например, 'win').
+ */
+function play(id) {
+    if (isMuted || !sounds[id] || !audioContext) return;
+
+    // Возобновляем контекст, если он был приостановлен браузером
+    if (audioContext.state === 'suspended') {
+        audioContext.resume();
     }
+
     const source = audioContext.createBufferSource();
-    source.buffer = buffer;
-    source.connect(masterGain);
+    source.buffer = sounds[id];
+    source.connect(audioContext.destination);
     source.start(0);
-};
+}
 
-// Exported functions to play specific sounds
-export const playTap = () => playSound(soundBuffers.tap);
-export const playWin = () => playSound(soundBuffers.win);
-export const playLose = () => playSound(soundBuffers.lose);
+/**
+ * Включает или выключает все звуки в приложении.
+ * @param {boolean} mutedState - true, чтобы выключить звук, false - чтобы включить.
+ */
+function setMuted(mutedState) {
+    isMuted = mutedState;
+    console.log(`[Audio] Звук ${isMuted ? 'выключен' : 'включен'}.`);
+    // TODO: Сохранить этот выбор в localStorage, чтобы он запоминался
+}
 
-// Function to toggle sound on/off
-export const toggleSound = (enabled) => {
-    if (masterGain) {
-        masterGain.gain.value = enabled ? 0.5 : 0;
-    }
+// Экспортируем наш аудио-менеджер
+export const audio = {
+    load: loadAllSounds,
+    play: play,
+    setMuted: setMuted,
 };

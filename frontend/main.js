@@ -1,69 +1,86 @@
 import { renderNav } from './ui/components/nav.js';
 import { navigate, getRoute } from './core/router.js';
-import { playTap, initAudio } from './core/audio.js';
+import { initAudio, playTap } from './core/audio.js';
 import { initI18n } from './core/i18n.js';
 
 /**
- * Главная функция инициализации приложения.
- * Она будет вызвана только после полной загрузки DOM.
+ * Возвращает ближайший элемент (Element) для произвольного node (чтобы избежать ошибок,
+ * когда event.target — текстовый узел).
  */
-function initializeApp() {
-    // Сначала инициализируем систему перевода (i18n)
-    initI18n().then(() => {
-        const navContainer = document.getElementById('bottom-nav');
-        const currentRoute = getRoute() || 'games';
-
-        // После успешной загрузки переводов, отрисовываем навигацию
-        renderNav(navContainer, currentRoute);
-
-        // Выполняем первоначальную навигацию на основе URL или на главную страницу
-        navigate(currentRoute);
-    });
-
-    /**
-     * Обработчик для самого первого клика пользователя.
-     * Инициализирует аудио и заменяет себя на более простой обработчик.
-     */
-    const handleFirstClick = (e) => {
-        // 1. Инициализируем аудио
-        initAudio();
-
-        // 2. Воспроизводим звук, если это был клик по кнопке или ссылке
-        if (e.target.closest('button, a')) {
-            playTap();
-        }
-
-        // 3. Удаляем этот обработчик, чтобы он больше никогда не выполнялся
-        document.body.removeEventListener('click', handleFirstClick);
-
-        // 4. Вешаем новый, более простой обработчик, который отвечает только за звуки
-        document.body.addEventListener('click', (event) => {
-            if (event.target.closest('button, a')) {
-                playTap();
-            }
-        });
-    };
-
-    // Добавляем глобальный обработчик для ПЕРВОГО клика
-    document.body.addEventListener('click', handleFirstClick);
-
-    // Добавляем обработчик для кнопок навигации
-    const navContainer = document.getElementById('bottom-nav');
-    if (navContainer) {
-        navContainer.addEventListener('click', (event) => {
-            const navLink = event.target.closest('.nav-link');
-            // Проверяем, что кликнули именно по ссылке навигации
-            if (navLink && navLink.hash) {
-                event.preventDefault(); // Предотвращаем стандартное поведение ссылки
-                const route = navLink.hash.substring(1); // Получаем маршрут из href (убираем #)
-                navigate(route);
-                renderNav(navContainer, route); // Перерисовываем навигацию для подсветки активной кнопки
-            }
-        });
-    } else {
-        console.error('Navigation container #bottom-nav not found during initialization!');
-    }
+function getClosestElement(node) {
+  while (node && node.nodeType !== 1) node = node.parentNode;
+  return node;
 }
 
-// Ждем, пока весь HTML-документ не будет готов, и только после этого запускаем наше приложение.
-document.addEventListener('DOMContentLoaded', initializeApp);
+async function initializeApp() {
+  console.log('App init');
+
+  // i18n может упасть — ловим ошибки чтобы не ломать всё приложение
+  try {
+    await initI18n('ru');
+  } catch (err) {
+    console.error('initI18n error:', err);
+  }
+
+  // Навигация — проверяем наличие контейнера и функций
+  const navContainer = document.getElementById('bottom-nav');
+  const currentRoute = (typeof getRoute === 'function' ? getRoute() : null) || 'taper';
+
+  if (navContainer && typeof renderNav === 'function') {
+    try {
+      renderNav(navContainer, currentRoute);
+    } catch (err) {
+      console.error('renderNav error:', err);
+    }
+  } else {
+    console.warn('bottom-nav not found or renderNav is not a function. Skipping renderNav.');
+  }
+
+  if (typeof navigate === 'function') {
+    try {
+      navigate(currentRoute);
+    } catch (err) {
+      console.error('navigate error:', err);
+    }
+  }
+
+  // Постоянный обработчик для воспроизведения звука при клике по button/a
+  const playOnClick = (ev) => {
+    const el = getClosestElement(ev.target);
+    if (!el) return;
+    if (el.closest('button, a')) {
+      try { playTap(); } catch (err) { console.error('playTap error:', err); }
+    }
+  };
+
+  // Одноразовая инициализация аудио (может быть async). Срабатывает на первом клике пользователя.
+  const initAudioOnce = async (ev) => {
+    try {
+      const maybePromise = initAudio();
+      if (maybePromise && typeof maybePromise.then === 'function') {
+        await maybePromise;
+      }
+    } catch (err) {
+      console.error('initAudio error:', err);
+    }
+
+    // Если первый клик был по кнопке/ссылке — проигрываем звук сразу
+    const el = getClosestElement(ev?.target);
+    if (el && el.closest('button, a')) {
+      try { playTap(); } catch (err) { console.error('playTap error:', err); }
+    }
+
+    // Устанавливаем постоянный обработчик кликов
+    document.body.addEventListener('click', playOnClick);
+  };
+
+  // Регистрация одноразового обработчика — автоматически удалится после первого срабатывания
+  document.body.addEventListener('click', initAudioOnce, { once: true });
+}
+
+// Запуск: если DOM уже загружен — запускаем сразу, иначе — слушаем DOMContentLoaded
+if (document.readyState === 'loading') {
+  document.addEventListener('DOMContentLoaded', initializeApp);
+} else {
+  initializeApp();
+}

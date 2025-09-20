@@ -1,22 +1,87 @@
+// Этот модуль - "главный мотор" для всех анимаций (игр, частиц).
+// Он создаёт один цикл requestAnimationFrame, чтобы всё было синхронно и плавно.
+
+const subscribers = new Set(); // Список подписчиков, которые хотят получать "тики" анимации
+let lastTime = 0;
+let isRunning = false;
+let isLowPerf = false; // Флаг для слабых устройств
+
 /**
- * Определяет, является ли устройство низкопроизводительным.
- * Это помогает адаптировать UI, отключая "тяжелые" эффекты.
- * @returns {boolean} - true, если устройство считается "слабым".
+ * Простая проверка на "слабое" устройство.
+ * Можно будет улучшить в будущем.
  */
-export function isLowPerfDevice() {
-    // 1. Проверяем настройку системы "предпочитает меньше движений" (важно для доступности).
-    const mediaQuery = window.matchMedia('(prefers-reduced-motion: reduce)');
-    if (mediaQuery.matches) {
-        return true;
+function detectLowPerformance() {
+    // Если у пользователя меньше 4 ядер процессора, считаем устройство слабым
+    if (navigator.hardwareConcurrency && navigator.hardwareConcurrency < 4) {
+        isLowPerf = true;
     }
-
-    // 2. Проверяем количество ядер процессора (если API доступно).
-    // Устройства с 4 или менее логическими ядрами считаем кандидатами на низкую производительность.
-    // Это простой эвристический метод.
-    if (navigator.hardwareConcurrency && navigator.hardwareConcurrency <= 4) {
-        return true;
+    // Если пользователь сам включил в браузере/системе режим экономии
+    if (window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches) {
+        isLowPerf = true;
     }
-
-    // В будущем можно добавить и другие проверки (например, объем RAM, если API станет доступно).
-    return false;
+    if (isLowPerf) {
+        console.warn('[Performance] Обнаружено слабое устройство. Эффекты будут упрощены.');
+        document.body.classList.add('low-performance');
+    }
 }
+
+/**
+ * Главный цикл анимации.
+ * @param {number} currentTime - Время, переданное браузером.
+ */
+function gameLoop(currentTime) {
+    if (!isRunning) return;
+
+    const deltaTime = (currentTime - lastTime) / 1000; // Время в секундах с прошлого кадра
+    lastTime = currentTime;
+
+    // Оповещаем всех подписчиков о новом кадре
+    for (const callback of subscribers) {
+        callback(deltaTime);
+    }
+
+    requestAnimationFrame(gameLoop);
+}
+
+/**
+ * Добавляет функцию в цикл анимации.
+ * @param {function} callback - Функция, которая будет вызываться каждый кадр.
+ */
+function subscribe(callback) {
+    subscribers.add(callback);
+}
+
+/**
+ * Удаляет функцию из цикла анимации.
+ * @param {function} callback - Функция для удаления.
+ */
+function unsubscribe(callback) {
+    subscribers.delete(callback);
+}
+
+/**
+ * Запускает главный цикл анимации.
+ */
+function start() {
+    if (isRunning) return;
+    console.log('[Performance] Главный цикл запущен.');
+    isRunning = true;
+    lastTime = performance.now();
+    requestAnimationFrame(gameLoop);
+}
+
+/**
+ * Останавливает главный цикл анимации.
+ */
+function stop() {
+    isRunning = false;
+}
+
+export const performance = {
+    init: detectLowPerformance,
+    isLow: () => isLowPerf,
+    start,
+    stop,
+    subscribe,
+    unsubscribe,
+};

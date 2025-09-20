@@ -439,3 +439,4 @@ async def achievement_info_handler(
         )
         await state.update_data(current_view="achievement_info")
     await callback.answer()
+    

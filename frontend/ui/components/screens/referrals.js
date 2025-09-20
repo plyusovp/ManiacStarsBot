@@ -1,53 +1,99 @@
-import { state } from '../../../core/state.js';
-import { showMessageModal } from '../modal.js'; // ИСПРАВЛЕНО: импорт из нового компонента modal.js
+// Импортируем нужные сервисы
+// TODO: Убедись, что пути к файлам правильные
+import { audio } from '../../../core/audio.js';
+import { createConfetti } from '../../../core/effects.js';
 
-const template = (referralLink) => `
-    <div class="screen">
-        <div class="referral-card">
-            <h2>Your Referral Link</h2>
-            <p>Share this link with your friends. You'll get a bonus for each friend who joins!</p>
-            <div class="referral-link-container">
-                <input type="text" value="${referralLink}" readonly id="referral-link-input">
-                <button id="copy-referral-link">Copy</button>
+// --- Фейковые данные для примера. Потом их нужно будет получать с бэкенда ---
+const FAKE_REFERRAL_DATA = {
+    link: "https://t.me/ManiacStarsBot?start=ref123456",
+    invitedCount: 12,
+    activeCount: 4,
+    earned: 1570,
+    lastReferrals: [
+        { name: "User1***" },
+        { name: "User2***" },
+        { name: "User3***" },
+    ]
+};
+
+export function mount(root) {
+    // --- 1. Создаём HTML-структуру ---
+    root.innerHTML = `
+        <div class="screen-container referrals-screen">
+            <h2>Ваши рефералы</h2>
+            
+            <div class="card glass-card">
+                <p>Ваша реферальная ссылка:</p>
+                <div class="ref-link-wrapper">
+                    <input type="text" id="refLinkInput" value="${FAKE_REFERRAL_DATA.link}" readonly>
+                </div>
+                <div class="ref-buttons">
+                    <button id="copyBtn">Скопировать</button>
+                    <button id="shareBtn">Поделиться</button>
+                </div>
+            </div>
+
+            <div class="ref-stats">
+                <div class="card">
+                    <span class="stat-value">${FAKE_REFERRAL_DATA.invitedCount}</span>
+                    <span class="stat-label">Приглашено</span>
+                </div>
+                <div class="card">
+                    <span class="stat-value">${FAKE_REFERRAL_DATA.activeCount}</span>
+                    <span class="stat-label">Активно</span>
+                </div>
+                <div class="card">
+                    <span class="stat-value">${FAKE_REFERRAL_DATA.earned} ⭐</span>
+                    <span class="stat-label">Заработано</span>
+                </div>
+            </div>
+
+            <h3>Последние приглашённые</h3>
+            <div class="ref-list">
+                ${FAKE_REFERRAL_DATA.lastReferrals.map(ref => `
+                    <div class="card">${ref.name}</div>
+                `).join('')}
             </div>
         </div>
-    </div>
-`;
+    `;
 
-const copyLinkToClipboard = () => {
-    const input = document.getElementById('referral-link-input');
-    if (input && input.value) {
-        // execCommand is more reliable in complex environments like iframes
-        input.select();
-        input.setSelectionRange(0, 99999);
-        try {
-            document.execCommand('copy');
-            showMessageModal('Referral link copied!');
-        } catch (err) {
-            console.error('Fallback copy failed: ', err);
-            showMessageModal('Could not copy link.');
+    // --- 2. Находим наши HTML-элементы ---
+    const copyBtn = document.getElementById('copyBtn');
+    const shareBtn = document.getElementById('shareBtn');
+    const refLinkInput = document.getElementById('refLinkInput');
+
+    // --- 3. Обработчики событий ---
+    
+    // Кнопка "Скопировать"
+    copyBtn.addEventListener('click', () => {
+        refLinkInput.select();
+        document.execCommand('copy');
+        audio.play('tap');
+        
+        // Показываем анимацию конфетти и уведомление
+        createConfetti(copyBtn); 
+        // TODO: Добавить вызов твоего компонента Toast (уведомление)
+        alert('Ссылка скопирована!'); 
+    });
+
+    // Кнопка "Поделиться"
+    shareBtn.addEventListener('click', () => {
+        audio.play('tap');
+        if (navigator.share) {
+            navigator.share({
+                title: 'Присоединяйся к Maniac Stars!',
+                text: 'Играй со мной и зарабатывай звёзды!',
+                url: FAKE_REFERRAL_DATA.link,
+            });
+        } else {
+            // Если navigator.share не поддерживается, просто копируем
+            copyBtn.click();
         }
-    }
-};
+    });
 
-const init = (container) => {
-    const userId = state.user ? state.user.id : 'your_unique_id';
-    const referralLink = `${window.location.origin}${window.location.pathname}?ref=${userId}`;
+    const unmount = () => {
+        console.log('Referrals screen unmounted');
+    };
 
-    container.innerHTML = template(referralLink);
-
-    const copyButton = document.getElementById('copy-referral-link');
-    if (copyButton) {
-        copyButton.addEventListener('click', copyLinkToClipboard);
-    }
-};
-
-const cleanup = () => {
-    // No complex event listeners to clean up in this version
-};
-
-export const referralsScreen = {
-    id: 'referrals',
-    init,
-    cleanup
-};
+    return unmount;
+}

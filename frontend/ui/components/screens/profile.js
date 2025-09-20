@@ -1,76 +1,109 @@
-import { state } from '../../../core/state.js';
+// Импортируем нужные сервисы
+// TODO: Убедись, что пути к файлам правильные
 import { bus } from '../../../core/bus.js';
+// import { balance } from '../../../core/balance.js'; // Предполагаем, что такой файл у тебя будет
 
-const template = `
-<div id="profile-screen" class="screen">
-    <div class="profile-container">
-        <div class="profile-header">
-            <img src="./assets/logo.png" alt="User Avatar" class="avatar">
-            <h1 id="username"></h1>
-        </div>
-        <div class="profile-stats">
-            <div class="stat">
-                <p>Balance</p>
-                <span id="profile-balance">0</span>
+// --- Фейковые данные для примера. Потом их нужно будет получать с бэкенда ---
+const FAKE_PROFILE_DATA = {
+    username: "Maniac",
+    level: 12,
+    xp: 75, // в процентах
+    balance: 12530,
+    history: [
+        { type: 'Taper Win', delta: '+150', date: 'Сегодня в 14:30' },
+        { type: 'Duel Lose', delta: '-50', date: 'Сегодня в 14:28' },
+        { type: 'Daily Bonus', delta: '+10', date: 'Вчера в 11:05' },
+    ],
+    achievements: [
+        { id: 'first_tap', name: 'Первый тап', unlocked: true },
+        { id: 'sniper', name: 'Снайпер', unlocked: true },
+        { id: 'ice_cold', name: 'Хладнокровный', unlocked: false },
+        { id: 'jackpot', name: 'Джекпот', unlocked: false },
+        { id: 'influencer', name: 'Инфлюенсер', unlocked: true },
+        { id: 'tap_king', name: 'Король тапов', unlocked: false },
+    ]
+};
+
+// Фейковый объект баланса, пока у тебя не готов balance.js
+const balance = {
+    _value: FAKE_PROFILE_DATA.balance,
+    get() { return this._value; },
+};
+
+export function mount(root) {
+    // --- 1. Создаём HTML-структуру ---
+    root.innerHTML = `
+        <div class="screen-container profile-screen">
+            <div class="profile-header card glass-card">
+                <div class="avatar"></div>
+                <div class="user-info">
+                    <span class="username">${FAKE_PROFILE_DATA.username}</span>
+                    <div class="level-bar">
+                        <div class="level-progress" style="width: ${FAKE_PROFILE_DATA.xp}%;"></div>
+                        <span class="level-text">Уровень ${FAKE_PROFILE_DATA.level}</span>
+                    </div>
+                </div>
             </div>
-            <div class="stat">
-                <p>Total Earned</p>
-                <span id="total-earned">0</span>
+
+            <div class="balance-card card">
+                <span class="balance-label">Ваш баланс</span>
+                <span class="balance-value">${balance.get().toLocaleString()} ⭐</span>
             </div>
+
+            <div class="profile-actions">
+                 <button class="button secondary" id="historyBtn">История</button>
+                 <button class="button secondary" id="achievementsBtn">Ачивки</button>
+            </div>
+            
+            <div id="dynamicContent" class="dynamic-content"></div>
         </div>
-        <div class="profile-actions">
-            <button id="logout-button">Logout</button>
-        </div>
-    </div>
-</div>
-`;
+    `;
 
-const updateProfile = () => {
-    const usernameElement = document.getElementById('username');
-    const balanceElement = document.getElementById('profile-balance');
-    const totalEarnedElement = document.getElementById('total-earned');
+    // --- 2. Находим наши HTML-элементы ---
+    const historyBtn = document.getElementById('historyBtn');
+    const achievementsBtn = document.getElementById('achievementsBtn');
+    const dynamicContent = document.getElementById('dynamicContent');
 
-    if (usernameElement) {
-        // Assuming the username is part of the state or user object
-        usernameElement.textContent = state.user ? state.user.username : 'Guest';
+    // --- 3. Функции для отрисовки ---
+    
+    function renderHistory() {
+        dynamicContent.innerHTML = `
+            <h3>История операций</h3>
+            <div class="history-list">
+                ${FAKE_PROFILE_DATA.history.map(item => `
+                    <div class="history-item card">
+                        <span class="history-type">${item.type}</span>
+                        <span class="history-date">${item.date}</span>
+                        <span class="history-delta ${item.delta.startsWith('+') ? 'win' : 'lose'}">${item.delta} ⭐</span>
+                    </div>
+                `).join('')}
+            </div>
+        `;
     }
-    if (balanceElement) {
-        balanceElement.textContent = Math.floor(state.balance);
-    }
-    if (totalEarnedElement) {
-        // You need to track total earned in the state
-        totalEarnedElement.textContent = Math.floor(state.totalEarned || 0);
-    }
-};
 
-const handleLogout = () => {
-    // Implement logout logic
-    console.log('User logged out');
-    // For example, clear state and redirect to a login screen
-    // This part depends on your authentication flow
-};
-
-const init = (container) => {
-    container.innerHTML = template;
-    const logoutButton = document.getElementById('logout-button');
-    if (logoutButton) {
-        logoutButton.addEventListener('click', handleLogout);
+    function renderAchievements() {
+        dynamicContent.innerHTML = `
+            <h3>Достижения</h3>
+            <div class="achievements-grid">
+                ${FAKE_PROFILE_DATA.achievements.map(ach => `
+                    <div class="achievement-card card ${ach.unlocked ? 'unlocked' : ''}">
+                        <div class="achievement-icon">🏆</div>
+                        <span class="achievement-name">${ach.name}</span>
+                    </div>
+                `).join('')}
+            </div>
+        `;
     }
-    updateProfile();
-    bus.on('state:updateBalance', updateProfile);
-    // You might want another event for total earned updates
-};
 
-const cleanup = () => {
-    const logoutButton = document.getElementById('logout-button');
-    if (logoutButton) {
-        logoutButton.removeEventListener('click', handleLogout);
-    }
-    bus.off('state:updateBalance', updateProfile);
-};
+    // --- 4. Обработчики событий ---
+    historyBtn.addEventListener('click', renderHistory);
+    achievementsBtn.addEventListener('click', renderAchievements);
 
-export const profileScreen = {
-    id: 'profile',
-    init,
-    cleanup
-};
+    // По умолчанию показываем историю
+    renderHistory(); 
+
+    const unmount = () => {
+        console.log('Profile screen unmounted');
+    };
+    return unmount;
+}
