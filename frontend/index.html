@@ -2,196 +2,70 @@
 <html lang="ru">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
-    <title>Star Tapper</title>
-    <!-- Подключаем Telegram Web App скрипт -->
-    <script src="https://telegram.org/js/telegram-web-app.js"></script>
-    <!-- Подключаем Tailwind CSS для стилей -->
-    <script src="https://cdn.tailwindcss.com"></script>
-    <!-- Подключаем шрифты от Google -->
-    <link rel="preconnect" href="https://fonts.googleapis.com">
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;700;900&display=swap" rel="stylesheet">
-    <style>
-        /* Базовые стили и переменные */
-        :root {
-            --tg-theme-bg-color: #181a1b; /* Цвет фона, который может передать Телеграм */
-            --glow-color: rgba(255, 223, 110, 0.8);
-        }
-
-        body {
-            font-family: 'Inter', sans-serif;
-            background-color: var(--tg-theme-bg-color);
-            color: #ffffff;
-            overflow: hidden; /* Запрещаем скролл */
-            -webkit-user-select: none; /* Запрет выделения текста */
-            -moz-user-select: none;
-            -ms-user-select: none;
-            user-select: none;
-        }
-
-        /* Анимация пульсации для звезды */
-        .star-pulse {
-            animation: pulse 2.5s infinite ease-in-out;
-        }
-
-        @keyframes pulse {
-            0%, 100% {
-                transform: scale(1);
-                filter: drop-shadow(0 0 10px var(--glow-color));
-            }
-            50% {
-                transform: scale(1.05);
-                filter: drop-shadow(0 0 20px var(--glow-color));
-            }
-        }
-
-        /* Анимация для всплывающего числа "+1" */
-        .tap-feedback {
-            position: absolute;
-            font-size: 2.5rem;
-            font-weight: 900;
-            color: white;
-            opacity: 0;
-            pointer-events: none;
-            text-shadow: 0 0 10px var(--glow-color);
-            animation: float-up 0.8s ease-out forwards;
-        }
-
-        @keyframes float-up {
-            0% {
-                opacity: 1;
-                transform: translateY(0) scale(1);
-            }
-            100% {
-                opacity: 0;
-                transform: translateY(-80px) scale(1.5);
-            }
-        }
-    </style>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Прототип TMA</title>
+    <link rel="stylesheet" href="style.css">
 </head>
-<body class="select-none">
+<body>
+    <!-- Основной контейнер приложения -->
+    <div class="app-container">
+        <header class="header">
+            <!-- Приветствие, будет обновляться из JS -->
+            <h1 id="greeting">Добро пожаловать!</h1>
+        </header>
 
-    <div id="app" class="h-screen w-screen flex flex-col items-center justify-between p-6 bg-gradient-to-b from-gray-900 to-black">
+        <main class="main-content">
+            <!-- Секция отображения баланса -->
+            <section class="card balance-section">
+                <h2>Ваш баланс</h2>
+                <p id="balance-display" class="large-text">0.00</p>
+            </section>
 
-        <!-- Верхняя часть: счёт и кнопка вывода -->
-        <div class="w-full flex justify-between items-center bg-black/30 backdrop-blur-md p-4 rounded-2xl">
-            <div>
-                <p class="text-sm text-gray-400">Твои звезды</p>
-                <p id="score" class="text-3xl font-bold">0</p>
-            </div>
-            <button id="withdraw-button" class="bg-yellow-500 text-black font-bold py-2 px-5 rounded-xl hover:bg-yellow-400 transition-colors">
-                Вывести
-            </button>
-        </div>
+            <!-- Секция отображения энергии -->
+            <section class="card energy-section">
+                <h2>Энергия</h2>
+                <div class="energy-bar-container">
+                    <div id="energy-bar" class="energy-bar-fill"></div>
+                </div>
+                <p id="energy-display">0 / 100</p>
+            </section>
 
-        <!-- Центральная часть: Тапалка -->
-        <div class="flex-grow flex items-center justify-center">
-            <div id="tapper" class="relative cursor-pointer transition-transform duration-100 active:scale-90">
-                <svg class="w-64 h-64 star-pulse" viewBox="0 0 24 24" fill="url(#star-gradient)" xmlns="http://www.w3.org/2000/svg">
-                    <defs>
-                        <linearGradient id="star-gradient" x1="0%" y1="0%" x2="100%" y2="100%">
-                            <stop offset="0%" style="stop-color: #FFD700; stop-opacity: 1" />
-                            <stop offset="100%" style="stop-color: #FFA500; stop-opacity: 1" />
-                        </linearGradient>
-                    </defs>
-                    <path d="M12 .587l3.668 7.568 8.332 1.151-6.064 5.828 1.48 8.279L12 18.896l-7.416 4.517 1.48-8.279-6.064-5.828 8.332-1.151z"/>
-                </svg>
-            </div>
-        </div>
+            <!-- Секция для вывода средств -->
+            <section class="card withdraw-section">
+                <h2>Вывод средств</h2>
+                <div class="withdraw-form">
+                    <input type="number" id="withdraw-amount-input" placeholder="Сумма для вывода" class="input-field">
+                    <button id="withdraw-button" class="action-button">Вывести</button>
+                </div>
+                <p class="fee-notice">Будет применена комиссия 7%.</p>
+            </section>
 
-        <!-- Нижняя часть: просто для отступа -->
-        <div class="h-16"></div>
+            <!-- Секция истории транзакций -->
+            <section class="card history-section">
+                <h2>История транзакций</h2>
+                <!-- Список будет динамически заполняться из JS -->
+                <ul id="transaction-list">
+                    <!-- Пример элемента списка (будет генерироваться JS) -->
+                    <!--
+                    <li>
+                        <div class="tx-info">
+                            <strong>Вывод средств</strong>
+                            <span>-100.00 (Комиссия: 7.00)</span>
+                        </div>
+                        <div class="tx-meta">
+                            <span>Итог: 93.00</span>
+                            <span>26.10.2023, 10:30</span>
+                        </div>
+                    </li>
+                     -->
+                </ul>
+            </section>
+        </main>
     </div>
 
-    <!-- Модальное окно для вывода (скрыто по умолчанию) -->
-    <div id="modal" class="hidden fixed inset-0 bg-black/70 backdrop-blur-sm flex items-center justify-center p-6">
-        <div class="bg-gray-800 rounded-2xl p-6 w-full max-w-sm text-center">
-            <h2 class="text-2xl font-bold mb-2">Вывод звезд</h2>
-            <p class="text-gray-400 mb-6">Скоро здесь можно будет вывести твои звезды прямо в бота!</p>
-            <button id="close-modal" class="w-full bg-yellow-500 text-black font-bold py-3 rounded-xl hover:bg-yellow-400 transition-colors">
-                Понятно
-            </button>
-        </div>
-    </div>
-
-
-    <script>
-        document.addEventListener('DOMContentLoaded', () => {
-            const tg = window.Telegram.WebApp;
-            tg.ready();
-            tg.expand(); // Раскрываем приложение на весь экран
-
-            const scoreElement = document.getElementById('score');
-            const tapperElement = document.getElementById('tapper');
-            const appElement = document.getElementById('app');
-            const withdrawButton = document.getElementById('withdraw-button');
-            const modal = document.getElementById('modal');
-            const closeModalButton = document.getElementById('close-modal');
-
-            // Загружаем счёт из localStorage или начинаем с нуля
-            let score = parseInt(localStorage.getItem('starTapperScore')) || 0;
-
-            // Функция обновления счёта на экране
-            const updateScore = () => {
-                scoreElement.textContent = score.toLocaleString('ru-RU'); // Форматируем число для красоты
-            };
-
-            // Функция для создания визуального эффекта "+1"
-            const createTapFeedback = (x, y) => {
-                const feedback = document.createElement('div');
-                feedback.className = 'tap-feedback';
-                feedback.textContent = '+1';
-                feedback.style.left = `${x}px`;
-                feedback.style.top = `${y}px`;
-
-                // Добавляем элемент и удаляем после завершения анимации
-                appElement.appendChild(feedback);
-                setTimeout(() => {
-                    feedback.remove();
-                }, 800);
-            };
-
-            // Обработчик нажатия на звезду
-            const handleTap = (event) => {
-                score++;
-                updateScore();
-                localStorage.setItem('starTapperScore', score);
-
-                // Получаем координаты клика/тапа
-                const rect = tapperElement.getBoundingClientRect();
-                const clientX = event.touches ? event.touches[0].clientX : event.clientX;
-                const clientY = event.touches ? event.touches[0].clientY : event.clientY;
-
-                // Создаем эффект "+1" в месте касания
-                createTapFeedback(clientX, clientY);
-            };
-
-            // Навешиваем обработчики на клик и на касание
-            tapperElement.addEventListener('click', handleTap);
-            tapperElement.addEventListener('touchstart', (e) => {
-                 // Предотвращаем эмуляцию клика, чтобы не было двойного срабатывания
-                e.preventDefault();
-                handleTap(e);
-            }, { passive: false });
-
-            // Обработчики для модального окна
-            withdrawButton.addEventListener('click', () => {
-                modal.classList.remove('hidden');
-            });
-
-            closeModalButton.addEventListener('click', () => {
-                modal.classList.add('hidden');
-            });
-
-            // Запрещаем "оттягивание" экрана на мобильных устройствах
-            document.body.addEventListener('touchmove', (e) => {
-                e.preventDefault();
-            }, { passive: false });
-
-            // Инициализация
-            updateScore();
-        });
-    </script>
+    <!-- Подключение скрипта Telegram Web App API -->
+    <script src="https://telegram.org/js/telegram-web-app.js"></script>
+    <!-- Подключение основного скрипта приложения -->
+    <script src="main.js"></script>
 </body>
 </html>
