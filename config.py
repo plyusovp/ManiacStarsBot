@@ -1,4 +1,5 @@
-# config.py
+# plyusovp/maniacstarsbot/ManiacStarsBot-4df23ef8bd5b8766acddffe6bca30a128458c7a5/config.py
+
 from typing import List
 
 from pydantic import field_validator

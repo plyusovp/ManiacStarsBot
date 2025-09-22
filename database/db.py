@@ -1,4 +1,5 @@
-# database/db.py
+# plyusovp/maniacstarsbot/ManiacStarsBot-4df23ef8bd5b8766acddffe6bca30a128458c7a5/database/db.py
+
 import asyncio
 import datetime
 import logging
@@ -1510,3 +1511,4 @@ async def _update_reward_status(
         "INSERT INTO reward_actions (reward_id, admin_id, action, notes) VALUES (?, ?, ?, ?)",
         (reward_id, admin_id, new_status, notes),
     )
+    

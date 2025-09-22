@@ -1,39 +1,67 @@
-# macOS
-.DS_Store
+# plyusovp/maniacstarsbot/ManiacStarsBot-4df23ef8bd5b8766acddffe6bca30a128458c7a5/.gitignore
 
-# Python
+# Системные файлы macOS и Windows
+.DS_Store
+Thumbs.db
+
+# Файлы IDE и редакторов кода
+.vscode/
+.idea/
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+
+# Python артефакты
 __pycache__/
 *.pyc
+*.pyo
+*.pyd
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# Виртуальные окружения
 .venv/
 env/
 venv/
 
-# SQLite базы и их журналы
+# Файлы окружения (содержат секреты!)
+.env
+.env.*
+!/.env.example 
+
+# Базы данных SQLite и их журналы
 *.db
+*.db-journal
 *.db-shm
 *.db-wal
 
-# VS Code
-.vscode/
+# Лог-файлы
+*.log
 
-# Игнорируем зависимости Node.js из папки frontend
+# Зависимости Node.js из папки frontend
 /frontend/node_modules/
 
-# Игнорируем кэш Python
-__pycache__/
-.venv/
+# Файлы сборки frontend
+/frontend/dist/
+/docs/
 
-# Другие системные файлы
-.vscode/
-.DS_Store
-```
-Этот файл говорит Git: "Никогда не обращай внимания на эти папки и файлы".
-
-#### Шаг 3: Удали `node_modules` из отслеживания Git
-
-Так как ты уже пытался добавить эту папку, её нужно "отцепить" от Git. **Эта команда не удалит папку с твоего Мака, а только из очереди на коммит.**
-
-Выполни в терминале (убедись, что ты в папке `ManiacStarsBot`):
-
-```bash
-git rm -r --cached frontend/node_modules
+# Флаги и временные файлы
+*.flag

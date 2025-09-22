@@ -1,4 +1,4 @@
-# gifts.py
+# plyusovp/maniacstarsbot/ManiacStarsBot-4df23ef8bd5b8766acddffe6bca30a128458c7a5/gifts.py
 
 # Этот файл содержит каталог доступных подарков для вывода.
 # Каждый подарок - это словарь с его свойствами.

@@ -1,3 +1,5 @@
+// plyusovp/maniacstarsbot/ManiacStarsBot-4df23ef8bd5b8766acddffe6bca30a128458c7a5/frontend/core/houseedge.js
+
 // --- 1. Преимущество казино (Edge) для каждой игры ---
 // Здесь мы храним "процент жадности" для каждой игры.
 // 0.02 = 2%, 0.04 = 4% и так далее.

@@ -1,3 +1,5 @@
+// plyusovp/maniacstarsbot/ManiacStarsBot-4df23ef8bd5b8766acddffe6bca30a128458c7a5/frontend/games/coin.js
+
 import { t } from '../core/i18n.js';
 import { playWin, playLose } from '../core/audio.js';
 import { applyPayout } from '../core/houseedge.js'; // <-- 1. ИМПОРТИРУЕМ ФУНКЦИЮ
