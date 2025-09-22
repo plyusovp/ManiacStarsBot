@@ -1,4 +1,5 @@
-# middlewares/error_handler.py
+# plyusovp/maniacstarsbot/ManiacStarsBot-4df23ef8bd5b8766acddffe6bca30a128458c7a5/middlewares/error_handler.py
+
 import asyncio
 import logging
 from typing import Any, Awaitable, Callable, Dict
@@ -71,3 +72,4 @@ class ErrorHandler(BaseMiddleware):
             await event.message.answer(message_text)
         elif event.callback_query:
             await event.callback_query.answer(message_text, show_alert=True)
+            

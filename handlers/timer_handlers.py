@@ -1,4 +1,5 @@
-# handlers/timer_handlers.py
+# plyusovp/maniacstarsbot/ManiacStarsBot-4df23ef8bd5b8766acddffe6bca30a128458c7a5/handlers/timer_handlers.py
+
 import asyncio
 import logging
 import secrets
@@ -404,3 +405,4 @@ async def stop_timer_handler(
 
     if should_resolve:
         asyncio.create_task(resolve_timer_game(bot, match_id))
+        

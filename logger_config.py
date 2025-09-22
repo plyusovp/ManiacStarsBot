@@ -1,4 +1,5 @@
-# logger_config.py
+# plyusovp/maniacstarsbot/ManiacStarsBot-4df23ef8bd5b8766acddffe6bca30a128458c7a5/logger_config.py
+
 import logging
 import sys
 
@@ -71,3 +72,4 @@ def setup_logging():
         force=True,  # Переопределяем любую существующую конфигурацию
     )
     logging.info("Logging configured successfully.")
+    

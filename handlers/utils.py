@@ -1,4 +1,5 @@
-# handlers/utils.py
+# plyusovp/maniacstarsbot/ManiacStarsBot-4df23ef8bd5b8766acddffe6bca30a128458c7a5/handlers/utils.py
+
 import logging
 from contextlib import suppress
 from typing import Any, Optional, Union

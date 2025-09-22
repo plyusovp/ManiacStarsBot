@@ -1,4 +1,5 @@
-# middlewares/metrics.py
+# plyusovp/maniacstarsbot/ManiacStarsBot-4df23ef8bd5b8766acddffe6bca30a128458c7a5/middlewares/metrics.py
+
 import logging
 from typing import Any, Awaitable, Callable, Dict
 
@@ -33,3 +34,4 @@ class MetricsMiddleware(BaseMiddleware):
         logging.info("Bot metrics collected", extra=extra)
 
         return await handler(event, data)
+        

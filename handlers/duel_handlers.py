@@ -1,4 +1,5 @@
-# handlers/duel_handlers.py
+# plyusovp/maniacstarsbot/ManiacStarsBot-4df23ef8bd5b8766acddffe6bca30a128458c7a5/handlers/duel_handlers.py
+
 import asyncio
 import logging
 import secrets
@@ -507,3 +508,4 @@ async def duel_stuck_handler(callback: CallbackQuery, bot: Bot):
     )
     if callback.message:
         await safe_delete(bot, callback.message.chat.id, callback.message.message_id)
+        

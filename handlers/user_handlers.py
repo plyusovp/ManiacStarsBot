@@ -1,3 +1,5 @@
+# plyusovp/maniacstarsbot/ManiacStarsBot-4df23ef8bd5b8766acddffe6bca30a128458c7a5/handlers/user_handlers.py
+
 import logging
 import uuid
 
@@ -45,6 +47,7 @@ async def command_start(message: Message, state: FSMContext):
 
     if is_new_user and referrer_id:
         try:
+            # Создаем уникальный ключ для этой конкретной операции
             idem_key = f"ref-{user_id}-{referrer_id}"
             await db.add_balance_with_checks(
                 referrer_id, settings.REFERRAL_BONUS, "referral_bonus", idem_key
@@ -89,6 +92,7 @@ async def process_promo_code(message: Message, state: FSMContext):
     if not message.from_user:
         return
     user_id = message.from_user.id
+    # Создаем уникальный ключ для этой конкретной операции
     idem_key = f"promo-{user_id}-{promo_code}-{uuid.uuid4()}"
 
     try:
@@ -139,3 +143,4 @@ async def get_id(message: Message):
         f"Твой юзернейм: @{username}\n"
         f"ID чата: <code>{chat_id}</code>"
     )
+    
