@@ -2,70 +2,117 @@
 <html lang="ru">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Прототип TMA</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no, viewport-fit=cover">
+    <title>Maniac Clic</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;600;700&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="style.css">
+    <script src="https://telegram.org/js/telegram-web-app.js"></script>
 </head>
 <body>
-    <!-- Основной контейнер приложения -->
-    <div class="app-container">
-        <header class="header">
-            <!-- Приветствие, будет обновляться из JS -->
-            <h1 id="greeting">Добро пожаловать!</h1>
-        </header>
+    <!-- Анимированный фон (общий для всех экранов) -->
+    <div class="background-gradient"></div>
+    <div id="background-stars"></div>
 
-        <main class="main-content">
-            <!-- Секция отображения баланса -->
-            <section class="card balance-section">
-                <h2>Ваш баланс</h2>
-                <p id="balance-display" class="large-text">0.00</p>
-            </section>
+    <!-- ЭКРАН ИГРЫ -->
+    <div id="game-screen" class="screen">
+        <div class="container">
+            <!-- Верхняя часть: Баланс -->
+            <div class="balance-container">
+                <svg class="balance-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor"><path d="M12 17.27L18.18 21l-1.64-7.03L22 9.24l-7.19-.61L12 2 9.19 8.63 2 9.24l5.46 4.73L5.82 21z"/></svg>
+                <span id="balance-counter">0</span>
+            </div>
 
-            <!-- Секция отображения энергии -->
-            <section class="card energy-section">
-                <h2>Энергия</h2>
-                <div class="energy-bar-container">
+            <!-- Центральный элемент: Кликабельная звезда -->
+            <div class="star-wrapper">
+                <div id="clickable-star">
+                    <svg class="star-svg" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100">
+                        <defs>
+                            <radialGradient id="starGradient" cx="50%" cy="50%" r="50%" fx="50%" fy="50%">
+                                <stop offset="0%" style="stop-color:#fff; stop-opacity:1" />
+                                <stop offset="70%" style="stop-color:#00ffff; stop-opacity:1" />
+                                <stop offset="100%" style="stop-color:#8a2be2; stop-opacity:1" />
+                            </radialGradient>
+                        </defs>
+                        <path d="M50 0L61.22 34.55H97.55L68.17 55.9L79.39 90.45L50 69.1L20.61 90.45L31.83 55.9L2.45 34.55H38.78L50 0Z" fill="url(#starGradient)"/>
+                    </svg>
+                </div>
+            </div>
+
+            <!-- Нижняя часть: Энергия -->
+            <div class="energy-container">
+                <div class="energy-info">
+                    <span>Энергия</span>
+                    <span id="energy-counter">200/200</span>
+                </div>
+                <div class="energy-bar-wrapper">
                     <div id="energy-bar" class="energy-bar-fill"></div>
                 </div>
-                <p id="energy-display">0 / 100</p>
-            </section>
+            </div>
 
-            <!-- Секция для вывода средств -->
-            <section class="card withdraw-section">
-                <h2>Вывод средств</h2>
-                <div class="withdraw-form">
-                    <input type="number" id="withdraw-amount-input" placeholder="Сумма для вывода" class="input-field">
-                    <button id="withdraw-button" class="action-button">Вывести</button>
-                </div>
-                <p class="fee-notice">Будет применена комиссия 7%.</p>
-            </section>
-
-            <!-- Секция истории транзакций -->
-            <section class="card history-section">
-                <h2>История транзакций</h2>
-                <!-- Список будет динамически заполняться из JS -->
-                <ul id="transaction-list">
-                    <!-- Пример элемента списка (будет генерироваться JS) -->
-                    <!--
-                    <li>
-                        <div class="tx-info">
-                            <strong>Вывод средств</strong>
-                            <span>-100.00 (Комиссия: 7.00)</span>
-                        </div>
-                        <div class="tx-meta">
-                            <span>Итог: 93.00</span>
-                            <span>26.10.2023, 10:30</span>
-                        </div>
-                    </li>
-                     -->
-                </ul>
-            </section>
-        </main>
+            <!-- Навигация -->
+            <nav class="navigation">
+                <button id="go-to-withdraw" class="nav-button">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12V7H5a2 2 0 0 1 0-4h14v4"/><path d="M3 5v14a2 2 0 0 0 2 2h16v-5"/><path d="M18 12a2 2 0 0 0 0 4h4v-4Z"/></svg>
+                    <span>Вывод</span>
+                </button>
+            </nav>
+        </div>
     </div>
 
-    <!-- Подключение скрипта Telegram Web App API -->
-    <script src="https://telegram.org/js/telegram-web-app.js"></script>
-    <!-- Подключение основного скрипта приложения -->
+    <!-- ЭКРАН ВЫВОДА -->
+    <div id="withdraw-screen" class="screen hidden">
+        <div class="container withdraw-container">
+            <button class="back-button">
+                <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"></polyline></svg>
+                Назад
+            </button>
+            <h1>Вывод звёзд</h1>
+            <div class="current-balance">
+                Ваш баланс:
+                <svg class="balance-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor"><path d="M12 17.27L18.18 21l-1.64-7.03L22 9.24l-7.19-.61L12 2 9.19 8.63 2 9.24l5.46 4.73L5.82 21z"/></svg>
+                <span id="withdraw-balance">0</span>
+            </div>
+
+            <div class="slider-group">
+                <label for="withdraw-slider">Сумма к выводу</label>
+                <input type="range" id="withdraw-slider" min="200" max="200" step="200" value="200">
+            </div>
+
+            <div class="calculator">
+                <div class="calc-row">
+                    <span>Сумма к выводу:</span>
+                    <span id="calc-amount">✨ 200</span>
+                </div>
+                <div class="calc-row">
+                    <span>Комиссия (7%):</span>
+                    <span id="calc-commission">✨ 14</span>
+                </div>
+                <div class="calc-row">
+                    <span>Итого будет списано:</span>
+                    <span id="calc-total">✨ 214</span>
+                </div>
+                <div class="calc-row bot-receive">
+                    <span>Вы получите в боте:</span>
+                    <span id="calc-bot-stars">⭐ 1</span>
+                </div>
+            </div>
+
+            <button id="withdraw-button" class="nav-button" disabled>Вывести</button>
+        </div>
+    </div>
+
+    <!-- ОБЩИЕ ЭЛЕМЕНТЫ -->
+    <div id="notification" class="notification hidden">Энергия восстанавливается...</div>
+
+    <div id="success-modal" class="modal-overlay hidden">
+        <div class="modal-content">
+            <h2>Успешно!</h2>
+            <p id="success-message">⭐ 1 звёзд зачислены в бота.</p>
+        </div>
+    </div>
+
     <script src="main.js"></script>
 </body>
 </html>
