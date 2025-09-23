@@ -1,4 +1,4 @@
-# plyusovp/maniacstarsbot/ManiacStarsBot-4df23ef8bd5b8766acddffe6bca30a128458c7a5/handlers/utils.py
+# plyusovp/maniacstarsbot/ManiacStarsBot-68ffe9d3e979f3cc61bcf924e4b9ab182d77be5f/handlers/utils.py
 
 import logging
 from contextlib import suppress
@@ -106,8 +106,8 @@ async def get_user_info_text(user_id: int, for_admin: bool = False) -> str:
 
 
 def generate_referral_link(user_id: int) -> str:
-    """Генерирует простую реферальную ссылку."""
-    return f"https://t.me/{settings.BOT_USERNAME}?start={user_id}"
+    """Генерирует правильную реферальную ссылку с префиксом ref_."""
+    return f"https://t.me/{settings.BOT_USERNAME}?start=ref_{user_id}"
 
 
 async def clean_junk_message(state: FSMContext, bot: Bot):
@@ -122,4 +122,15 @@ async def clean_junk_message(state: FSMContext, bot: Bot):
             current_data = await state.get_data()
             current_data.pop("junk_message_id", None)
             await state.set_data(current_data)
-            
+
+
+async def check_subscription(bot: Bot, user_id: int) -> bool:
+    """Проверяет, подписан ли пользователь на основной канал."""
+    try:
+        member = await bot.get_chat_member(chat_id=settings.CHANNEL_ID, user_id=user_id)
+        # Проверяет, является ли пользователь участником, создателем или администратором канала.
+        return member.status in ["member", "creator", "administrator"]
+    except Exception as e:
+        logger.error(f"Не удалось проверить подписку для пользователя {user_id}: {e}")
+        # В случае ошибки (например, бот не является администратором в канале), доступ запрещается.
+        return False

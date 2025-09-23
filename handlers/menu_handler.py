@@ -221,7 +221,8 @@ async def gifts_handler(callback: CallbackQuery, state: FSMContext, bot: Bot):
     )
     media = InputMediaPhoto(media=settings.PHOTO_WITHDRAW, caption=text)
 
-    await bot.edit_message_media(
+    await safe_edit_media(
+        bot=bot,
         media=media,
         chat_id=callback.message.chat.id,
         message_id=callback.message.message_id,
