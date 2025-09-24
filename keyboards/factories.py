@@ -75,3 +75,33 @@ class GiftCallback(CallbackData, prefix="gift"):  # type: ignore
     action: str
     item_id: str
     cost: int
+
+
+class SlotsCallback(CallbackData, prefix="slots"):  # type: ignore
+    """Фабрика для действий в игре 'Слоты'."""
+
+    action: str
+
+
+class FootballCallback(CallbackData, prefix="football"):  # type: ignore
+    """Фабрика для действий в игре 'Футбол'."""
+
+    action: str
+
+
+class BowlingCallback(CallbackData, prefix="bowling"):  # type: ignore
+    """Фабрика для действий в игре 'Боулинг'."""
+
+    action: str
+
+
+class BasketballCallback(CallbackData, prefix="basketball"):  # type: ignore
+    """Фабрика для действий в игре 'Баскетбол'."""
+
+    action: str
+
+
+class DartsCallback(CallbackData, prefix="darts"):  # type: ignore
+    """Фабрика для действий в игре 'Дартс'."""
+
+    action: str

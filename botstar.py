@@ -15,9 +15,14 @@ from config import settings
 from database import db
 from handlers import (
     admin_handlers,
+    basketball_handlers,
+    bowling_handlers,
+    darts_handlers,
     duel_handlers,
+    football_handlers,
     game_handlers,
     menu_handler,
+    slots_handlers,
     timer_handlers,
     user_handlers,
 )
@@ -114,6 +119,11 @@ async def main():
     dp.include_router(game_handlers.router)
     dp.include_router(duel_handlers.router)
     dp.include_router(timer_handlers.router)
+    dp.include_router(slots_handlers.router)
+    dp.include_router(football_handlers.router)
+    dp.include_router(bowling_handlers.router)
+    dp.include_router(basketball_handlers.router)
+    dp.include_router(darts_handlers.router)
 
     # Регистрируем функцию on_startup
     dp.startup.register(on_startup)

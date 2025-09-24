@@ -217,7 +217,10 @@ async def start_duel_game(
     await update_game_interface(bot, match)
 
 
-# --- Handlers ---
+# handlers/duel_handlers.py
+
+# ... (другой код файла) ...
+
 @router.callback_query(GameCallback.filter((F.name == "duel") & (F.action == "start")))
 async def duel_menu_handler(callback: CallbackQuery, state: FSMContext, bot: Bot):
     await state.clear()
@@ -232,15 +235,17 @@ async def duel_menu_handler(callback: CallbackQuery, state: FSMContext, bot: Bot
         wins=stats.get("wins", 0),
         losses=stats.get("losses", 0),
     )
-    media = InputMediaPhoto(media=settings.PHOTO_DUEL_MENU, caption=caption)
-    await safe_edit_media(
+    # Заменили safe_edit_media на safe_edit_caption, убрав картинку
+    await safe_edit_caption(
         bot,
-        media,
+        caption,
         callback.message.chat.id,
         callback.message.message_id,
         reply_markup=duel_stake_keyboard(),
     )
     await callback.answer()
+
+# ... (остальной код файла) ...
 
 
 @router.callback_query(DuelCallback.filter(F.action == "stake"))

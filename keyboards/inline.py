@@ -10,11 +10,16 @@ from gifts import GIFTS_CATALOG
 from keyboards.factories import (
     AchievementCallback,
     AdminCallback,
+    BasketballCallback,
+    BowlingCallback,
     CoinflipCallback,
     DuelCallback,
+    DartsCallback,
+    FootballCallback,
     GameCallback,
     GiftCallback,
     MenuCallback,
+    SlotsCallback,
     TimerCallback,
     UserCallback,
 )
@@ -104,30 +109,36 @@ def games_menu_keyboard() -> InlineKeyboardMarkup:
             callback_data=GameCallback(name="coinflip", action="start").pack(),
         ),
     )
-    # Игры-заглушки
     builder.row(
         InlineKeyboardButton(
-            text="🎰 Слоты", callback_data=MenuCallback(name="placeholder_game").pack()
+            text="🎰 Слоты",
+            callback_data=GameCallback(name="slots", action="start").pack(),
         ),
         InlineKeyboardButton(
-            text="🎲 Кости", callback_data=MenuCallback(name="placeholder_game").pack()
+            text="⚽️ Футбол",
+            callback_data=GameCallback(name="football", action="start").pack(),
         ),
         InlineKeyboardButton(
-            text="🏀 Баскетбол",
-            callback_data=MenuCallback(name="placeholder_game").pack(),
+            text="🎳 Боулинг",
+            callback_data=GameCallback(name="bowling", action="start").pack(),
         ),
     )
     builder.row(
         InlineKeyboardButton(
-            text="🎯 Дартс", callback_data=MenuCallback(name="placeholder_game").pack()
+            text="🏀 Баскетбол",
+            callback_data=GameCallback(name="basketball", action="start").pack(),
         ),
+        # ДАРТС ТЕПЕРЬ ТУТ:
         InlineKeyboardButton(
-            text="🎳 Боулинг",
-            callback_data=MenuCallback(name="placeholder_game").pack(),
+            text="🎯 Дартс",
+            callback_data=GameCallback(name="darts", action="start").pack(),
         ),
+    )
+    # Игры-заглушки
+    builder.row(
         InlineKeyboardButton(
-            text="⚽️ Футбол", callback_data=MenuCallback(name="placeholder_game").pack()
-        ),
+            text="🎲 Кости", callback_data=MenuCallback(name="placeholder_game").pack()
+        )
     )
     # Дополнительные кнопки
     builder.row(
@@ -148,6 +159,9 @@ def games_menu_keyboard() -> InlineKeyboardMarkup:
             callback_data=MenuCallback(name="main_menu").pack(),
         )
     )
+    # Управляем количеством кнопок в ряду для красивого отображения
+    builder.adjust(3, 3, 2, 1, 1, 1, 1)
+
     return builder.as_markup()
 
 
@@ -774,6 +788,94 @@ def admin_manage_menu() -> InlineKeyboardMarkup:
     builder.row(
         InlineKeyboardButton(
             text="⬅️ Назад", callback_data=AdminCallback(action="main_panel").pack()
+        )
+    )
+    return builder.as_markup()
+
+# --- Slots Keyboards ---
+def slots_keyboard() -> InlineKeyboardMarkup:
+    """Генерирует клавиатуру для игры в слоты."""
+    builder = InlineKeyboardBuilder()
+    builder.row(
+        InlineKeyboardButton(
+            text="🎰 Крутить",
+            callback_data=SlotsCallback(action="spin").pack(),
+        )
+    )
+    builder.row(
+        InlineKeyboardButton(
+            text="⬅️ К другим играм", callback_data=MenuCallback(name="games").pack()
+        )
+    )
+    return builder.as_markup()
+
+
+    # --- Football Keyboards ---
+def football_keyboard() -> InlineKeyboardMarkup:
+    """Генерирует клавиатуру для игры в футбол."""
+    builder = InlineKeyboardBuilder()
+    builder.row(
+        InlineKeyboardButton(
+            text="⚽️ Ударить по мячу",
+            callback_data=FootballCallback(action="kick").pack(),
+        )
+    )
+    builder.row(
+        InlineKeyboardButton(
+            text="⬅️ К другим играм", callback_data=MenuCallback(name="games").pack()
+        )
+    )
+    return builder.as_markup()
+
+# --- Bowling Keyboards ---
+def bowling_play_again_keyboard() -> InlineKeyboardMarkup:
+    """Генерирует клавиатуру для игры в боулинг с кнопкой 'Играть снова'."""
+    builder = InlineKeyboardBuilder()
+    builder.row(
+        InlineKeyboardButton(
+            text="🎳 Бросить шар",
+            callback_data=BowlingCallback(action="throw").pack(),
+        )
+    )
+    builder.row(
+        InlineKeyboardButton(
+            text="⬅️ К другим играм", callback_data=MenuCallback(name="games").pack()
+        )
+    )
+    return builder.as_markup()
+
+
+    # --- Basketball Keyboards ---
+def basketball_play_again_keyboard() -> InlineKeyboardMarkup:
+    """Генерирует клавиатуру для игры в баскетбол с кнопкой 'Играть снова'."""
+    builder = InlineKeyboardBuilder()
+    builder.row(
+        InlineKeyboardButton(
+            text="🏀 Сделать бросок",
+            callback_data=BasketballCallback(action="throw").pack(),
+        )
+    )
+    builder.row(
+        InlineKeyboardButton(
+            text="⬅️ К другим играм", callback_data=MenuCallback(name="games").pack()
+        )
+    )
+    return builder.as_markup()
+
+
+    # --- Darts Keyboards ---
+def darts_play_again_keyboard() -> InlineKeyboardMarkup:
+    """Генерирует клавиатуру для игры в дартс с кнопкой 'Играть снова'."""
+    builder = InlineKeyboardBuilder()
+    builder.row(
+        InlineKeyboardButton(
+            text="🎯 Бросить дротик",
+            callback_data=DartsCallback(action="throw").pack(),
+        )
+    )
+    builder.row(
+        InlineKeyboardButton(
+            text="⬅️ К другим играм", callback_data=MenuCallback(name="games").pack()
         )
     )
     return builder.as_markup()

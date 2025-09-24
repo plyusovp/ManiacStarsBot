@@ -28,6 +28,10 @@ class CoinflipState(StatesGroup):
     game_in_progress = State()
 
 
+# handlers/game_handlers.py
+
+# ... (другой код файла) ...
+
 @router.callback_query(
     GameCallback.filter((F.name == "coinflip") & (F.action == "start"))
 )
@@ -39,16 +43,19 @@ async def coinflip_menu_handler(
     await clean_junk_message(state, bot)
     balance = await db.get_user_balance(callback.from_user.id)
     text = LEXICON["coinflip_menu"].format(balance=balance)
-    media = InputMediaPhoto(media=settings.PHOTO_COINFLIP_MENU, caption=text)
+    # media = InputMediaPhoto(media=settings.PHOTO_COINFLIP_MENU, caption=text) # Убрали эту строку
     if callback.message:
-        await safe_edit_media(
+        # Заменили safe_edit_media на safe_edit_caption
+        await safe_edit_caption(
             bot,
-            media=media,
+            caption=text, # Передаем только текст
             chat_id=callback.message.chat.id,
             message_id=callback.message.message_id,
             reply_markup=coinflip_stake_keyboard(),
         )
     await callback.answer()
+
+# ... (остальной код файла) ...
 
 
 @router.callback_query(CoinflipCallback.filter(F.action == "stake"))
