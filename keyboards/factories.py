@@ -105,3 +105,10 @@ class DartsCallback(CallbackData, prefix="darts"):  # type: ignore
     """Фабрика для действий в игре 'Дартс'."""
 
     action: str
+
+
+class DiceCallback(CallbackData, prefix="dice"):  # type: ignore
+    """Фабрика для действий в игре 'Кости'."""
+
+    action: str
+    choice: Optional[str] = None

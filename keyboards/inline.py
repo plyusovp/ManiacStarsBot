@@ -13,6 +13,7 @@ from keyboards.factories import (
     BasketballCallback,
     BowlingCallback,
     CoinflipCallback,
+    DiceCallback,
     DuelCallback,
     DartsCallback,
     FootballCallback,
@@ -91,6 +92,26 @@ def resources_keyboard() -> InlineKeyboardMarkup:
     return builder.as_markup()
 
 
+def resources_keyboard() -> InlineKeyboardMarkup:
+    """Генерирует клавиатуру для раздела 'Наши ресурсы'."""
+    builder = InlineKeyboardBuilder()
+    builder.row(
+        InlineKeyboardButton(text="Наш канал", url=settings.URL_CHANNEL),
+        InlineKeyboardButton(text="Наш чат", url=settings.URL_CHAT),
+    )
+    builder.row(
+        InlineKeyboardButton(text="Наши выводы", url=settings.URL_WITHDRAWALS),
+        InlineKeyboardButton(text="Наш мануал", url=settings.URL_MANUAL),
+    )
+    builder.row(
+        InlineKeyboardButton(
+            text="⬅️ Назад в меню",
+            callback_data=MenuCallback(name="main_menu").pack(),
+        )
+    )
+    return builder.as_markup()
+
+
 def games_menu_keyboard() -> InlineKeyboardMarkup:
     """Генерирует клавиатуру выбора игр."""
     builder = InlineKeyboardBuilder()
@@ -128,18 +149,17 @@ def games_menu_keyboard() -> InlineKeyboardMarkup:
             text="🏀 Баскетбол",
             callback_data=GameCallback(name="basketball", action="start").pack(),
         ),
-        # ДАРТС ТЕПЕРЬ ТУТ:
         InlineKeyboardButton(
             text="🎯 Дартс",
             callback_data=GameCallback(name="darts", action="start").pack(),
         ),
-    )
-    # Игры-заглушки
-    builder.row(
         InlineKeyboardButton(
-            text="🎲 Кости", callback_data=MenuCallback(name="placeholder_game").pack()
-        )
+            text="🎲 Кости",
+            callback_data=GameCallback(name="dice", action="start").pack(),
+        ),
     )
+    # Игры-заглушки (теперь их нет)
+
     # Дополнительные кнопки
     builder.row(
         InlineKeyboardButton(
@@ -160,7 +180,7 @@ def games_menu_keyboard() -> InlineKeyboardMarkup:
         )
     )
     # Управляем количеством кнопок в ряду для красивого отображения
-    builder.adjust(3, 3, 2, 1, 1, 1, 1)
+    builder.adjust(3, 3, 3, 1, 1, 1)
 
     return builder.as_markup()
 
@@ -871,6 +891,28 @@ def darts_play_again_keyboard() -> InlineKeyboardMarkup:
         InlineKeyboardButton(
             text="🎯 Бросить дротик",
             callback_data=DartsCallback(action="throw").pack(),
+        )
+    )
+    builder.row(
+        InlineKeyboardButton(
+            text="⬅️ К другим играм", callback_data=MenuCallback(name="games").pack()
+        )
+    )
+    return builder.as_markup()
+
+
+# --- Dice Keyboards ---
+def dice_choice_keyboard() -> InlineKeyboardMarkup:
+    """Генерирует клавиатуру для игры в кости с выбором диапазона."""
+    builder = InlineKeyboardBuilder()
+    builder.row(
+        InlineKeyboardButton(
+            text="🎲 Поставить на 1-3",
+            callback_data=DiceCallback(action="choice", choice="low").pack(),
+        ),
+        InlineKeyboardButton(
+            text="🎲 Поставить на 4-6",
+            callback_data=DiceCallback(action="choice", choice="high").pack(),
         )
     )
     builder.row(

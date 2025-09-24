@@ -18,6 +18,7 @@ from handlers import (
     basketball_handlers,
     bowling_handlers,
     darts_handlers,
+    dice_handlers,
     duel_handlers,
     football_handlers,
     game_handlers,
@@ -124,6 +125,7 @@ async def main():
     dp.include_router(bowling_handlers.router)
     dp.include_router(basketball_handlers.router)
     dp.include_router(darts_handlers.router)
+    dp.include_router(dice_handlers.router)
 
     # Регистрируем функцию on_startup
     dp.startup.register(on_startup)
