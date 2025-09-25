@@ -81,6 +81,7 @@ class SlotsCallback(CallbackData, prefix="slots"):  # type: ignore
     """Фабрика для действий в игре 'Слоты'."""
 
     action: str
+    value: Optional[int] = None
 
 
 class FootballCallback(CallbackData, prefix="football"):  # type: ignore

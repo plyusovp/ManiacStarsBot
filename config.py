@@ -80,3 +80,4 @@ settings = Settings()
 DUEL_STAKES = [10, 25, 50, 100, 250]
 TIMER_STAKES = [10, 25, 50, 100]
 COINFLIP_STAKES = [10, 25, 50, 100, 250, 500]
+SLOTS_STAKES = [1, 3, 5, 10]

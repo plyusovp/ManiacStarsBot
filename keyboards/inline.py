@@ -5,7 +5,7 @@ from urllib.parse import quote_plus
 from aiogram.types import InlineKeyboardButton, InlineKeyboardMarkup
 from aiogram.utils.keyboard import InlineKeyboardBuilder
 
-from config import COINFLIP_STAKES, DUEL_STAKES, TIMER_STAKES, settings
+from config import COINFLIP_STAKES, DUEL_STAKES, TIMER_STAKES, settings, SLOTS_STAKES
 from gifts import GIFTS_CATALOG
 from keyboards.factories import (
     AchievementCallback,
@@ -812,16 +812,19 @@ def admin_manage_menu() -> InlineKeyboardMarkup:
     )
     return builder.as_markup()
 
+
 # --- Slots Keyboards ---
-def slots_keyboard() -> InlineKeyboardMarkup:
-    """Генерирует клавиатуру для игры в слоты."""
+def slots_stake_keyboard() -> InlineKeyboardMarkup:
+    """Генерирует клавиатуру для выбора ставки в слотах."""
     builder = InlineKeyboardBuilder()
-    builder.row(
+    buttons = [
         InlineKeyboardButton(
-            text="🎰 Крутить",
-            callback_data=SlotsCallback(action="spin").pack(),
+            text=f"{stake} ⭐",
+            callback_data=SlotsCallback(action="spin", value=stake).pack(),
         )
-    )
+        for stake in SLOTS_STAKES
+    ]
+    builder.row(*buttons, width=4)
     builder.row(
         InlineKeyboardButton(
             text="⬅️ К другим играм", callback_data=MenuCallback(name="games").pack()
@@ -921,3 +924,4 @@ def dice_choice_keyboard() -> InlineKeyboardMarkup:
         )
     )
     return builder.as_markup()
+
