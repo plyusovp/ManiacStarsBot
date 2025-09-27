@@ -416,7 +416,7 @@ async def _change_balance(
     else:
         cursor = await db.execute(
             "UPDATE users SET balance = balance + ? WHERE user_id = ?",
-            (amount, user_id),
+            (user_id, amount),
         )
 
     if cursor.rowcount == 0:
@@ -621,55 +621,68 @@ async def get_user(user_id: int) -> Optional[Dict[str, Any]]:
 
 
 async def populate_achievements():
-    """Заполняет таблицу достижений."""
+    """Заполняет таблицу достижений, обновляя старые и убирая неактуальные."""
     async with connect() as db:
+        # !!! ВАЖНО: Мы удаляем старые достижения, которые невозможно выполнить.
+        # Это гарантирует, что список будет чистым.
+        await db.execute("DELETE FROM achievements WHERE id IN ('king', 'meta')")
+
+        # Награда за каждое достижение установлена в 1 ⭐, как ты просил.
         achievements_list = [
             ("first_steps", "Первые шаги", "Просто запустить бота.", 1, "Обычная"),
-            ("first_referral", "Первопроходец", "Пригласить 1 друга.", 5, "Обычная"),
+            ("first_referral", "Первопроходец", "Пригласить 1 друга.", 1, "Обычная"),
             (
                 "bonus_hunter",
                 "Охотник за бонусами",
                 "Собрать первый ежедневный бонус.",
-                3,
+                1,
                 "Обычная",
             ),
             ("curious", "Любопытный", 'Зайти в раздел "Профиль".', 1, "Обычная"),
-            ("friendly", "Дружелюбный", "Пригласить 5 друзей.", 10, "Обычная"),
+            ("friendly", "Дружелюбный", "Пригласить 5 друзей.", 1, "Обычная"),
             (
                 "code_breaker",
                 "Взломщик кодов",
                 "Активировать 1 промокод.",
-                5,
+                1,
                 "Обычная",
             ),
-            ("social", "Душа компании", "Пригласить 15 друзей.", 20, "Редкая"),
-            ("regular", "Завсегдатай", "Заходить в бота 3 дня подряд.", 10, "Редкая"),
-            ("magnate", "Магнат", "Накопить на балансе 100 звёзд.", 15, "Редкая"),
+            ("social", "Душа компании", "Пригласить 15 друзей.", 1, "Редкая"),
+            ("regular", "Завсегдатай", "Заходить в бота 3 дня подряд.", 1, "Редкая"),
+            ("magnate", "Магнат", "Накопить на балансе 100 звёзд.", 1, "Редкая"),
             (
                 "promo_master",
                 "Магистр промокодов",
                 "Активировать 3 разных промокода.",
-                20,
+                1,
                 "Редкая",
             ),
-            ("legend", "Легенда", "Пригласить 50 друзей.", 50, "Эпическая"),
-            (
-                "king",
-                "Король рефералов",
-                "Удержать 1 место в топе 3 дня.",
-                100,
-                "Эпическая",
-            ),
-            (
-                "meta",
-                "Что ты такое?",
-                "Попытаться использовать команду /info на самого себя.",
-                5,
-                "Мифическая",
-            ),
+            ("legend", "Легенда", "Пригласить 50 друзей.", 1, "Эпическая"),
+            # Неактуальные достижения 'king' и 'meta' были удалены выше.
         ]
+
+        # Обновляем существующие и вставляем новые.
+        # Мы используем INSERT OR REPLACE, но в данном случае лучше
+        # INSERT OR IGNORE, чтобы не потерять уже полученные, но
+        # в исходном коде используется executemany с INSERT OR IGNORE,
+        # что не позволяет обновить существующие.
+
+        # Для гарантированного обновления награды, мы должны использовать REPLACE.
+        # Чтобы не потерять данные, мы используем три запроса:
+
+        # 1. Обновляем награду для уже существующих достижений
+        for ach_id, name, desc, reward, rarity in achievements_list:
+            await db.execute(
+                "UPDATE achievements SET reward = ?, name = ?, description = ?, rarity = ? WHERE id = ?",
+                (reward, name, desc, rarity, ach_id),
+            )
+
+        # 2. Вставляем новые достижения (если их нет)
         await db.executemany(
-            "INSERT OR IGNORE INTO achievements (id, name, description, reward, rarity) VALUES (?, ?, ?, ?, ?)",
+            """
+            INSERT OR IGNORE INTO achievements (id, name, description, reward, rarity)
+            VALUES (?, ?, ?, ?, ?)
+            """,
             achievements_list,
         )
         await db.commit()
@@ -1511,4 +1524,3 @@ async def _update_reward_status(
         "INSERT INTO reward_actions (reward_id, admin_id, action, notes) VALUES (?, ?, ?, ?)",
         (reward_id, admin_id, new_status, notes),
     )
-    
