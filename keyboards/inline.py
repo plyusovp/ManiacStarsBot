@@ -5,7 +5,7 @@ from urllib.parse import quote_plus
 from aiogram.types import InlineKeyboardButton, InlineKeyboardMarkup
 from aiogram.utils.keyboard import InlineKeyboardBuilder
 
-from config import COINFLIP_STAKES, DUEL_STAKES, TIMER_STAKES, settings, SLOTS_STAKES
+from config import COINFLIP_STAKES, DUEL_STAKES, TIMER_STAKES, settings, SLOTS_STAKES, BOWLING_STAKES
 from gifts import GIFTS_CATALOG
 from keyboards.factories import (
     AchievementCallback,
@@ -850,14 +850,32 @@ def football_keyboard() -> InlineKeyboardMarkup:
     )
     return builder.as_markup()
 
-# --- Bowling Keyboards ---
+def bowling_stake_keyboard() -> InlineKeyboardMarkup:
+    """Генерирует клавиатуру для выбора ставки в боулинге."""
+    builder = InlineKeyboardBuilder()
+    buttons = [
+        InlineKeyboardButton(
+            text=f"{stake} ⭐",
+            callback_data=BowlingCallback(action="throw", value=stake).pack(),
+        )
+        for stake in BOWLING_STAKES
+    ]
+    builder.row(*buttons, width=4)
+    builder.row(
+        InlineKeyboardButton(
+            text="⬅️ К другим играм", callback_data=MenuCallback(name="games").pack()
+        )
+    )
+    return builder.as_markup()
+
+
 def bowling_play_again_keyboard() -> InlineKeyboardMarkup:
-    """Генерирует клавиатуру для игры в боулинг с кнопкой 'Играть снова'."""
+    """Генерирует клавиатуру для боулинга с кнопкой 'Играть снова'."""
     builder = InlineKeyboardBuilder()
     builder.row(
         InlineKeyboardButton(
-            text="🎳 Бросить шар",
-            callback_data=BowlingCallback(action="throw").pack(),
+            text="🎳 Играть снова",
+            callback_data=GameCallback(name="bowling", action="start").pack(),
         )
     )
     builder.row(

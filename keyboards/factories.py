@@ -94,6 +94,7 @@ class BowlingCallback(CallbackData, prefix="bowling"):  # type: ignore
     """Фабрика для действий в игре 'Боулинг'."""
 
     action: str
+    value: Optional[int] = None
 
 
 class BasketballCallback(CallbackData, prefix="basketball"):  # type: ignore
