@@ -288,9 +288,10 @@ async def timer_menu_handler(callback: CallbackQuery, state: FSMContext, bot: Bo
 async def find_timer_handler(
     callback: CallbackQuery, callback_data: TimerCallback, bot: Bot, **data
 ):
-    stake = callback_data.value
-    if stake is None or not callback.message:
+    raw_stake = callback_data.value
+    if raw_stake is None or not callback.message:
         return await callback.answer("Ошибка: неверная ставка.", show_alert=True)
+    stake = int(raw_stake)
 
     user_id = callback.from_user.id
     balance = await db.get_user_balance(user_id)
@@ -405,4 +406,3 @@ async def stop_timer_handler(
 
     if should_resolve:
         asyncio.create_task(resolve_timer_game(bot, match_id))
-        

@@ -1,5 +1,3 @@
-# plyusovp/maniacstarsbot/ManiacStarsBot-68ffe9d3e979f3cc61bcf924e4b9ab182d77be5f/handlers/utils.py
-
 import logging
 from contextlib import suppress
 from typing import Any, Optional, Union
@@ -36,14 +34,19 @@ async def safe_edit_caption(
     reply_markup: Optional[InlineKeyboardMarkup] = None,
     **kwargs: Any,
 ) -> Union[Message, bool]:
-    """Безопасно изменяет подпись к медиа, обрабатывая ошибки."""
-    with suppress(TelegramBadRequest, Exception):
+    """Безопасно изменяет подпись к медиа, с логированием ошибок."""
+    try:
         return await bot.edit_message_caption(
             caption=caption,
             chat_id=chat_id,
             message_id=message_id,
             reply_markup=reply_markup,
             **kwargs,
+        )
+    except TelegramBadRequest as e:
+        # Не молчим, а орём в логи, чтобы понять, в чем дело!
+        logger.error(
+            f"Failed to edit caption for message {message_id} in chat {chat_id}. Reason: {e.message}"
         )
     return False
 
@@ -56,14 +59,19 @@ async def safe_edit_media(
     reply_markup: Optional[InlineKeyboardMarkup] = None,
     **kwargs: Any,
 ) -> Union[Message, bool]:
-    """Безопасно изменяет медиа в сообщении, обрабатывая ошибки."""
-    with suppress(TelegramBadRequest, Exception):
+    """Безопасно изменяет медиа в сообщении, с логированием ошибок."""
+    try:
         return await bot.edit_message_media(
             media=media,
             chat_id=chat_id,
             message_id=message_id,
             reply_markup=reply_markup,
             **kwargs,
+        )
+    except TelegramBadRequest as e:
+        # И тут тоже орём!
+        logger.error(
+            f"Failed to edit media for message {message_id} in chat {chat_id}. Reason: {e.message}"
         )
     return False
 

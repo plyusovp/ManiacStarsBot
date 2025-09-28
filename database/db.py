@@ -1,5 +1,3 @@
-# plyusovp/maniacstarsbot/ManiacStarsBot-4df23ef8bd5b8766acddffe6bca30a128458c7a5/database/db.py
-
 import asyncio
 import datetime
 import logging
@@ -34,15 +32,16 @@ async def connect() -> AsyncGenerator[aiosqlite.Connection, None]:
 
 async def _begin_transaction(db: aiosqlite.Connection) -> None:
     """Starts a transaction, retrying if another one is in progress."""
-    while True:
+    retries = 5
+    for attempt in range(retries):
         try:
-            await db.execute("BEGIN IMMEDIATE;")
+            await db.execute("BEGIN EXCLUSIVE;")
             return
         except sqlite3.OperationalError as e:
-            if "transaction" in str(e).lower() or "locked" in str(e).lower():
-                await asyncio.sleep(0.001)
-            else:
-                raise
+            if "locked" in str(e).lower() and attempt < retries - 1:
+                await asyncio.sleep(0.01 * (attempt + 1))
+                continue
+            raise
 
 
 async def init_db() -> None:
@@ -408,6 +407,7 @@ async def _change_balance(
     if amount == 0 and reason != "initial_balance":
         return True
 
+    # Use a different query for debit to prevent negative balance
     if amount < 0:
         cursor = await db.execute(
             "UPDATE users SET balance = balance + ? WHERE user_id = ? AND balance >= ?",
@@ -416,7 +416,7 @@ async def _change_balance(
     else:
         cursor = await db.execute(
             "UPDATE users SET balance = balance + ? WHERE user_id = ?",
-            (user_id, amount),
+            (amount, user_id),
         )
 
     if cursor.rowcount == 0:
@@ -434,7 +434,7 @@ async def add_balance_unrestricted(
     user_id: int, amount: int, reason: str, ref_id: Optional[str] = None
 ) -> bool:
     """Adds funds without limit checks (for refunds, admin commands)."""
-    if amount < 0:  # Allow 0 for initial ledger entry
+    if amount <= 0:  # Allow 0 for initial ledger entry
         return False
     async with connect() as db:
         await _begin_transaction(db)
@@ -901,67 +901,105 @@ async def activate_promo(user_id, code, idem_key: str):
             return "error"
 
 
-async def get_daily_bonus(user_id):
-    """
-    Атомарно выдает ежедневный бонус.
-    Сначала пытается обновить время бонуса с условием, что прошло >24ч.
-    Если обновление успешно (rowcount=1), значит, бонус можно выдать.
-    Если нет (rowcount=0), значит, бонус уже был взят.
-    """
-    async with connect() as db:
-        current_time = int(time.time())
-        # 24 часа в секундах
-        time_limit = current_time - 86400
+# ... (весь код до функции get_daily_bonus) ...
 
-        # Админы могут получать бонус без ограничений по времени для тестов
-        is_admin = user_id in settings.ADMIN_IDS
 
+async def get_daily_bonus(user_id: int) -> Dict[str, Any]:
+    """
+    Атомарно выдает ежедневный бонус с повторными попытками при блокировке БД.
+    """
+    retries = 5  # Попытки на случай, если базу залочило
+    for attempt in range(retries):
         try:
-            await _begin_transaction(db)
+            async with connect() as db:
+                await _begin_transaction(db)
+                try:
+                    # Внутренняя логика, которая может упасть
+                    current_time = int(time.time())
+                    # ИСПОЛЬЗУЕМ НОВУЮ НАСТРОЙКУ ИЗ CONFIG.PY
+                    time_limit = current_time - (settings.DAILY_BONUS_HOURS * 3600)
+                    is_admin = user_id in settings.ADMIN_IDS
 
-            # Формируем запрос на обновление
-            update_query = "UPDATE users SET last_bonus_time = ? WHERE user_id = ?"
-            params = [current_time, user_id]
-            # Добавляем условие по времени для обычных пользователей
-            if not is_admin:
-                update_query += " AND last_bonus_time < ?"
-                params.append(time_limit)
+                    update_query = (
+                        "UPDATE users SET last_bonus_time = ? WHERE user_id = ?"
+                    )
+                    params = [current_time, user_id]
 
-            cursor = await db.execute(update_query, tuple(params))
+                    if not is_admin:
+                        update_query += " AND last_bonus_time < ?"
+                        params.append(time_limit)
 
-            # Если ни одна строка не была обновлена, значит, время еще не пришло
-            if cursor.rowcount == 0:
-                await db.rollback()  # Откатываем пустую транзакцию
-                # Получаем последнее время бонуса, чтобы сказать пользователю, сколько ждать
-                cursor = await db.execute(
-                    "SELECT last_bonus_time FROM users WHERE user_id = ?", (user_id,)
+                    cursor = await db.execute(update_query, tuple(params))
+
+                    if cursor.rowcount == 0:
+                        await db.rollback()
+                        cursor = await db.execute(
+                            "SELECT last_bonus_time FROM users WHERE user_id = ?",
+                            (user_id,),
+                        )
+                        res = await cursor.fetchone()
+                        last_bonus_time = res["last_bonus_time"] if res else 0
+                        elapsed = current_time - last_bonus_time
+                        seconds_left = max(
+                            0, (settings.DAILY_BONUS_HOURS * 3600) - elapsed
+                        )
+                        return {"status": "wait", "seconds_left": seconds_left}
+
+                    # ИСПОЛЬЗУЕМ СУММУ БОНУСА ИЗ CONFIG.PY
+                    reward = settings.DAILY_BONUS_AMOUNT
+                    if not await _change_balance(db, user_id, reward, "daily_bonus"):
+                        await db.rollback()
+                        return {"status": "error", "reason": "update_failed"}
+
+                    await db.commit()
+                    return {"status": "success", "reward": reward}
+
+                except Exception as e:
+                    await db.rollback()
+                    # Если ошибка - это блокировка, то мы её прокидываем выше, чтобы сработал retry
+                    if isinstance(e, sqlite3.OperationalError) and "locked" in str(e):
+                        raise
+                    # Все другие ошибки логируем как обычно
+                    logging.error(
+                        "Error in get_daily_bonus inner transaction on attempt %d",
+                        attempt + 1,
+                        exc_info=True,
+                        extra={"user_id": user_id},
+                    )
+                    return {"status": "error", "reason": "transaction_failed"}
+
+        # Ловим ошибку блокировки и ждём перед новой попыткой
+        except sqlite3.OperationalError as e:
+            if "locked" in str(e).lower() and attempt < retries - 1:
+                logging.warning(
+                    "Database locked for get_daily_bonus on attempt %d for user %d. Retrying...",
+                    attempt + 1,
+                    user_id,
                 )
-                res = await cursor.fetchone()
-                last_bonus_time = res["last_bonus_time"] if res else 0
-
-                elapsed = current_time - last_bonus_time
-                seconds_left = max(0, 86400 - elapsed)
-                return {"status": "wait", "seconds_left": seconds_left}
-
-            # Если обновление прошло успешно, начисляем бонус
-            reward = 1  # Сумма ежедневного бонуса
-            if not await _change_balance(db, user_id, reward, "daily_bonus"):
-                # Если по какой-то причине баланс не начислился, откатываем все
-                await db.rollback()
-                return {"status": "error", "reason": "update_failed"}
-
-            # Все успешно, подтверждаем транзакцию
-            await db.commit()
-            return {"status": "success", "reward": reward}
-
+                await asyncio.sleep(0.01 * (attempt + 1))
+                continue
+            else:
+                logging.error(
+                    "Failed to get daily bonus for user %d after %d retries",
+                    user_id,
+                    retries,
+                    exc_info=True,
+                )
+                return {"status": "error", "reason": "db_locked"}
+        # Ловим все остальные непредвиденные ошибки
         except Exception:
-            await db.rollback()
             logging.error(
-                "Error in get_daily_bonus transaction",
+                "Unhandled exception in get_daily_bonus for user %d",
+                user_id,
                 exc_info=True,
-                extra={"user_id": user_id},
             )
-            return {"status": "error", "reason": "transaction_failed"}
+            return {"status": "error", "reason": "unknown_error"}
+
+    # Если все попытки провалились
+    return {"status": "error", "reason": "max_retries_exceeded"}
+
+
+# ... (остальной код файла db.py) ...
 
 
 async def grant_achievement(user_id, ach_id, bot: Bot) -> bool:

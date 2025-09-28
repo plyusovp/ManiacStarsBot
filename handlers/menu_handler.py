@@ -116,6 +116,13 @@ async def bonus_handler(message: Message):
         minutes = (seconds % 3600) // 60
         await message.answer(f"⏳ Бонус будет доступен через {hours} ч {minutes} м.")
     else:
+        # ДОБАВЛЕНО ЛОГИРОВАНИЕ ОШИБКИ
+        logger.error(
+            "Failed to get daily bonus for user %d via command. Status: %s, Result: %s",
+            message.from_user.id,
+            status,
+            result,
+        )
         await message.answer("❌ Не удалось получить бонус. Попробуйте позже.")
 
 
@@ -320,6 +327,13 @@ async def get_daily_bonus_callback_handler(callback: CallbackQuery):
             f"⏳ Бонус будет доступен через {hours} ч {minutes} м.", show_alert=True
         )
     else:
+        # ДОБАВЛЕНО ЛОГИРОВАНИЕ ОШИБКИ
+        logger.error(
+            "Failed to get daily bonus for user %d via callback. Status: %s, Result: %s",
+            callback.from_user.id,
+            status,
+            result,
+        )
         await callback.answer(
             "❌ Не удалось получить бонус. Попробуйте позже.", show_alert=True
         )

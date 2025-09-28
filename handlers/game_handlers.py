@@ -1,9 +1,11 @@
 # handlers/game_handlers.py
 import asyncio
+import logging
 import secrets
 import uuid
 
 from aiogram import Bot, F, Router
+from aiogram.exceptions import TelegramBadRequest
 from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import State, StatesGroup
 from aiogram.types import CallbackQuery, InputMediaPhoto
@@ -22,15 +24,11 @@ from keyboards.inline import (
 from lexicon.texts import LEXICON
 
 router = Router()
+logger = logging.getLogger(__name__)
 
 
 class CoinflipState(StatesGroup):
     game_in_progress = State()
-
-
-# handlers/game_handlers.py
-
-# ... (другой код файла) ...
 
 
 @router.callback_query(
@@ -40,24 +38,18 @@ async def coinflip_menu_handler(
     callback: CallbackQuery, state: FSMContext, bot: Bot
 ) -> None:
     """Отображает меню выбора ставки для Coinflip."""
-    await state.clear()
     await clean_junk_message(state, bot)
     balance = await db.get_user_balance(callback.from_user.id)
     text = LEXICON["coinflip_menu"].format(balance=balance)
-    # media = InputMediaPhoto(media=settings.PHOTO_COINFLIP_MENU, caption=text) # Убрали эту строку
     if callback.message:
-        # Заменили safe_edit_media на safe_edit_caption
         await safe_edit_caption(
             bot,
-            caption=text,  # Передаем только текст
+            caption=text,
             chat_id=callback.message.chat.id,
             message_id=callback.message.message_id,
             reply_markup=coinflip_stake_keyboard(),
         )
     await callback.answer()
-
-
-# ... (остальной код файла) ...
 
 
 @router.callback_query(CoinflipCallback.filter(F.action == "stake"))
@@ -67,41 +59,54 @@ async def coinflip_stake_selected_handler(
     bot: Bot,
     state: FSMContext,
 ) -> None:
-    """Обрабатывает выбор ставки и предлагает сделать выбор."""
-    if not isinstance(callback_data.value, int) or not callback.message:
-        return
-    stake = callback_data.value
+    """Обрабатывает выбор ставки."""
     user_id = callback.from_user.id
+    try:
+        if not isinstance(callback_data.value, (int, float)) or not callback.message:
+            return
 
-    balance = await db.get_user_balance(user_id)
-    if balance < stake:
-        await callback.answer("Недостаточно средств.", show_alert=True)
-        return
+        stake = callback_data.value
+        balance = await db.get_user_balance(user_id)
+        if balance < stake:
+            await callback.answer("Недостаточно средств.", show_alert=True)
+            return
 
-    idem_key = f"cf-start-{user_id}-{uuid.uuid4()}"
-    spent = await db.spend_balance(
-        user_id, int(stake), "coinflip_stake", idem_key=idem_key
-    )
-    if not spent:
-        await callback.answer("Не удалось списать ставку.", show_alert=True)
-        return
+        idem_key = f"cf-start-{user_id}-{uuid.uuid4()}"
+        spent = await db.spend_balance(
+            user_id, int(stake), "coinflip_stake", idem_key=idem_key
+        )
+        if not spent:
+            await callback.answer(
+                "Не удалось списать ставку. Попробуйте еще раз.", show_alert=True
+            )
+            return
 
-    await state.set_state(CoinflipState.game_in_progress)
-    await state.update_data(stake=stake, stage=0, idem_key=idem_key)
+        await state.set_state(CoinflipState.game_in_progress)
+        await state.update_data(stake=stake, stage=0, idem_key=idem_key)
 
-    text = LEXICON["coinflip_choice_prompt"].format(stake=stake)
-    await safe_edit_caption(
-        bot,
-        text,
-        callback.message.chat.id,
-        callback.message.message_id,
-        reply_markup=coinflip_choice_keyboard(),
-    )
-    await callback.answer()
+        text = LEXICON["coinflip_choice_prompt"].format(stake=stake)
+        await safe_edit_caption(
+            bot,
+            text,
+            callback.message.chat.id,
+            callback.message.message_id,
+            reply_markup=coinflip_choice_keyboard(),
+        )
+        await callback.answer()
+
+    except TelegramBadRequest as e:
+        logger.warning(
+            f"Failed to edit message for user {user_id} during stake selection: {e}"
+        )
+        await callback.answer(
+            "Произошла небольшая ошибка, попробуй еще раз.", show_alert=True
+        )
+        await state.clear()
 
 
 @router.callback_query(
-    CoinflipState.game_in_progress, CoinflipCallback.filter(F.action == "choice")
+    CoinflipCallback.filter(F.action == "choice"),
+    CoinflipState.game_in_progress,
 )
 async def coinflip_choice_handler(
     callback: CallbackQuery,
@@ -110,28 +115,50 @@ async def coinflip_choice_handler(
     state: FSMContext,
 ):
     """Обрабатывает выбор 'Орла' или 'Решки'."""
-    user_choice = callback_data.choice
-    if not user_choice or not callback.message:
-        return
+    try:
+        if not callback.data or not callback.message:
+            await callback.answer()
+            return
 
-    media = InputMediaPhoto(
-        media=settings.PHOTO_COINFLIP_PROCESS, caption=LEXICON["coinflip_process"]
-    )
-    await safe_edit_media(
-        bot,
-        media,
-        callback.message.chat.id,
-        callback.message.message_id,
-        reply_markup=None,
-    )
-    await asyncio.sleep(1.5)
+        await callback.answer()
 
-    fsm_data = await state.get_data()
-    stage_index = fsm_data.get("stage", 0)
-    current_stage = COINFLIP_STAGES[stage_index]
-    is_win = secrets.randbelow(100) < current_stage["chance"]
+        # --- ВРЕМЕННАЯ ЗАГЛУШКА ---
+        media = InputMediaPhoto(
+            media=settings.PHOTO_GAMES_MENU, caption=LEXICON["coinflip_process"]
+        )
+        await safe_edit_media(
+            bot,
+            media,
+            callback.message.chat.id,
+            callback.message.message_id,
+            reply_markup=None,  # Убираем клавиатуру
+        )
 
-    await process_coinflip_result(callback, bot, state, is_win)
+        await asyncio.sleep(1.5)
+
+        fsm_data = await state.get_data()
+        if not fsm_data:
+            logger.error(
+                f"FSM data is empty for user {callback.from_user.id} in coinflip_choice_handler!"
+            )
+            await safe_edit_caption(
+                bot,
+                "Произошла ошибка, данные игры потеряны. Начните заново.",
+                callback.message.chat.id,
+                callback.message.message_id,
+                reply_markup=coinflip_play_again_keyboard(),
+            )
+            await state.clear()
+            return
+
+        stage_index = fsm_data.get("stage", 0)
+        current_stage = COINFLIP_STAGES[stage_index]
+        is_win = secrets.randbelow(100) < current_stage["chance"]
+
+        await process_coinflip_result(callback, bot, state, is_win)
+    except Exception:
+        await state.clear()
+        raise
 
 
 async def process_coinflip_result(
@@ -162,13 +189,13 @@ async def process_coinflip_result(
             next_stage = COINFLIP_STAGES[next_stage_index]
             next_gross = int(stake * next_stage["multiplier"])
             next_prize = next_gross - int(next_gross * (COINFLIP_RAKE_PERCENT / 100))
-
             text = LEXICON["coinflip_continue"].format(
                 current_prize=current_prize,
                 next_prize=next_prize,
                 next_chance=next_stage["chance"],
             )
-            media = InputMediaPhoto(media=settings.PHOTO_COINFLIP_MENU, caption=text)
+            # --- ВРЕМЕННАЯ ЗАГЛУШКА ---
+            media = InputMediaPhoto(media=settings.PHOTO_GAMES_MENU, caption=text)
             await safe_edit_media(
                 bot,
                 media,
@@ -182,7 +209,8 @@ async def process_coinflip_result(
         await state.clear()
         new_balance = await db.get_user_balance(user_id)
         text = LEXICON["coinflip_loss"].format(stake=stake, new_balance=new_balance)
-        media = InputMediaPhoto(media=settings.PHOTO_COINFLIP_MENU, caption=text)
+        # --- ВРЕМЕННАЯ ЗАГЛУШКА ---
+        media = InputMediaPhoto(media=settings.PHOTO_GAMES_MENU, caption=text)
         await safe_edit_media(
             bot,
             media,
@@ -231,6 +259,7 @@ async def cash_out(callback: CallbackQuery, bot: Bot, state: FSMContext):
 
     win_stage_index = stage_index - 1
     if win_stage_index < 0:
+        logger.warning(f"User {user_id} tried to cash out at stage 0. Aborting.")
         await state.clear()
         return
 
@@ -244,7 +273,8 @@ async def cash_out(callback: CallbackQuery, bot: Bot, state: FSMContext):
     await state.clear()
 
     text = LEXICON["coinflip_win_final"].format(prize=prize, new_balance=new_balance)
-    media = InputMediaPhoto(media=settings.PHOTO_COINFLIP_MENU, caption=text)
+    # --- ВРЕМЕННАЯ ЗАГЛУШКА ---
+    media = InputMediaPhoto(media=settings.PHOTO_GAMES_MENU, caption=text)
 
     await safe_edit_media(
         bot,

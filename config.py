@@ -36,6 +36,8 @@ class Settings(BaseSettings):
     DUEL_REROLL_COST: int = 2
     REFERRAL_BONUS: int = 5
     MIN_REFERRALS_FOR_WITHDRAW: int = 5
+    DAILY_BONUS_HOURS: int = 24  # <--- ВОТ ЭТО ДОБАВЛЕНО
+    DAILY_BONUS_AMOUNT: int = 1
 
     # --- Настройки вывода ---
     REWARDS_ENABLED: bool = True

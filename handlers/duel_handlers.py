@@ -8,16 +8,11 @@ from typing import Optional
 
 from aiogram import Bot, F, Router
 from aiogram.fsm.context import FSMContext
-from aiogram.types import CallbackQuery, InputMediaPhoto
+from aiogram.types import CallbackQuery
 
 from config import settings
 from database import db
-from handlers.utils import (
-    safe_delete,
-    safe_edit_caption,
-    safe_edit_media,
-    safe_send_message,
-)
+from handlers.utils import safe_delete, safe_edit_caption, safe_send_message
 from keyboards.factories import DuelCallback, GameCallback
 from keyboards.inline import (
     back_to_duels_keyboard,
@@ -217,10 +212,6 @@ async def start_duel_game(
     await update_game_interface(bot, match)
 
 
-# handlers/duel_handlers.py
-
-# ... (другой код файла) ...
-
 @router.callback_query(GameCallback.filter((F.name == "duel") & (F.action == "start")))
 async def duel_menu_handler(callback: CallbackQuery, state: FSMContext, bot: Bot):
     await state.clear()
@@ -235,7 +226,6 @@ async def duel_menu_handler(callback: CallbackQuery, state: FSMContext, bot: Bot
         wins=stats.get("wins", 0),
         losses=stats.get("losses", 0),
     )
-    # Заменили safe_edit_media на safe_edit_caption, убрав картинку
     await safe_edit_caption(
         bot,
         caption,
@@ -245,16 +235,15 @@ async def duel_menu_handler(callback: CallbackQuery, state: FSMContext, bot: Bot
     )
     await callback.answer()
 
-# ... (остальной код файла) ...
-
 
 @router.callback_query(DuelCallback.filter(F.action == "stake"))
 async def find_duel_handler(
     callback: CallbackQuery, callback_data: DuelCallback, bot: Bot, **data
 ):
-    stake = callback_data.value
-    if stake is None or not callback.message:
+    raw_stake = callback_data.value
+    if raw_stake is None or not callback.message:
         return
+    stake = int(raw_stake)
     user_id = callback.from_user.id
     balance = await db.get_user_balance(user_id)
     trace_id = data.get("trace_id", "unknown")
@@ -315,9 +304,10 @@ async def find_duel_handler(
 async def cancel_duel_search_handler(
     callback: CallbackQuery, callback_data: DuelCallback, bot: Bot, state: FSMContext
 ):
-    stake = callback_data.value
-    if stake is None or not callback.message:
+    raw_stake = callback_data.value
+    if raw_stake is None or not callback.message:
         return
+    stake = int(raw_stake)
     user_id = callback.from_user.id
     trace_id = state.key.user_id if state.key else "unknown"
     extra = {"trace_id": trace_id, "user_id": user_id, "stake": stake}
@@ -342,9 +332,10 @@ async def play_card_handler(
     callback: CallbackQuery, callback_data: DuelCallback, bot: Bot
 ):
     match_id = callback_data.match_id
-    card_value = callback_data.value
-    if match_id is None or card_value is None:
+    raw_card_value = callback_data.value
+    if match_id is None or raw_card_value is None:
         return
+    card_value = int(raw_card_value)
     user_id = callback.from_user.id
     if match_id not in active_duels:
         return await callback.answer(
@@ -403,9 +394,10 @@ async def boost_confirm_handler(
     callback: CallbackQuery, callback_data: DuelCallback, bot: Bot
 ):
     match_id = callback_data.match_id
-    card_to_boost = callback_data.value
-    if match_id is None or card_to_boost is None:
+    raw_card_to_boost = callback_data.value
+    if match_id is None or raw_card_to_boost is None:
         return
+    card_to_boost = int(raw_card_to_boost)
     user_id = callback.from_user.id
     if match_id not in active_duels:
         return await callback.answer("Игра не найдена.", show_alert=True)
@@ -513,4 +505,3 @@ async def duel_stuck_handler(callback: CallbackQuery, bot: Bot):
     )
     if callback.message:
         await safe_delete(bot, callback.message.chat.id, callback.message.message_id)
-        
