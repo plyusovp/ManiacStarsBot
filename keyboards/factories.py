@@ -29,7 +29,7 @@ class CoinflipCallback(CallbackData, prefix="cf"):  # type: ignore
     """Фабрика для действий в игре 'Орёл и Решка'."""
 
     action: str
-    value: Optional[int] = None
+    value: Optional[float] = None
     choice: Optional[str] = None
 
 
@@ -38,8 +38,8 @@ class DuelCallback(CallbackData, prefix="duel"):  # type: ignore
 
     action: str
     match_id: Optional[int] = None
-    value: Optional[int] = None
-    original_value: Optional[int] = None
+    value: Optional[float] = None
+    original_value: Optional[float] = None
     opponent_id: Optional[int] = None
 
 
@@ -48,7 +48,7 @@ class TimerCallback(CallbackData, prefix="timer"):  # type: ignore
 
     action: str
     match_id: Optional[int] = None
-    value: Optional[int] = None
+    value: Optional[float] = None
 
 
 class AdminCallback(CallbackData, prefix="admin"):  # type: ignore
@@ -81,32 +81,35 @@ class SlotsCallback(CallbackData, prefix="slots"):  # type: ignore
     """Фабрика для действий в игре 'Слоты'."""
 
     action: str
-    value: Optional[int] = None
+    value: Optional[float] = None
 
 
 class FootballCallback(CallbackData, prefix="football"):  # type: ignore
     """Фабрика для действий в игре 'Футбол'."""
 
     action: str
+    value: Optional[float] = None
 
 
 class BowlingCallback(CallbackData, prefix="bowling"):  # type: ignore
     """Фабрика для действий в игре 'Боулинг'."""
 
     action: str
-    value: Optional[int] = None
+    value: Optional[int] = None  # ИЗМЕНЕНО: float -> int
 
 
 class BasketballCallback(CallbackData, prefix="basketball"):  # type: ignore
     """Фабрика для действий в игре 'Баскетбол'."""
 
     action: str
+    value: Optional[float] = None
 
 
 class DartsCallback(CallbackData, prefix="darts"):  # type: ignore
     """Фабрика для действий в игре 'Дартс'."""
 
     action: str
+    value: Optional[float] = None
 
 
 class DiceCallback(CallbackData, prefix="dice"):  # type: ignore
@@ -114,3 +117,4 @@ class DiceCallback(CallbackData, prefix="dice"):  # type: ignore
 
     action: str
     choice: Optional[str] = None
+    value: Optional[float] = None

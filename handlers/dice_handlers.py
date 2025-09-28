@@ -4,7 +4,6 @@ import asyncio
 import uuid
 
 from aiogram import Bot, F, Router
-from aiogram.fsm.context import FSMContext
 from aiogram.types import CallbackQuery, Message
 
 from database import db
@@ -43,10 +42,12 @@ async def dice_menu_handler(callback: CallbackQuery, bot: Bot):
 
 
 @router.callback_query(DiceCallback.filter(F.action == "choice"))
-async def throw_dice_handler(callback: CallbackQuery, callback_data: DiceCallback, bot: Bot):
+async def throw_dice_handler(
+    callback: CallbackQuery, callback_data: DiceCallback, bot: Bot
+):
     """Обрабатывает бросок костей после выбора игрока."""
     user_id = callback.from_user.id
-    user_choice = callback_data.choice # "low" or "high"
+    user_choice = callback_data.choice  # "low" or "high"
 
     if not user_choice:
         await callback.answer("Произошла ошибка, попробуйте снова.", show_alert=True)
@@ -67,7 +68,9 @@ async def throw_dice_handler(callback: CallbackQuery, callback_data: DiceCallbac
         user_id, DICE_COST, "dice_throw_cost", idem_key=idem_key
     )
     if not spent:
-        await safe_send_message(user_id, "Не удалось списать ставку, попробуйте снова.")
+        await safe_send_message(
+            bot, user_id, "Не удалось списать ставку, попробуйте снова."
+        )
         return
 
     # Отправляем эмодзи костей
@@ -90,15 +93,19 @@ async def throw_dice_handler(callback: CallbackQuery, callback_data: DiceCallbac
         await db.add_balance_unrestricted(user_id, DICE_WIN_AMOUNT, "dice_win")
         new_balance = await db.get_user_balance(user_id)
         result_text = LEXICON["dice_win"].format(
-            choice=choice_text, value=dice_value, prize=DICE_WIN_AMOUNT, new_balance=new_balance
+            choice=choice_text,
+            value=dice_value,
+            prize=DICE_WIN_AMOUNT,
+            new_balance=new_balance,
         )
     else:
         new_balance = await db.get_user_balance(user_id)
         result_text = LEXICON["dice_lose"].format(
-            choice=choice_text, value=dice_value, cost=DICE_COST, new_balance=new_balance
+            choice=choice_text,
+            value=dice_value,
+            cost=DICE_COST,
+            new_balance=new_balance,
         )
 
     # Отправляем новое сообщение с результатом и клавиатурой для новой игры
-    await bot.send_message(
-        user_id, result_text, reply_markup=dice_choice_keyboard()
-    )
+    await bot.send_message(user_id, result_text, reply_markup=dice_choice_keyboard())

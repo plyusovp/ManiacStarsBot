@@ -5,7 +5,14 @@ from urllib.parse import quote_plus
 from aiogram.types import InlineKeyboardButton, InlineKeyboardMarkup
 from aiogram.utils.keyboard import InlineKeyboardBuilder
 
-from config import COINFLIP_STAKES, DUEL_STAKES, TIMER_STAKES, settings, SLOTS_STAKES, BOWLING_STAKES
+from config import (
+    BOWLING_STAKES,
+    COINFLIP_STAKES,
+    DUEL_STAKES,
+    SLOTS_STAKES,
+    TIMER_STAKES,
+    settings,
+)
 from gifts import GIFTS_CATALOG
 from keyboards.factories import (
     AchievementCallback,
@@ -13,9 +20,9 @@ from keyboards.factories import (
     BasketballCallback,
     BowlingCallback,
     CoinflipCallback,
+    DartsCallback,
     DiceCallback,
     DuelCallback,
-    DartsCallback,
     FootballCallback,
     GameCallback,
     GiftCallback,
@@ -67,26 +74,6 @@ def main_menu_keyboard() -> InlineKeyboardMarkup:
         InlineKeyboardButton(
             text="Техподдержка 12:00-21:00 🆘",
             url=f"{settings.URL_SUPPORT}?start={support_text}",
-        )
-    )
-    return builder.as_markup()
-
-
-def resources_keyboard() -> InlineKeyboardMarkup:
-    """Генерирует клавиатуру для раздела 'Наши ресурсы'."""
-    builder = InlineKeyboardBuilder()
-    builder.row(
-        InlineKeyboardButton(text="Наш канал", url=settings.URL_CHANNEL),
-        InlineKeyboardButton(text="Наш чат", url=settings.URL_CHAT),
-    )
-    builder.row(
-        InlineKeyboardButton(text="Наши выводы", url=settings.URL_WITHDRAWALS),
-        InlineKeyboardButton(text="Наш мануал", url=settings.URL_MANUAL),
-    )
-    builder.row(
-        InlineKeyboardButton(
-            text="⬅️ Назад в меню",
-            callback_data=MenuCallback(name="main_menu").pack(),
         )
     )
     return builder.as_markup()
@@ -832,8 +819,9 @@ def slots_stake_keyboard() -> InlineKeyboardMarkup:
     )
     return builder.as_markup()
 
-
     # --- Football Keyboards ---
+
+
 def football_keyboard() -> InlineKeyboardMarkup:
     """Генерирует клавиатуру для игры в футбол."""
     builder = InlineKeyboardBuilder()
@@ -849,6 +837,7 @@ def football_keyboard() -> InlineKeyboardMarkup:
         )
     )
     return builder.as_markup()
+
 
 def bowling_stake_keyboard() -> InlineKeyboardMarkup:
     """Генерирует клавиатуру для выбора ставки в боулинге."""
@@ -885,8 +874,9 @@ def bowling_play_again_keyboard() -> InlineKeyboardMarkup:
     )
     return builder.as_markup()
 
-
     # --- Basketball Keyboards ---
+
+
 def basketball_play_again_keyboard() -> InlineKeyboardMarkup:
     """Генерирует клавиатуру для игры в баскетбол с кнопкой 'Играть снова'."""
     builder = InlineKeyboardBuilder()
@@ -903,8 +893,9 @@ def basketball_play_again_keyboard() -> InlineKeyboardMarkup:
     )
     return builder.as_markup()
 
-
     # --- Darts Keyboards ---
+
+
 def darts_play_again_keyboard() -> InlineKeyboardMarkup:
     """Генерирует клавиатуру для игры в дартс с кнопкой 'Играть снова'."""
     builder = InlineKeyboardBuilder()
@@ -934,7 +925,7 @@ def dice_choice_keyboard() -> InlineKeyboardMarkup:
         InlineKeyboardButton(
             text="🎲 Поставить на 4-6",
             callback_data=DiceCallback(action="choice", choice="high").pack(),
-        )
+        ),
     )
     builder.row(
         InlineKeyboardButton(
@@ -942,4 +933,3 @@ def dice_choice_keyboard() -> InlineKeyboardMarkup:
         )
     )
     return builder.as_markup()
-

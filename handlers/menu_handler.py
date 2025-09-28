@@ -254,7 +254,7 @@ async def games_menu_handler(callback: CallbackQuery, state: FSMContext, bot: Bo
 
 @router.callback_query(MenuCallback.filter(F.name == "resources"))
 async def resources_menu_handler(callback: CallbackQuery, state: FSMContext, bot: Bot):
-    """Отображает меню 'Наши ресурсы'."""
+    """Отображает меню 'Наши ресурсы' с фотографией из раздела выводов."""
     await state.clear()
     await clean_junk_message(state, bot)
 
@@ -265,36 +265,17 @@ async def resources_menu_handler(callback: CallbackQuery, state: FSMContext, bot
     chat_id = callback.message.chat.id
     message_id = callback.message.message_id
     caption = LEXICON["resources_menu"]
-    media = InputMediaPhoto(media=settings.PHOTO_RESOURCES, caption=caption)
+    # Используем фото из раздела выводов
+    media = InputMediaPhoto(media=settings.PHOTO_WITHDRAW, caption=caption)
 
-    # Try to edit the message first
-    success = await safe_edit_media(
+    # Пытаемся изменить существующее сообщение
+    await safe_edit_media(
         bot=bot,
         media=media,
         chat_id=chat_id,
         message_id=message_id,
         reply_markup=resources_keyboard(),
     )
-
-    # If editing fails, delete the old message and send a new one
-    if not success:
-        await safe_delete(bot, chat_id, message_id)
-        try:
-            # Try sending with photo again
-            await bot.send_photo(
-                chat_id=chat_id,
-                photo=settings.PHOTO_RESOURCES,
-                caption=caption,
-                reply_markup=resources_keyboard(),
-            )
-        except Exception as e:
-            # If it fails again (bad file_id), send a text-only message as a fallback
-            logger.error(f"Failed to send photo for resources menu: {e}")
-            await bot.send_message(
-                chat_id=chat_id,
-                text=caption,
-                reply_markup=resources_keyboard(),
-            )
 
     await state.update_data(current_view="resources")
     await callback.answer()
@@ -441,4 +422,3 @@ async def achievement_info_handler(
         )
         await state.update_data(current_view="achievement_info")
     await callback.answer()
-    

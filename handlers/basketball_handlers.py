@@ -4,7 +4,6 @@ import asyncio
 import uuid
 
 from aiogram import Bot, F, Router
-from aiogram.fsm.context import FSMContext
 from aiogram.types import CallbackQuery, Message
 
 from database import db
@@ -20,7 +19,9 @@ BASKETBALL_COST = 10
 BASKETBALL_WIN_AMOUNT = 12
 
 
-@router.callback_query(GameCallback.filter((F.name == "basketball") & (F.action == "start")))
+@router.callback_query(
+    GameCallback.filter((F.name == "basketball") & (F.action == "start"))
+)
 async def basketball_menu_handler(callback: CallbackQuery, bot: Bot):
     """Отображает главное меню игры 'Баскетбол'."""
     if not callback.message:
@@ -61,7 +62,9 @@ async def throw_basketball_handler(callback: CallbackQuery, bot: Bot):
         user_id, BASKETBALL_COST, "basketball_throw_cost", idem_key=idem_key
     )
     if not spent:
-        await safe_send_message(user_id, "Не удалось списать ставку, попробуйте снова.")
+        await safe_send_message(
+            bot, user_id, "Не удалось списать ставку, попробуйте снова."
+        )
         return
 
     # Отправляем эмодзи баскетбола
@@ -76,7 +79,9 @@ async def throw_basketball_handler(callback: CallbackQuery, bot: Bot):
 
     if is_win:
         # Начисляем выигрыш
-        await db.add_balance_unrestricted(user_id, BASKETBALL_WIN_AMOUNT, "basketball_win")
+        await db.add_balance_unrestricted(
+            user_id, BASKETBALL_WIN_AMOUNT, "basketball_win"
+        )
         new_balance = await db.get_user_balance(user_id)
         result_text = LEXICON["basketball_win"].format(
             prize=BASKETBALL_WIN_AMOUNT, new_balance=new_balance

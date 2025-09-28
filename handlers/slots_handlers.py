@@ -9,7 +9,7 @@ from aiogram.fsm.context import FSMContext
 from aiogram.types import CallbackQuery, Message
 
 from database import db
-from handlers.utils import safe_edit_caption, safe_send_message, safe_delete
+from handlers.utils import safe_delete, safe_edit_caption
 from keyboards.factories import GameCallback, SlotsCallback
 from keyboards.inline import slots_stake_keyboard
 from lexicon.texts import LEXICON
@@ -54,8 +54,14 @@ async def spin_slots_handler(
     if not callback.from_user or not callback.message:
         return
 
-    stake = callback_data.value
-    if stake is None or stake not in SLOTS_PRIZES:
+    stake_from_callback = callback_data.value
+    if stake_from_callback is None:
+        await callback.answer("Неверная ставка.", show_alert=True)
+        return
+
+    stake = int(stake_from_callback)
+
+    if stake not in SLOTS_PRIZES:
         await callback.answer("Неверная ставка.", show_alert=True)
         return
 
@@ -74,15 +80,15 @@ async def spin_slots_handler(
 
     # Списываем деньги за попытку
     idem_key = f"slots-spend-{user_id}-{uuid.uuid4()}"
-    spent = await db.spend_balance(
-        user_id, stake, "slots_spin_cost", idem_key=idem_key
-    )
+    spent = await db.spend_balance(user_id, stake, "slots_spin_cost", idem_key=idem_key)
     if not spent:
         # Если списание не удалось, нужно отправить новое меню, так как старое мы удалили
         new_balance = await db.get_user_balance(user_id)
         error_text = "Не удалось списать ставку, попробуйте снова."
         menu_text = LEXICON["slots_menu"].format(balance=new_balance)
-        await bot.send_message(user_id, f"{error_text}\n\n{menu_text}", reply_markup=slots_stake_keyboard())
+        await bot.send_message(
+            user_id, f"{error_text}\n\n{menu_text}", reply_markup=slots_stake_keyboard()
+        )
         return
 
     # Отправляем эмодзи казино
@@ -95,7 +101,7 @@ async def spin_slots_handler(
     is_win = msg.dice and msg.dice.value in winning_values
     win_amount = SLOTS_PRIZES[stake]
     result_text = ""
-    
+
     # Рассчитываем результат и новый баланс
     if is_win:
         await db.add_balance_unrestricted(user_id, win_amount, "slots_win")
@@ -105,17 +111,13 @@ async def spin_slots_handler(
         )
     else:
         new_balance = await db.get_user_balance(user_id)
-        result_text = LEXICON["slots_lose"].format(
-            cost=stake, new_balance=new_balance
-        )
-        
+        result_text = LEXICON["slots_lose"].format(cost=stake, new_balance=new_balance)
+
     # Формируем текст для нового меню
     menu_text = LEXICON["slots_menu"].format(balance=new_balance)
-    
+
     # Объединяем результат и новое меню в одно сообщение
     final_text = f"{result_text}\n\n{menu_text}"
 
     # Отправляем одно новое сообщение с результатом и кнопками для новой игры
-    await bot.send_message(
-        user_id, final_text, reply_markup=slots_stake_keyboard()
-    )
+    await bot.send_message(user_id, final_text, reply_markup=slots_stake_keyboard())

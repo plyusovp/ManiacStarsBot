@@ -32,6 +32,7 @@ class CoinflipState(StatesGroup):
 
 # ... (другой код файла) ...
 
+
 @router.callback_query(
     GameCallback.filter((F.name == "coinflip") & (F.action == "start"))
 )
@@ -48,12 +49,13 @@ async def coinflip_menu_handler(
         # Заменили safe_edit_media на safe_edit_caption
         await safe_edit_caption(
             bot,
-            caption=text, # Передаем только текст
+            caption=text,  # Передаем только текст
             chat_id=callback.message.chat.id,
             message_id=callback.message.message_id,
             reply_markup=coinflip_stake_keyboard(),
         )
     await callback.answer()
+
 
 # ... (остальной код файла) ...
 
@@ -77,7 +79,9 @@ async def coinflip_stake_selected_handler(
         return
 
     idem_key = f"cf-start-{user_id}-{uuid.uuid4()}"
-    spent = await db.spend_balance(user_id, stake, "coinflip_stake", idem_key=idem_key)
+    spent = await db.spend_balance(
+        user_id, int(stake), "coinflip_stake", idem_key=idem_key
+    )
     if not spent:
         await callback.answer("Не удалось списать ставку.", show_alert=True)
         return
@@ -249,4 +253,3 @@ async def cash_out(callback: CallbackQuery, bot: Bot, state: FSMContext):
         callback.message.message_id,
         reply_markup=coinflip_play_again_keyboard(),
     )
-    

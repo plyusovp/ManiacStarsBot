@@ -77,8 +77,16 @@ class Settings(BaseSettings):
 
 settings = Settings()
 
+# --- Ставки для всех игр ---
+# Сложные игры
 DUEL_STAKES = [10, 25, 50, 100, 250]
 TIMER_STAKES = [10, 25, 50, 100]
 COINFLIP_STAKES = [10, 25, 50, 100, 250, 500]
+
+# Игры с маленькими ставками
 SLOTS_STAKES = [1, 3, 5, 10]
 BOWLING_STAKES = [1, 3, 5, 10]
+FOOTBALL_STAKES = [1, 3, 5, 10]
+BASKETBALL_STAKES = [1, 3, 5, 10]
+DARTS_STAKES = [1, 3, 5, 10]
+DICE_STAKES = [1, 3, 5, 10]

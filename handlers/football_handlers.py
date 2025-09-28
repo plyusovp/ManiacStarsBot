@@ -20,7 +20,9 @@ FOOTBALL_COST = 10
 FOOTBALL_WIN_AMOUNT = 12
 
 
-@router.callback_query(GameCallback.filter((F.name == "football") & (F.action == "start")))
+@router.callback_query(
+    GameCallback.filter((F.name == "football") & (F.action == "start"))
+)
 async def football_menu_handler(callback: CallbackQuery, state: FSMContext, bot: Bot):
     """Отображает главное меню игры 'Футбол'."""
     await state.clear()
@@ -61,7 +63,9 @@ async def kick_football_handler(callback: CallbackQuery, state: FSMContext, bot:
         user_id, FOOTBALL_COST, "football_kick_cost", idem_key=idem_key
     )
     if not spent:
-        await callback.answer("Не удалось списать ставку, попробуйте снова.", show_alert=True)
+        await callback.answer(
+            "Не удалось списать ставку, попробуйте снова.", show_alert=True
+        )
         return
 
     # Отправляем эмодзи футбола

@@ -4,7 +4,6 @@ import asyncio
 import uuid
 
 from aiogram import Bot, F, Router
-from aiogram.fsm.context import FSMContext
 from aiogram.types import CallbackQuery, Message
 
 from database import db
@@ -61,7 +60,9 @@ async def throw_darts_handler(callback: CallbackQuery, bot: Bot):
         user_id, DARTS_COST, "darts_throw_cost", idem_key=idem_key
     )
     if not spent:
-        await safe_send_message(user_id, "Не удалось списать ставку, попробуйте снова.")
+        await safe_send_message(
+            bot, user_id, "Не удалось списать ставку, попробуйте снова."
+        )
         return
 
     # Отправляем эмодзи дартса

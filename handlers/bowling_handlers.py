@@ -25,7 +25,9 @@ BOWLING_PRIZES: Dict[int, int] = {
 }
 
 
-@router.callback_query(GameCallback.filter((F.name == "bowling") & (F.action == "start")))
+@router.callback_query(
+    GameCallback.filter((F.name == "bowling") & (F.action == "start"))
+)
 async def bowling_menu_handler(callback: CallbackQuery, state: FSMContext, bot: Bot):
     """Отображает главное меню игры 'Боулинг' с выбором ставки."""
     await state.clear()
@@ -48,15 +50,20 @@ async def bowling_menu_handler(callback: CallbackQuery, state: FSMContext, bot: 
 
 
 @router.callback_query(BowlingCallback.filter(F.action == "throw"))
-async def throw_bowling_handler(callback: CallbackQuery, callback_data: BowlingCallback, bot: Bot):
+async def throw_bowling_handler(
+    callback: CallbackQuery, callback_data: BowlingCallback, bot: Bot
+):
     """Обрабатывает бросок шара по выбранной ставке."""
     if not callback.from_user or not callback.message:
         return
 
-    stake = callback_data.value
-    if stake is None or stake not in BOWLING_PRIZES:
+    stake_value = callback_data.value
+    if stake_value is None or int(stake_value) not in BOWLING_PRIZES:
         await callback.answer("Неверная ставка.", show_alert=True)
         return
+
+    # ИСПРАВЛЕНО: Приводим ставку к int, чтобы избежать ошибок типов
+    stake = int(stake_value)
 
     user_id = callback.from_user.id
     balance = await db.get_user_balance(user_id)
@@ -70,11 +77,14 @@ async def throw_bowling_handler(callback: CallbackQuery, callback_data: BowlingC
 
     # Списываем деньги за попытку
     idem_key = f"bowling-spend-{user_id}-{uuid.uuid4()}"
+    # ИСПРАВЛЕНО: передаем int в функцию
     spent = await db.spend_balance(
         user_id, stake, "bowling_throw_cost", idem_key=idem_key
     )
     if not spent:
-        await safe_send_message(user_id, "Не удалось списать ставку, попробуйте снова.")
+        await safe_send_message(
+            bot, user_id, "Не удалось списать ставку, попробуйте снова."
+        )
         return
 
     # Отправляем эмодзи боулинга
@@ -85,6 +95,7 @@ async def throw_bowling_handler(callback: CallbackQuery, callback_data: BowlingC
 
     # Значение 6 означает страйк
     is_win = msg.dice and msg.dice.value == 6
+    # ИСПРАВЛЕНО: используем int для доступа к словарю
     win_amount = BOWLING_PRIZES[stake]
 
     if is_win:
@@ -103,4 +114,3 @@ async def throw_bowling_handler(callback: CallbackQuery, callback_data: BowlingC
     await bot.send_message(
         user_id, result_text, reply_markup=bowling_play_again_keyboard()
     )
-    
