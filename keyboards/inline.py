@@ -7,8 +7,12 @@ from aiogram.utils.keyboard import InlineKeyboardBuilder
 
 from config import (
     BOWLING_STAKES,
+    BASKETBALL_STAKES,
     COINFLIP_STAKES,
+    FOOTBALL_STAKES,
     DUEL_STAKES,
+    DARTS_STAKES,
+    DICE_STAKES,
     SLOTS_STAKES,
     TIMER_STAKES,
     settings,
@@ -822,15 +826,21 @@ def slots_stake_keyboard() -> InlineKeyboardMarkup:
     # --- Football Keyboards ---
 
 
-def football_keyboard() -> InlineKeyboardMarkup:
-    """Генерирует клавиатуру для игры в футбол."""
+# ЭТОТ БЛОК НУЖНО ДОБАВИТЬ
+
+def football_stake_keyboard() -> InlineKeyboardMarkup:
+    """Генерирует клавиатуру для выбора ставки в футболе."""
     builder = InlineKeyboardBuilder()
-    builder.row(
+    buttons = [
         InlineKeyboardButton(
-            text="⚽️ Ударить по мячу",
-            callback_data=FootballCallback(action="kick").pack(),
+            text=f"{stake} ⭐",
+            callback_data=FootballCallback(action="kick", value=stake).pack(),
         )
-    )
+        for stake in FOOTBALL_STAKES
+    ]
+    # Создаем ряд из кнопок со ставками, по 4 в ряд
+    builder.row(*buttons, width=4)
+    # Добавляем кнопку "Назад"
     builder.row(
         InlineKeyboardButton(
             text="⬅️ К другим играм", callback_data=MenuCallback(name="games").pack()
@@ -877,18 +887,22 @@ def bowling_play_again_keyboard() -> InlineKeyboardMarkup:
     # --- Basketball Keyboards ---
 
 
-def basketball_play_again_keyboard() -> InlineKeyboardMarkup:
-    """Генерирует клавиатуру для игры в баскетбол с кнопкой 'Играть снова'."""
+# ЭТОТ БЛОК НУЖНО ДОБАВИТЬ
+
+def basketball_stake_keyboard() -> InlineKeyboardMarkup:
+    """Генерирует клавиатуру для выбора ставки в баскетболе."""
     builder = InlineKeyboardBuilder()
-    builder.row(
+    buttons = [
         InlineKeyboardButton(
-            text="🏀 Сделать бросок",
-            callback_data=BasketballCallback(action="throw").pack(),
+            text=f"{stake} ⭐",
+            callback_data=BasketballCallback(action="throw", value=stake).pack(),
         )
-    )
+        for stake in BASKETBALL_STAKES
+    ]
+    builder.row(*buttons, width=4)
     builder.row(
         InlineKeyboardButton(
-            text="⬅️ К другим играм", callback_data=MenuCallback(name="games").pack()
+            text="⬅️ К другим игам", callback_data=MenuCallback(name="games").pack()
         )
     )
     return builder.as_markup()
@@ -896,15 +910,40 @@ def basketball_play_again_keyboard() -> InlineKeyboardMarkup:
     # --- Darts Keyboards ---
 
 
-def darts_play_again_keyboard() -> InlineKeyboardMarkup:
-    """Генерирует клавиатуру для игры в дартс с кнопкой 'Играть снова'."""
+# ЭТОТ БЛОК НУЖНО ДОБАВИТЬ
+
+def darts_stake_keyboard() -> InlineKeyboardMarkup:
+    """Генерирует клавиатуру для выбора ставки в дартсе."""
     builder = InlineKeyboardBuilder()
+    buttons = [
+        InlineKeyboardButton(
+            text=f"{stake} ⭐",
+            callback_data=DartsCallback(action="throw", value=stake).pack(),
+        )
+        for stake in DARTS_STAKES
+    ]
+    builder.row(*buttons, width=4)
     builder.row(
         InlineKeyboardButton(
-            text="🎯 Бросить дротик",
-            callback_data=DartsCallback(action="throw").pack(),
+            text="⬅️ К другим играм", callback_data=MenuCallback(name="games").pack()
         )
     )
+    return builder.as_markup()
+
+
+# ЭТОТ БЛОК НУЖНО ДОБАВИТЬ ПЕРЕД ФУНКЦИЕЙ ВЫШЕ
+
+def dice_stake_keyboard() -> InlineKeyboardMarkup:
+    """Генерирует клавиатуру для выбора ставки в костях."""
+    builder = InlineKeyboardBuilder()
+    buttons = [
+        InlineKeyboardButton(
+            text=f"{stake} ⭐",
+            callback_data=DiceCallback(action="stake", value=stake).pack(),
+        )
+        for stake in DICE_STAKES
+    ]
+    builder.row(*buttons, width=4)
     builder.row(
         InlineKeyboardButton(
             text="⬅️ К другим играм", callback_data=MenuCallback(name="games").pack()
@@ -914,7 +953,7 @@ def darts_play_again_keyboard() -> InlineKeyboardMarkup:
 
 
 # --- Dice Keyboards ---
-def dice_choice_keyboard() -> InlineKeyboardMarkup:
+def dice_range_choice_keyboard() -> InlineKeyboardMarkup:
     """Генерирует клавиатуру для игры в кости с выбором диапазона."""
     builder = InlineKeyboardBuilder()
     builder.row(

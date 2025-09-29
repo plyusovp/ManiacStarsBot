@@ -88,7 +88,8 @@ class FootballCallback(CallbackData, prefix="football"):  # type: ignore
     """Фабрика для действий в игре 'Футбол'."""
 
     action: str
-    value: Optional[float] = None
+    # ИЗМЕНЯЕМ float НА int
+    value: Optional[int] = None
 
 
 class BowlingCallback(CallbackData, prefix="bowling"):  # type: ignore
@@ -102,14 +103,16 @@ class BasketballCallback(CallbackData, prefix="basketball"):  # type: ignore
     """Фабрика для действий в игре 'Баскетбол'."""
 
     action: str
-    value: Optional[float] = None
+    # ИЗМЕНЯЕМ float НА int
+    value: Optional[int] = None
 
 
 class DartsCallback(CallbackData, prefix="darts"):  # type: ignore
     """Фабрика для действий в игре 'Дартс'."""
 
     action: str
-    value: Optional[float] = None
+    # ИЗМЕНЯЕМ float НА int
+    value: Optional[int] = None
 
 
 class DiceCallback(CallbackData, prefix="dice"):  # type: ignore
@@ -117,4 +120,5 @@ class DiceCallback(CallbackData, prefix="dice"):  # type: ignore
 
     action: str
     choice: Optional[str] = None
-    value: Optional[float] = None
+    # ИЗМЕНЯЕМ float НА int
+    value: Optional[int] = None
