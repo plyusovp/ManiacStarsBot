@@ -1,8 +1,8 @@
-# plyusovp/maniacstarsbot/ManiacStarsBot-67d43495a3d8b0b5689fd3311461f2c73499ed96/handlers/slots_handlers.py
+# handlers/slots_handlers.py
 
 import asyncio
 import uuid
-from typing import Dict, Tuple
+from typing import Tuple
 
 from aiogram import Bot, F, Router
 from aiogram.fsm.context import FSMContext
@@ -16,25 +16,16 @@ from lexicon.texts import LEXICON
 
 router = Router()
 
-# Экономика: джекпот x12, два первых совпадения - возврат ставки
-SLOTS_PRIZES: Dict[int, int] = {
-    1: 12,
-    3: 36,
-    5: 60,
-    10: 120,
-}
-
 
 def get_reels_from_dice(value: int) -> Tuple[int, int, int]:
     """
-    Разбирает значение дайса "🎰" (от 0 до 63) на три барабана (от 0 до 3).
+    Разбирает значение дайса "🎰" (от 1 до 64) на три барабана.
+    Символы: 0: BAR, 1: Grapes, 2: Lemon, 3: Seven
     """
-    # Значения в aiogram для "🎰" начинаются с 1, а логика основана на 0-63.
-    # Поэтому вычитаем 1.
     val = value - 1
-    reel1 = val // 16
-    reel2 = (val % 16) // 4
-    reel3 = val % 4
+    reel1 = val % 4
+    reel2 = (val // 4) % 4
+    reel3 = (val // 16) % 4
     return reel1, reel2, reel3
 
 
@@ -72,12 +63,9 @@ async def spin_slots_handler(
         return
 
     stake = int(stake_from_callback)
-    if stake not in SLOTS_PRIZES:
-        await callback.answer("Неверная ставка.", show_alert=True)
-        return
-
     user_id = callback.from_user.id
     balance = await db.get_user_balance(user_id)
+
     if balance < stake:
         await callback.answer("Недостаточно средств для игры.", show_alert=True)
         return
@@ -101,27 +89,35 @@ async def spin_slots_handler(
 
     dice_value = msg.dice.value if msg.dice else 0
     reel1, reel2, reel3 = get_reels_from_dice(dice_value)
+    symbol_seven = 3
 
-    # Определяем результат: ПРОВЕРКА ПЕРВЫХ ДВУХ БАРАБАНОВ, БЛЯТЬ.
-    is_jackpot = reel1 == reel2 == reel3
-    is_two_match = reel1 == reel2 and reel1 != reel3
+    win_amount: int = 0  # Инициализируем как int
+    result_text_key = "slots_lose"
 
-    if is_jackpot:
-        win_amount = SLOTS_PRIZES[stake]
-        await db.add_balance_unrestricted(user_id, win_amount, "slots_win_jackpot")
-        new_balance = await db.get_user_balance(user_id)
-        result_text = LEXICON["slots_win"].format(
+    if reel1 == reel2 == reel3:
+        if reel1 == symbol_seven:
+            # Три семерки
+            win_amount = stake * 7
+            result_text_key = "slots_win"
+        else:
+            # Три одинаковых (не семерки)
+            win_amount = stake * 2
+            result_text_key = "slots_win"
+    elif reel1 == reel2 or reel2 == reel3:
+        # Два одинаковых подряд
+        # ИСПРАВЛЕНИЕ: Преобразуем float в int
+        win_amount = int(stake * 1.5)
+        result_text_key = "slots_two_match"
+
+    new_balance = await db.get_user_balance(user_id)
+
+    if win_amount > 0:
+        await db.add_balance_unrestricted(user_id, win_amount, "slots_win")
+        new_balance += win_amount
+        result_text = LEXICON[result_text_key].format(
             prize=win_amount, new_balance=new_balance
         )
-    elif is_two_match:
-        # Возвращаем ставку
-        win_amount = stake
-        await db.add_balance_unrestricted(user_id, win_amount, "slots_win_return")
-        new_balance = await db.get_user_balance(user_id)
-        result_text = f"🤷‍♂️ Считай, что это был бесплатный спин. 🤷‍♂️\n\nВселенная даёт тебе ещё один шанс не быть лузером. Твоя ставка в {win_amount} ⭐ вернулась.\n💰 Ваш новый баланс: {new_balance} ⭐"
     else:
-        # Проигрыш
-        new_balance = await db.get_user_balance(user_id)
         result_text = LEXICON["slots_lose"].format(cost=stake, new_balance=new_balance)
 
     menu_text = LEXICON["slots_menu"].format(balance=new_balance)

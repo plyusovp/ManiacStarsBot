@@ -2,27 +2,18 @@
 
 import asyncio
 import uuid
-from typing import Dict
 
 from aiogram import Bot, F, Router
 from aiogram.fsm.context import FSMContext
 from aiogram.types import CallbackQuery, Message
 
 from database import db
-from handlers.utils import safe_edit_caption, safe_send_message
+from handlers.utils import safe_delete, safe_edit_caption
 from keyboards.factories import BowlingCallback, GameCallback
-from keyboards.inline import bowling_play_again_keyboard, bowling_stake_keyboard
+from keyboards.inline import bowling_stake_keyboard
 from lexicon.texts import LEXICON
 
 router = Router()
-
-# Новая экономика: ставка -> выигрыш
-BOWLING_PRIZES: Dict[int, int] = {
-    1: 5,
-    3: 15,
-    5: 25,
-    10: 50,
-}
 
 
 @router.callback_query(
@@ -35,10 +26,8 @@ async def bowling_menu_handler(callback: CallbackQuery, state: FSMContext, bot: 
         return
 
     balance = await db.get_user_balance(callback.from_user.id)
-    # Используем правильный текст из lexicon, который не требует 'cost'
     text = LEXICON["bowling_menu"].format(balance=balance)
 
-    # Меняем старое сообщение на меню с кнопками выбора ставок
     await safe_edit_caption(
         bot,
         caption=text,
@@ -58,13 +47,11 @@ async def throw_bowling_handler(
         return
 
     stake_value = callback_data.value
-    if stake_value is None or int(stake_value) not in BOWLING_PRIZES:
+    if stake_value is None:
         await callback.answer("Неверная ставка.", show_alert=True)
         return
 
-    # ИСПРАВЛЕНО: Приводим ставку к int, чтобы избежать ошибок типов
     stake = int(stake_value)
-
     user_id = callback.from_user.id
     balance = await db.get_user_balance(user_id)
 
@@ -72,45 +59,49 @@ async def throw_bowling_handler(
         await callback.answer("Недостаточно средств для игры.", show_alert=True)
         return
 
-    # Отвечаем на колбэк, чтобы кнопка не "висела"
     await callback.answer()
+    await safe_delete(bot, callback.message.chat.id, callback.message.message_id)
 
-    # Списываем деньги за попытку
     idem_key = f"bowling-spend-{user_id}-{uuid.uuid4()}"
-    # ИСПРАВЛЕНО: передаем int в функцию
     spent = await db.spend_balance(
         user_id, stake, "bowling_throw_cost", idem_key=idem_key
     )
     if not spent:
-        await safe_send_message(
-            bot, user_id, "Не удалось списать ставку, попробуйте снова."
+        new_balance = await db.get_user_balance(user_id)
+        error_text = "Не удалось списать ставку, попробуйте снова."
+        menu_text = LEXICON["bowling_menu"].format(balance=new_balance)
+        await bot.send_message(
+            user_id,
+            f"{error_text}\n\n{menu_text}",
+            reply_markup=bowling_stake_keyboard(),
         )
         return
 
-    # Отправляем эмодзи боулинга
     msg: Message = await bot.send_dice(chat_id=user_id, emoji="🎳")
-
-    # Ждем завершения анимации
     await asyncio.sleep(4)
 
-    # Значение 6 означает страйк
-    is_win = msg.dice and msg.dice.value == 6
-    # ИСПРАВЛЕНО: используем int для доступа к словарю
-    win_amount = BOWLING_PRIZES[stake]
+    dice_value = msg.dice.value if msg.dice else 0
+    win_amount: int = 0  # Инициализируем как int
 
-    if is_win:
+    if dice_value == 6:  # Strike
+        win_amount = stake * 3
+    elif dice_value == 5:  # 1 pin left
+        # ИСПРАВЛЕНИЕ: Преобразуем float в int
+        win_amount = int(stake * 1.5)
+
+    new_balance = await db.get_user_balance(user_id)
+
+    if win_amount > 0:
         await db.add_balance_unrestricted(user_id, win_amount, "bowling_win")
-        new_balance = await db.get_user_balance(user_id)
+        new_balance += win_amount
         result_text = LEXICON["bowling_win"].format(
             prize=win_amount, new_balance=new_balance
         )
     else:
-        new_balance = await db.get_user_balance(user_id)
         result_text = LEXICON["bowling_lose"].format(
             cost=stake, new_balance=new_balance
         )
 
-    # Отправляем новое сообщение с результатом и кнопкой "Играть снова"
-    await bot.send_message(
-        user_id, result_text, reply_markup=bowling_play_again_keyboard()
-    )
+    menu_text = LEXICON["bowling_menu"].format(balance=new_balance)
+    final_text = f"{result_text}\n\n{menu_text}"
+    await bot.send_message(user_id, final_text, reply_markup=bowling_stake_keyboard())

@@ -1,8 +1,7 @@
-# plyusovp/maniacstarsbot/ManiacStarsBot-67d43495a3d8b0b5689fd3311461f2c73499ed96/handlers/basketball_handlers.py
+# handlers/basketball_handlers.py
 
 import asyncio
 import uuid
-from typing import Dict
 
 from aiogram import Bot, F, Router
 from aiogram.types import CallbackQuery, Message
@@ -14,14 +13,7 @@ from keyboards.inline import basketball_stake_keyboard
 from lexicon.texts import LEXICON
 
 router = Router()
-
-# Новая экономика: ставка -> выигрыш (x2)
-BASKETBALL_PRIZES: Dict[int, int] = {
-    1: 2,
-    3: 6,
-    5: 10,
-    10: 20,
-}
+WIN_MULTIPLIER = 2.5
 
 
 @router.callback_query(
@@ -35,7 +27,6 @@ async def basketball_menu_handler(callback: CallbackQuery, bot: Bot):
     balance = await db.get_user_balance(callback.from_user.id)
     text = LEXICON["basketball_menu"].format(balance=balance)
 
-    # Меняем старое сообщение на меню с кнопками выбора ставок
     await safe_edit_caption(
         bot,
         caption=text,
@@ -55,7 +46,7 @@ async def throw_basketball_handler(
         return
 
     stake_from_callback = callback_data.value
-    if stake_from_callback is None or int(stake_from_callback) not in BASKETBALL_PRIZES:
+    if stake_from_callback is None:
         await callback.answer("Неверная ставка.", show_alert=True)
         return
 
@@ -67,58 +58,47 @@ async def throw_basketball_handler(
         await callback.answer("Недостаточно средств для игры.", show_alert=True)
         return
 
-    # Отвечаем на колбэк
     await callback.answer()
-
-    # Удаляем старое сообщение
     await safe_delete(bot, callback.message.chat.id, callback.message.message_id)
 
-    # Списываем деньги за попытку
     idem_key = f"basketball-spend-{user_id}-{uuid.uuid4()}"
     spent = await db.spend_balance(
         user_id, stake, "basketball_throw_cost", idem_key=idem_key
     )
     if not spent:
-        # Если списание не удалось, отправляем новое меню
         new_balance = await db.get_user_balance(user_id)
         error_text = "Не удалось списать ставку, попробуйте снова."
         menu_text = LEXICON["basketball_menu"].format(balance=new_balance)
         await bot.send_message(
-            user_id, f"{error_text}\n\n{menu_text}", reply_markup=basketball_stake_keyboard()
+            user_id,
+            f"{error_text}\n\n{menu_text}",
+            reply_markup=basketball_stake_keyboard(),
         )
         return
 
-    # Отправляем эмодзи баскетбола
     msg: Message = await bot.send_dice(chat_id=user_id, emoji="🏀")
-
-    # Значения 4 и 5 означают попадание в корзину (40% шанс)
-    winning_values = {4, 5}
-    is_win = msg.dice and msg.dice.value in winning_values
-    win_amount = BASKETBALL_PRIZES[stake]
-
-    # Ждем завершения анимации
     await asyncio.sleep(4)
 
-    # Рассчитываем результат
+    # Попадание при значениях 4 и 5
+    winning_values = {4, 5}
+    is_win = msg.dice and msg.dice.value in winning_values
+
+    new_balance = await db.get_user_balance(user_id)
+
     if is_win:
-        # Начисляем выигрыш
-        await db.add_balance_unrestricted(
-            user_id, win_amount, "basketball_win"
-        )
-        new_balance = await db.get_user_balance(user_id)
+        win_amount = int(stake * WIN_MULTIPLIER)
+        await db.add_balance_unrestricted(user_id, win_amount, "basketball_win")
+        new_balance += win_amount
         result_text = LEXICON["basketball_win"].format(
             prize=win_amount, new_balance=new_balance
         )
     else:
-        # Проигрыш
-        new_balance = await db.get_user_balance(user_id)
         result_text = LEXICON["basketball_lose"].format(
             cost=stake, new_balance=new_balance
         )
-        
-    # Формируем текст для нового меню
+
     menu_text = LEXICON["basketball_menu"].format(balance=new_balance)
     final_text = f"{result_text}\n\n{menu_text}"
-
-    # Отправляем одно новое сообщение с результатом и клавиатурой для новой игры
-    await bot.send_message(user_id, final_text, reply_markup=basketball_stake_keyboard())
+    await bot.send_message(
+        user_id, final_text, reply_markup=basketball_stake_keyboard()
+    )

@@ -32,12 +32,13 @@ class Settings(BaseSettings):
     # --- Настройки экономики и игр ---
     INITIAL_BALANCE: int = 0
     DUEL_RAKE_PERCENT: int
-    DUEL_BOOST_COST: int = 1
-    DUEL_REROLL_COST: int = 2
+    DUEL_BOOST_COST: int = 2
+    DUEL_REROLL_COST: int = 3
     REFERRAL_BONUS: int = 5
     MIN_REFERRALS_FOR_WITHDRAW: int = 5
-    DAILY_BONUS_HOURS: int = 24  # <--- ВОТ ЭТО ДОБАВЛЕНО
+    DAILY_BONUS_HOURS: int = 24
     DAILY_BONUS_AMOUNT: int = 1
+    COINFLIP_RAKE_PERCENT: int = 7
 
     # --- Настройки вывода ---
     REWARDS_ENABLED: bool = True
@@ -56,7 +57,7 @@ class Settings(BaseSettings):
     URL_MANUAL: str = "https://t.me/manualstar"
     URL_SUPPORT: str = "https://t.me/limejko"
 
-    # --- Старые Медиа (FILE_ID) ---
+    # --- Медиа (FILE_ID) ---
     PHOTO_MAIN_MENU: str = "AgACAgQAAxkBAAIH42jElgmn6BB8_Id-jKc7SwEWjaIxAAKJzzEbKHEhUmI1AAFPzWmoQAEAAwIAA3kAAzYE"
     PHOTO_GAMES_MENU: str = "AgACAgQAAxkBAAIH5WjEl27FsoitJkCDl_fls8xltAABPwACMcoxG_KCKVK5XWe6RKn9OQEAAwIAA3kAAzYE"
     PHOTO_WITHDRAW: str = "AgACAgQAAxkBAAIH52jEmQABRRDUNSU5oeleD3mxdoZ34wACNsoxG_KCKVIa4lfrb-fI6QEAAwIAA3kAAzYE"
@@ -65,11 +66,7 @@ class Settings(BaseSettings):
     PHOTO_PROMO: str = "AgACAgQAAxkBAAIH7WjEmZyC46umULOyFQ_eaCVEZz6HAAI6yjEb8oIpUnqOncQsYsXlAQADAgADeQADNgQ"
     PHOTO_EARN_STARS: str = "AgACAgQAAxkBAAIH8WjEmyW1XdLZSG_qd4z-nEfewxUDAAI9yjEb8oIpUvfGPlFenoImAQADAgADeQADNgQ"
     PHOTO_ACHIEVEMENTS: str = "AgACAgQAAxkBAAIH72jEmf5nIhZVIeyHkl7o4i3PUrV3AAI7yjEb8oIpUi4QwQoZ0aMDAQADAgADeQADNgQ"
-
-    # --- Новые и обновленные фото ---
     PHOTO_RESOURCES: str = "AgACAgQAAxkBAAEBRahoxtbkPuDr2vkDniunHd1eDQRjfwACGs8xGyhxIVIL4TQKmD6kGwEAAwIAA3kAAzYE"
-    PHOTO_DUEL_MENU: str = "AgACAgQAAxkBAAEBRbloxtd_hT3U2PWdnDfyISJsQkYS9AACmcsxG4K_IFLOUIM0qh2bfwEAAwIAA3kAAzYE"
-    PHOTO_COINFLIP_MENU: str = "AgACAgQAAxkBAAEBRatoxtb8z0zCYYgYO9AdMkKTi5FwgAACFc8xGyhxIVJz7d0SDKi2oQEAAwIAA3kAAzYE"
     PHOTO_COINFLIP_PROCESS: str = "AgACAgQAAxkBAAEBRa5oxtcE-LOFVz26ZnIrRx7SZR9WsgACocsxG4K_IFLHLjFwpfluEgEAAwIAA3kAAzYE"
 
     model_config = SettingsConfigDict(
@@ -80,15 +77,15 @@ class Settings(BaseSettings):
 settings = Settings()
 
 # --- Ставки для всех игр ---
-# Сложные игры
-DUEL_STAKES = [10, 25, 50, 100, 250]
-TIMER_STAKES = [10, 25, 50, 100]
-COINFLIP_STAKES = [10, 25, 50, 100, 250, 500]
+# Устанавливаем единые ставки 1, 2, 3, 4, 5 для всех игр
+COMMON_STAKES = [1, 2, 3, 4, 5]
 
-# Игры с маленькими ставками
-SLOTS_STAKES = [1, 3, 5, 10]
-BOWLING_STAKES = [1, 3, 5, 10]
-FOOTBALL_STAKES = [1, 3, 5, 10]
-BASKETBALL_STAKES = [1, 3, 5, 10]
-DARTS_STAKES = [1, 3, 5, 10]
-DICE_STAKES = [1, 3, 5, 10]
+DUEL_STAKES = COMMON_STAKES.copy()
+TIMER_STAKES = COMMON_STAKES.copy()
+COINFLIP_STAKES = COMMON_STAKES.copy()
+SLOTS_STAKES = COMMON_STAKES.copy()
+BOWLING_STAKES = COMMON_STAKES.copy()
+FOOTBALL_STAKES = COMMON_STAKES.copy()
+BASKETBALL_STAKES = COMMON_STAKES.copy()
+DARTS_STAKES = COMMON_STAKES.copy()
+DICE_STAKES = COMMON_STAKES.copy()

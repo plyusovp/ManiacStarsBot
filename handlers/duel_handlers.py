@@ -1,4 +1,4 @@
-# plyusovp/maniacstarsbot/ManiacStarsBot-4df23ef8bd5b8766acddffe6bca30a128458c7a5/handlers/duel_handlers.py
+# handlers/duel_handlers.py
 
 import asyncio
 import logging
@@ -176,17 +176,44 @@ async def resolve_game_end(bot: Bot, match: DuelMatch):
         if match.p1_wins > match.p2_wins
         else (match.p2.id, match.p1.id)
     )
+    winner_wins, loser_wins = (
+        (match.p1_wins, match.p2_wins)
+        if winner_id == match.p1.id
+        else (match.p2_wins, match.p1_wins)
+    )
+
     rake = int(match.stake * 2 * (settings.DUEL_RAKE_PERCENT / 100))
     prize = match.stake * 2 - rake
     logging.info(f"Duel finished. Winner: {winner_id}, Prize: {prize}", extra=extra)
     await db.finish_duel_atomic(match.match_id, winner_id, loser_id, prize)
-    final_text = LEXICON["duel_game_over"].format(
-        winner_id=winner_id,
-        p1_wins=match.p1_wins,
-        p2_wins=match.p2_wins,
-        prize=prize,
+
+    winner_text = LEXICON["duel_win"].format(
+        your_wins=winner_wins, opponent_wins=loser_wins, prize=prize
     )
-    await update_game_interface(bot, match, text_override=final_text)
+    loser_text = LEXICON["duel_lose"].format(
+        your_wins=loser_wins, opponent_wins=winner_wins, stake=match.stake
+    )
+
+    winner = match.p1 if winner_id == match.p1.id else match.p2
+    loser = match.p2 if winner_id == match.p1.id else match.p1
+
+    await asyncio.gather(
+        safe_edit_caption(
+            bot,
+            winner_text,
+            winner.id,
+            winner.message_id,
+            reply_markup=back_to_duels_keyboard(),
+        ),
+        safe_edit_caption(
+            bot,
+            loser_text,
+            loser.id,
+            loser.message_id,
+            reply_markup=back_to_duels_keyboard(),
+        ),
+    )
+
     if match.match_id in active_duels:
         del active_duels[match.match_id]
 

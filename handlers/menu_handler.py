@@ -1,6 +1,7 @@
 # plyusovp/maniacstarsbot/ManiacStarsBot-4df23ef8bd5b8766acddffe6bca30a128458c7a5/handlers/menu_handler.py
 
 import logging
+import uuid
 from typing import Optional
 
 from aiogram import Bot, F, Router
@@ -10,7 +11,9 @@ from aiogram.types import CallbackQuery, InputMediaPhoto, Message
 
 from config import settings
 from database import db
+from gifts import GIFTS_CATALOG
 from handlers.utils import (
+    check_subscription,
     clean_junk_message,
     generate_referral_link,
     get_user_info_text,
@@ -18,19 +21,20 @@ from handlers.utils import (
     safe_edit_caption,
     safe_edit_media,
 )
-from keyboards.factories import AchievementCallback, MenuCallback
+from keyboards.factories import AchievementCallback, GiftCallback, MenuCallback
 from keyboards.inline import (
     achievements_keyboard,
     back_to_achievements_keyboard,
     back_to_menu_keyboard,
     games_menu_keyboard,
+    gift_confirm_keyboard,
     gifts_catalog_keyboard,
     main_menu_keyboard,
     profile_keyboard,
     resources_keyboard,
     top_users_keyboard,
 )
-from lexicon.texts import LEXICON
+from lexicon.texts import LEXICON, LEXICON_ERRORS
 
 router = Router()
 logger = logging.getLogger(__name__)
@@ -237,6 +241,97 @@ async def gifts_handler(callback: CallbackQuery, state: FSMContext, bot: Bot):
     )
     await state.update_data(current_view="gifts")
     await callback.answer()
+
+
+@router.callback_query(GiftCallback.filter(F.action == "select"))
+async def select_gift_handler(
+    callback: CallbackQuery, callback_data: GiftCallback, bot: Bot
+):
+    """Handles the selection of a gift and shows the confirmation screen."""
+    item_id = callback_data.item_id
+    cost = callback_data.cost
+
+    gift = next((g for g in GIFTS_CATALOG if g["id"] == item_id), None)
+    if not gift or not callback.message:
+        await callback.answer("Подарок не найден!", show_alert=True)
+        return
+
+    text = LEXICON["gift_confirm"].format(
+        cost=cost,
+        emoji=gift["emoji"],
+        name=gift["name"],
+    )
+
+    await safe_edit_caption(
+        bot=bot,
+        caption=text,
+        chat_id=callback.message.chat.id,
+        message_id=callback.message.message_id,
+        reply_markup=gift_confirm_keyboard(item_id, cost),
+    )
+    await callback.answer()
+
+
+@router.callback_query(GiftCallback.filter(F.action == "confirm"))
+async def confirm_gift_handler(
+    callback: CallbackQuery, callback_data: GiftCallback, bot: Bot, state: FSMContext
+):
+    """Handles the final confirmation and processes the withdrawal request."""
+    if not callback.from_user:
+        return
+    user_id = callback.from_user.id
+    cost = callback_data.cost
+    item_id = callback_data.item_id
+
+    # --- Pre-checks ---
+    errors = []
+    is_admin = user_id in settings.ADMIN_IDS
+
+    if not is_admin:
+        # 1. Subscription check for regular users
+        is_subscribed = await check_subscription(bot, user_id)
+        if not is_subscribed:
+            errors.append(LEXICON_ERRORS["error_not_subscribed"])
+
+        # 2. Referrals check for regular users
+        referrals_count = await db.get_referrals_count(user_id)
+        if referrals_count < settings.MIN_REFERRALS_FOR_WITHDRAW:
+            errors.append(
+                LEXICON_ERRORS["error_not_enough_referrals"].format(
+                    min_refs=settings.MIN_REFERRALS_FOR_WITHDRAW,
+                    current_refs=referrals_count,
+                )
+            )
+
+    # 3. Balance check (for everyone)
+    balance = await db.get_user_balance(user_id)
+    if balance < cost:
+        errors.append("Недостаточно средств на балансе.")
+
+    if errors:
+        error_text = "\n\n".join(errors)
+        await callback.answer(error_text, show_alert=True)
+        return
+
+    # --- Processing ---
+    idem_key = f"reward-{user_id}-{uuid.uuid4()}"
+    result = await db.create_reward_request(user_id, item_id, cost, idem_key)
+
+    if result.get("success"):
+        gift = next((g for g in GIFTS_CATALOG if g["id"] == item_id), None)
+        if gift:
+            success_text = LEXICON["withdrawal_success"].format(
+                emoji=gift["emoji"], name=gift["name"], amount=cost
+            )
+            await callback.answer(success_text, show_alert=True)
+            # Go back to main menu
+            if callback.message:
+                await show_main_menu(
+                    bot, callback.message.chat.id, callback.message.message_id, state
+                )
+    else:
+        reason = result.get("reason", "unknown_error")
+        await callback.answer(f"Ошибка: {reason}. Попробуйте позже.", show_alert=True)
 
 
 @router.callback_query(MenuCallback.filter(F.name == "games"))

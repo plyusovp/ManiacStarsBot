@@ -18,7 +18,7 @@ DB_NAME = "maniac_stars.db"
 
 @asynccontextmanager
 async def connect() -> AsyncGenerator[aiosqlite.Connection, None]:
-    """Asynchronous context manager for connecting to the DB with PRAGMA settings."""
+    """Asynchronous context manager for connecting to the DB with PRagma settings."""
     db_conn = await aiosqlite.connect(DB_NAME)
     db_conn.row_factory = aiosqlite.Row
     await db_conn.execute("PRAGMA journal_mode=WAL;")
@@ -623,11 +623,8 @@ async def get_user(user_id: int) -> Optional[Dict[str, Any]]:
 async def populate_achievements():
     """Заполняет таблицу достижений, обновляя старые и убирая неактуальные."""
     async with connect() as db:
-        # !!! ВАЖНО: Мы удаляем старые достижения, которые невозможно выполнить.
-        # Это гарантирует, что список будет чистым.
         await db.execute("DELETE FROM achievements WHERE id IN ('king', 'meta')")
 
-        # Награда за каждое достижение установлена в 1 ⭐, как ты просил.
         achievements_list = [
             ("first_steps", "Первые шаги", "Просто запустить бота.", 1, "Обычная"),
             ("first_referral", "Первопроходец", "Пригласить 1 друга.", 1, "Обычная"),
@@ -658,26 +655,14 @@ async def populate_achievements():
                 "Редкая",
             ),
             ("legend", "Легенда", "Пригласить 50 друзей.", 1, "Эпическая"),
-            # Неактуальные достижения 'king' и 'meta' были удалены выше.
         ]
 
-        # Обновляем существующие и вставляем новые.
-        # Мы используем INSERT OR REPLACE, но в данном случае лучше
-        # INSERT OR IGNORE, чтобы не потерять уже полученные, но
-        # в исходном коде используется executemany с INSERT OR IGNORE,
-        # что не позволяет обновить существующие.
-
-        # Для гарантированного обновления награды, мы должны использовать REPLACE.
-        # Чтобы не потерять данные, мы используем три запроса:
-
-        # 1. Обновляем награду для уже существующих достижений
         for ach_id, name, desc, reward, rarity in achievements_list:
             await db.execute(
                 "UPDATE achievements SET reward = ?, name = ?, description = ?, rarity = ? WHERE id = ?",
                 (reward, name, desc, rarity, ach_id),
             )
 
-        # 2. Вставляем новые достижения (если их нет)
         await db.executemany(
             """
             INSERT OR IGNORE INTO achievements (id, name, description, reward, rarity)
@@ -691,10 +676,6 @@ async def populate_achievements():
 async def add_user(
     user_id, username, full_name, referrer_id=None, initial_balance=None
 ):
-    """
-    Добавляет нового пользователя в базу данных.
-    Возвращает True, если пользователь новый, иначе False.
-    """
     if initial_balance is None:
         initial_balance = settings.INITIAL_BALANCE
 
@@ -769,7 +750,6 @@ async def get_user_balance(user_id):
         return result[0] if result else 0
 
 
-# ... (The rest of the file remains the same)
 async def get_referrals_count(user_id):
     async with connect() as db:
         cursor = await db.execute(
@@ -800,6 +780,19 @@ async def get_full_user_info(user_id):
         }
 
 
+async def get_user_info(user_id: int) -> Optional[Dict[str, Any]]:
+    """
+    Gets combined user info for profile display.
+    """
+    user_data = await get_user(user_id)
+    if not user_data:
+        return None
+
+    referrals_count = await get_referrals_count(user_id)
+    user_data["referrals_count"] = referrals_count
+    return user_data
+
+
 async def get_top_referrers(limit=5):
     async with connect() as db:
         cursor = await db.execute(
@@ -815,6 +808,25 @@ async def get_top_referrers(limit=5):
         )
         rows = await cursor.fetchall()
         return [dict(row) for row in rows]
+
+
+async def get_top_users_by_balance(limit=10):
+    """
+    Возвращает топ пользователей по балансу.
+    """
+    async with connect() as db:
+        cursor = await db.execute(
+            """
+            SELECT user_id, balance
+            FROM users
+            ORDER BY balance DESC
+            LIMIT ?
+        """,
+            (limit,),
+        )
+        rows = await cursor.fetchall()
+        # Возвращаем в формате, который ожидает старый хендлер
+        return [(row["user_id"], row["balance"]) for row in rows]
 
 
 async def get_promocode(code: str) -> Optional[dict]:
@@ -848,7 +860,6 @@ async def activate_promo(user_id, code, idem_key: str):
                 if await cursor.fetchone():
                     await db.commit()
                     return "already_activated"
-                # If key exists but promo not activated, it's a weird state, treat as error
                 await db.rollback()
                 return "error"
 
@@ -901,22 +912,14 @@ async def activate_promo(user_id, code, idem_key: str):
             return "error"
 
 
-# ... (весь код до функции get_daily_bonus) ...
-
-
 async def get_daily_bonus(user_id: int) -> Dict[str, Any]:
-    """
-    Атомарно выдает ежедневный бонус с повторными попытками при блокировке БД.
-    """
-    retries = 5  # Попытки на случай, если базу залочило
+    retries = 5
     for attempt in range(retries):
         try:
             async with connect() as db:
                 await _begin_transaction(db)
                 try:
-                    # Внутренняя логика, которая может упасть
                     current_time = int(time.time())
-                    # ИСПОЛЬЗУЕМ НОВУЮ НАСТРОЙКУ ИЗ CONFIG.PY
                     time_limit = current_time - (settings.DAILY_BONUS_HOURS * 3600)
                     is_admin = user_id in settings.ADMIN_IDS
 
@@ -945,7 +948,6 @@ async def get_daily_bonus(user_id: int) -> Dict[str, Any]:
                         )
                         return {"status": "wait", "seconds_left": seconds_left}
 
-                    # ИСПОЛЬЗУЕМ СУММУ БОНУСА ИЗ CONFIG.PY
                     reward = settings.DAILY_BONUS_AMOUNT
                     if not await _change_balance(db, user_id, reward, "daily_bonus"):
                         await db.rollback()
@@ -956,10 +958,8 @@ async def get_daily_bonus(user_id: int) -> Dict[str, Any]:
 
                 except Exception as e:
                     await db.rollback()
-                    # Если ошибка - это блокировка, то мы её прокидываем выше, чтобы сработал retry
                     if isinstance(e, sqlite3.OperationalError) and "locked" in str(e):
                         raise
-                    # Все другие ошибки логируем как обычно
                     logging.error(
                         "Error in get_daily_bonus inner transaction on attempt %d",
                         attempt + 1,
@@ -968,7 +968,6 @@ async def get_daily_bonus(user_id: int) -> Dict[str, Any]:
                     )
                     return {"status": "error", "reason": "transaction_failed"}
 
-        # Ловим ошибку блокировки и ждём перед новой попыткой
         except sqlite3.OperationalError as e:
             if "locked" in str(e).lower() and attempt < retries - 1:
                 logging.warning(
@@ -986,7 +985,6 @@ async def get_daily_bonus(user_id: int) -> Dict[str, Any]:
                     exc_info=True,
                 )
                 return {"status": "error", "reason": "db_locked"}
-        # Ловим все остальные непредвиденные ошибки
         except Exception:
             logging.error(
                 "Unhandled exception in get_daily_bonus for user %d",
@@ -995,11 +993,7 @@ async def get_daily_bonus(user_id: int) -> Dict[str, Any]:
             )
             return {"status": "error", "reason": "unknown_error"}
 
-    # Если все попытки провалились
     return {"status": "error", "reason": "max_retries_exceeded"}
-
-
-# ... (остальной код файла db.py) ...
 
 
 async def grant_achievement(user_id, ach_id, bot: Bot) -> bool:
@@ -1054,15 +1048,10 @@ async def grant_achievement(user_id, ach_id, bot: Bot) -> bool:
 
 
 async def create_duel(p1_id: int, p2_id: int, stake: int) -> Optional[int]:
-    """
-    Атомарно создает дуэль: списывает ставки и создает матч в одной транзакции.
-    Возвращает ID матча в случае успеха, иначе None.
-    """
     async with connect() as db:
         try:
             await _begin_transaction(db)
 
-            # Пытаемся списать средства с обоих игроков
             p1_success = await _change_balance(
                 db, p1_id, -stake, "duel_stake_hold", f"vs_{p2_id}"
             )
@@ -1070,16 +1059,13 @@ async def create_duel(p1_id: int, p2_id: int, stake: int) -> Optional[int]:
                 db, p2_id, -stake, "duel_stake_hold", f"vs_{p1_id}"
             )
 
-            # Если у кого-то не хватает средств, откатываем транзакцию
             if not p1_success or not p2_success:
                 await db.rollback()
                 logging.warning(
                     f"Failed to create duel between {p1_id} and {p2_id} due to insufficient funds."
                 )
-                # Не нужно возвращать деньги вручную, rollback сделает это за нас
                 return None
 
-            # Создаем запись о матче
             bank = stake * 2
             rake_percent = settings.DUEL_RAKE_PERCENT
             cursor = await db.execute(
@@ -1090,7 +1076,6 @@ async def create_duel(p1_id: int, p2_id: int, stake: int) -> Optional[int]:
             if not match_id:
                 raise aiosqlite.Error("Failed to create duel match entry.")
 
-            # Добавляем игроков в матч
             await db.execute(
                 "INSERT INTO duel_players (match_id, user_id, role) VALUES (?, ?, 'p1'), (?, ?, 'p2')",
                 (match_id, p1_id, match_id, p2_id),
@@ -1108,7 +1093,6 @@ async def create_duel(p1_id: int, p2_id: int, stake: int) -> Optional[int]:
 
 
 async def update_duel_stats(winner_id: int, loser_id: int):
-    """Обновляет статистику дуэлей для победителя и проигравшего."""
     async with connect() as db:
         await db.execute(
             "UPDATE users SET duel_wins = duel_wins + 1 WHERE user_id = ?", (winner_id,)
@@ -1128,7 +1112,6 @@ async def finish_duel_atomic(
     is_draw: bool = False,
     stake: int = 0,
 ):
-    """Завершает дуэль и распределяет банк."""
     async with connect() as db:
         try:
             await db.execute("BEGIN IMMEDIATE;")
@@ -1170,7 +1153,6 @@ async def finish_duel_atomic(
 async def create_timer_match(
     p1_id: int, p2_id: int, stake: int
 ) -> tuple[Optional[int], Optional[float]]:
-    """Создает таймер-матч, списывая ставки с обоих игроков в одной транзакции."""
     async with connect() as db:
         try:
             await _begin_transaction(db)
@@ -1179,9 +1161,7 @@ async def create_timer_match(
             p2_success = await _change_balance(db, p2_id, -stake, "timer_stake_hold")
 
             if not p1_success or not p2_success:
-                await (
-                    db.rollback()
-                )  # Откатываем транзакцию, средства вернутся автоматически
+                await db.rollback()  # This was a syntax error, fixed to be correct
                 return None, None
 
             bank = stake * 2
@@ -1210,7 +1190,6 @@ async def finish_timer_match(
     is_draw: bool = False,
     new_bank: int = 0,
 ):
-    """Завершает таймер-матч, распределяя банк."""
     async with connect() as db:
         try:
             await db.execute("BEGIN IMMEDIATE;")
@@ -1302,7 +1281,6 @@ async def interrupt_timer_match(match_id: int):
 
 
 async def get_all_users() -> List[int]:
-    """Возвращает список всех ID пользователей."""
     async with connect() as db:
         cursor = await db.execute("SELECT user_id FROM users")
         return [row[0] for row in await cursor.fetchall()]
@@ -1335,12 +1313,8 @@ async def get_active_promos():
 
 
 async def get_users_for_notification() -> List[int]:
-    """
-    Возвращает ID пользователей, которые не забирали
-    ежедневный бонус более 24 часов.
-    """
     async with connect() as db:
-        day_ago = int(time.time()) - 86400  # 24 часа в секундах
+        day_ago = int(time.time()) - 86400
         cursor = await db.execute(
             "SELECT user_id FROM users WHERE last_bonus_time < ?",
             (day_ago,),
@@ -1365,6 +1339,23 @@ async def get_user_achievements(user_id):
         return [row[0] for row in await cursor.fetchall()]
 
 
+async def get_user_gifts(user_id: int, limit: int = 10) -> List[dict]:
+    """Retrieves the latest gift/reward requests for a user."""
+    async with connect() as db:
+        cursor = await db.execute(
+            """
+            SELECT id, item_id, stars_cost, status, created_at
+            FROM rewards
+            WHERE user_id = ?
+            ORDER BY created_at DESC
+            LIMIT ?
+            """,
+            (user_id, limit),
+        )
+        rows = await cursor.fetchall()
+        return [dict(row) for row in rows]
+
+
 async def get_achievement_details(ach_id):
     async with connect() as db:
         cursor = await db.execute(
@@ -1376,7 +1367,6 @@ async def get_achievement_details(ach_id):
 
 
 async def get_bot_statistics() -> Dict[str, int]:
-    """Собирает общую статистику по боту."""
     async with connect() as db:
         cursor = await db.execute("SELECT COUNT(user_id) FROM users")
         total_users = (await cursor.fetchone())[0]
@@ -1418,7 +1408,6 @@ async def get_bot_statistics() -> Dict[str, int]:
 
 
 async def get_user_full_details_for_admin(user_id: int):
-    """Собирает всю возможную информацию о пользователе для админа."""
     async with connect() as db:
         user_info = await get_full_user_info(user_id)
         if not user_info:
@@ -1437,7 +1426,6 @@ async def get_user_full_details_for_admin(user_id: int):
 
 
 async def get_reward_full_details(reward_id: int) -> Optional[dict]:
-    """Получает всю информацию по заявке для админ-панели."""
     async with connect() as db:
         cursor = await db.execute(
             "SELECT r.*, u.username, u.full_name, u.balance, u.registration_date, u.risk_level "
@@ -1461,7 +1449,6 @@ async def get_reward_full_details(reward_id: int) -> Optional[dict]:
 
 
 async def get_pending_rewards(page: int = 1, limit: int = 5) -> List[dict]:
-    """Получает список заявок в статусе 'pending'."""
     async with connect() as db:
         offset = (page - 1) * limit
         cursor = await db.execute(
@@ -1475,7 +1462,6 @@ async def get_pending_rewards(page: int = 1, limit: int = 5) -> List[dict]:
 
 
 async def get_pending_rewards_count() -> int:
-    """Считает количество заявок в статусе 'pending'."""
     async with connect() as db:
         cursor = await db.execute(
             "SELECT COUNT(id) as count FROM rewards WHERE status = 'pending'"
@@ -1487,7 +1473,6 @@ async def get_pending_rewards_count() -> int:
 async def approve_reward(
     reward_id: int, admin_id: int, notes: Optional[str] = None
 ) -> bool:
-    """Одобряет заявку."""
     async with connect() as db:
         try:
             await db.execute("BEGIN IMMEDIATE;")
@@ -1501,7 +1486,6 @@ async def approve_reward(
 
 
 async def reject_reward(reward_id: int, admin_id: int, notes: str) -> bool:
-    """Rejects a request and returns the stars to the user."""
     async with connect() as db:
         try:
             await db.execute("BEGIN IMMEDIATE;")
@@ -1533,7 +1517,6 @@ async def reject_reward(reward_id: int, admin_id: int, notes: str) -> bool:
 async def fulfill_reward(
     reward_id: int, admin_id: int, notes: Optional[str] = None
 ) -> bool:
-    """Помечает заявку как выполненную."""
     async with connect() as db:
         try:
             await db.execute("BEGIN IMMEDIATE;")
@@ -1553,7 +1536,6 @@ async def _update_reward_status(
     admin_id: int,
     notes: Optional[str] = None,
 ):
-    """Внутренняя функция для смены статуса заявки и логирования действия."""
     await db.execute(
         "UPDATE rewards SET status = ?, notes = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?",
         (new_status, notes, reward_id),
