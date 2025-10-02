@@ -2,17 +2,17 @@
 from typing import Optional, Union
 from urllib.parse import quote_plus
 
-from aiogram.types import InlineKeyboardButton, InlineKeyboardMarkup
+from aiogram.types import InlineKeyboardButton, InlineKeyboardMarkup, WebAppInfo
 from aiogram.utils.keyboard import InlineKeyboardBuilder
 
 from config import (
-    BOWLING_STAKES,
     BASKETBALL_STAKES,
+    BOWLING_STAKES,
     COINFLIP_STAKES,
-    FOOTBALL_STAKES,
-    DUEL_STAKES,
     DARTS_STAKES,
     DICE_STAKES,
+    DUEL_STAKES,
+    FOOTBALL_STAKES,
     SLOTS_STAKES,
     TIMER_STAKES,
     settings,
@@ -151,6 +151,12 @@ def games_menu_keyboard() -> InlineKeyboardMarkup:
     )
     # Игры-заглушки (теперь их нет)
 
+    # WebApp игра
+    builder.row(
+        InlineKeyboardButton(
+            text="🎮 Maniac Clic Game", web_app=WebAppInfo(url=settings.URL_WEBAPP_GAME)
+        )
+    )
     # Дополнительные кнопки
     builder.row(
         InlineKeyboardButton(
@@ -828,6 +834,7 @@ def slots_stake_keyboard() -> InlineKeyboardMarkup:
 
 # ЭТОТ БЛОК НУЖНО ДОБАВИТЬ
 
+
 def football_stake_keyboard() -> InlineKeyboardMarkup:
     """Генерирует клавиатуру для выбора ставки в футболе."""
     builder = InlineKeyboardBuilder()
@@ -889,6 +896,7 @@ def bowling_play_again_keyboard() -> InlineKeyboardMarkup:
 
 # ЭТОТ БЛОК НУЖНО ДОБАВИТЬ
 
+
 def basketball_stake_keyboard() -> InlineKeyboardMarkup:
     """Генерирует клавиатуру для выбора ставки в баскетболе."""
     builder = InlineKeyboardBuilder()
@@ -912,6 +920,7 @@ def basketball_stake_keyboard() -> InlineKeyboardMarkup:
 
 # ЭТОТ БЛОК НУЖНО ДОБАВИТЬ
 
+
 def darts_stake_keyboard() -> InlineKeyboardMarkup:
     """Генерирует клавиатуру для выбора ставки в дартсе."""
     builder = InlineKeyboardBuilder()
@@ -932,6 +941,7 @@ def darts_stake_keyboard() -> InlineKeyboardMarkup:
 
 
 # ЭТОТ БЛОК НУЖНО ДОБАВИТЬ ПЕРЕД ФУНКЦИЕЙ ВЫШЕ
+
 
 def dice_stake_keyboard() -> InlineKeyboardMarkup:
     """Генерирует клавиатуру для выбора ставки в костях."""

@@ -56,6 +56,9 @@ class Settings(BaseSettings):
     URL_WITHDRAWALS: str = "https://t.me/withdraw0000"
     URL_MANUAL: str = "https://t.me/manualstar"
     URL_SUPPORT: str = "https://t.me/limejko"
+    URL_WEBAPP_GAME: str = (
+        "https://plyusovp.github.io/ManiacClic/"  # Замените на ваш URL
+    )
 
     # --- Медиа (FILE_ID) ---
     PHOTO_MAIN_MENU: str = "AgACAgQAAxkBAAIH42jElgmn6BB8_Id-jKc7SwEWjaIxAAKJzzEbKHEhUmI1AAFPzWmoQAEAAwIAA3kAAzYE"
