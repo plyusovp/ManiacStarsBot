@@ -1,4 +1,4 @@
-# handlers/duel_handlers.py
+# plyusovp/maniacstarsbot/ManiacStarsBot-4df23ef8bd5b8766acddffe6bca30a128458c7a5/handlers/duel_handlers.py
 
 import asyncio
 import logging
@@ -65,8 +65,19 @@ async def update_game_interface(
     bot: Bot, match: DuelMatch, text_override: Optional[str] = None
 ):
     event_text = LEXICON.get(match.current_event, "") if match.current_event else ""
-    p1_hand_text = " ".join(map(str, sorted(match.p1.hand)))
-    p2_hand_text = " ".join(map(str, sorted(match.p2.hand)))
+
+    # Красивое отображение карт с эмодзи
+    card_emojis = ["1️⃣", "2️⃣", "3️⃣", "4️⃣", "5️⃣", "6️⃣", "7️⃣", "8️⃣", "9️⃣", "🔟"]
+
+    def format_hand(hand):
+        formatted_cards = []
+        for card in sorted(hand):
+            emoji = card_emojis[card - 1] if card <= 10 else f"{card}"
+            formatted_cards.append(emoji)
+        return " ".join(formatted_cards)
+
+    p1_hand_text = format_hand(match.p1.hand)
+    p2_hand_text = format_hand(match.p2.hand)
     p1_text = text_override or LEXICON["duel_turn"].format(
         round=match.round,
         p1_wins=match.p1_wins,
@@ -130,8 +141,18 @@ async def start_new_round(bot: Bot, match: DuelMatch):
     match.p1.played_card = None
     match.p2.played_card = None
     match.current_event = None
-    if rand.random() < 0.1:
-        match.current_event = rand.choice(["event_comet", "event_black_hole"])
+
+    # Увеличиваем шанс магических событий для большей захватывающей игры
+    event_chance = 0.15  # 15% вместо 10%
+    if rand.random() < event_chance:
+        # Добавляем больше разнообразия в события
+        events = ["event_comet", "event_black_hole"]
+
+        # В последних раундах больше шансов на комету
+        if match.round >= 3:
+            events.extend(["event_comet", "event_comet"])  # Удваиваем шанс кометы
+
+        match.current_event = rand.choice(events)
     await update_game_interface(bot, match)
 
 
@@ -140,29 +161,58 @@ async def resolve_round(bot: Bot, match: DuelMatch):
     if p1_card is None or p2_card is None:
         return
     round_winner = None
-    round_text = ""
+    p1_round_text = ""
+    p2_round_text = ""
+
     if match.current_event == "event_black_hole":
-        round_text = LEXICON["event_black_hole_triggered"]
+        p1_round_text = p2_round_text = LEXICON["event_black_hole_triggered"]
     elif p1_card > p2_card:
         match.p1_wins += 1
         round_winner = match.p1
-        round_text = f"Игрок {match.p1.id} победил в раунде!"
+        p1_round_text = "🏆 **ПОБЕДА!** Ваша карта сильнее! 🏆"
+        p2_round_text = "😔 **ПОРАЖЕНИЕ...** Карта соперника оказалась сильнее 😔"
     elif p2_card > p1_card:
         match.p2_wins += 1
         round_winner = match.p2
-        round_text = f"Игрок {match.p2.id} победил в раунде!"
+        p1_round_text = "😔 **ПОРАЖЕНИЕ...** Карта соперника оказалась сильнее 😔"
+        p2_round_text = "🏆 **ПОБЕДА!** Ваша карта сильнее! 🏆"
     else:
-        round_text = "Ничья в этом раунде!"
+        p1_round_text = p2_round_text = "🤝 **НИЧЬЯ!** Одинаковые карты! 🤝"
     if match.current_event == "event_comet" and round_winner:
         if round_winner.id == match.p1.id:
             match.p1_wins = min(match.p1_wins + 1, 2)
         else:
             match.p2_wins = min(match.p2_wins + 1, 2)
-        round_text += "\n" + LEXICON["event_comet_triggered"]
-    final_text = LEXICON["duel_round_end"].format(
-        p1_card=p1_card, p2_card=p2_card, round_result=round_text
+        # Добавляем эффект кометы к персональным сообщениям
+        comet_text = "\n" + LEXICON["event_comet_triggered"]
+        p1_round_text += comet_text
+        p2_round_text += comet_text
+
+    # Создаем персональные сообщения для каждого игрока
+    p1_final_text = LEXICON["duel_round_end"].format(
+        p1_card=p1_card, p2_card=p2_card, round_result=p1_round_text
     )
-    await update_game_interface(bot, match, text_override=final_text)
+    p2_final_text = LEXICON["duel_round_end"].format(
+        p1_card=p2_card, p2_card=p1_card, round_result=p2_round_text
+    )
+
+    # Отправляем персональные сообщения каждому игроку
+    await asyncio.gather(
+        safe_edit_caption(
+            bot,
+            p1_final_text,
+            match.p1.id,
+            match.p1.message_id,
+            reply_markup=back_to_duels_keyboard(),
+        ),
+        safe_edit_caption(
+            bot,
+            p2_final_text,
+            match.p2.id,
+            match.p2.message_id,
+            reply_markup=back_to_duels_keyboard(),
+        ),
+    )
     await asyncio.sleep(4)
     await start_new_round(bot, match)
 
@@ -176,44 +226,78 @@ async def resolve_game_end(bot: Bot, match: DuelMatch):
         if match.p1_wins > match.p2_wins
         else (match.p2.id, match.p1.id)
     )
-    winner_wins, loser_wins = (
-        (match.p1_wins, match.p2_wins)
-        if winner_id == match.p1.id
-        else (match.p2_wins, match.p1_wins)
-    )
-
     rake = int(match.stake * 2 * (settings.DUEL_RAKE_PERCENT / 100))
     prize = match.stake * 2 - rake
     logging.info(f"Duel finished. Winner: {winner_id}, Prize: {prize}", extra=extra)
     await db.finish_duel_atomic(match.match_id, winner_id, loser_id, prize)
 
-    winner_text = LEXICON["duel_win"].format(
-        your_wins=winner_wins, opponent_wins=loser_wins, prize=prize
-    )
-    loser_text = LEXICON["duel_lose"].format(
-        your_wins=loser_wins, opponent_wins=winner_wins, stake=match.stake
-    )
+    # Проверяем достижения для победителя
+    try:
+        from aiogram import Bot as BotType
 
-    winner = match.p1 if winner_id == match.p1.id else match.p2
-    loser = match.p2 if winner_id == match.p1.id else match.p1
+        if isinstance(bot, BotType):
+            # Проверяем достижения по количеству побед
+            winner_stats = await db.get_user_duel_stats(winner_id)
+            wins = winner_stats.get("wins", 0)
 
+            # Достижения за победы в дуэлях
+            if wins == 1:
+                await db.grant_achievement(winner_id, "first_duel_win", bot)
+            elif wins == 5:
+                await db.grant_achievement(winner_id, "duel_warrior", bot)
+            elif wins == 10:
+                await db.grant_achievement(winner_id, "duel_master", bot)
+            elif wins == 25:
+                await db.grant_achievement(winner_id, "duel_legend", bot)
+    except Exception as e:
+        logging.warning(f"Failed to check duel achievements: {e}")
+    # Создаем персональные сообщения об окончании игры
+    if winner_id == match.p1.id:
+        # P1 победил
+        p1_final_text = (
+            f"🎉 **ПОЗДРАВЛЯЕМ! ВЫ ПОБЕДИЛИ!** 🎉\n\n"
+            f"🏆 Счёт: {match.p1_wins}:{match.p2_wins}\n"
+            f"💰 Выигрыш: **{prize} ⭐**\n\n"
+            f"Отличная игра! Ваши звёзды уже начислены на баланс."
+        )
+        p2_final_text = (
+            f"😔 **Поражение...** 😔\n\n"
+            f"📊 Счёт: {match.p2_wins}:{match.p1_wins}\n"
+            f"💸 Потеря: **{match.stake} ⭐**\n\n"
+            f"Не расстраивайтесь! В следующий раз повезёт больше!"
+        )
+    else:
+        # P2 победил
+        p1_final_text = (
+            f"😔 **Поражение...** 😔\n\n"
+            f"📊 Счёт: {match.p1_wins}:{match.p2_wins}\n"
+            f"💸 Потеря: **{match.stake} ⭐**\n\n"
+            f"Не расстраивайтесь! В следующий раз повезёт больше!"
+        )
+        p2_final_text = (
+            f"🎉 **ПОЗДРАВЛЯЕМ! ВЫ ПОБЕДИЛИ!** 🎉\n\n"
+            f"🏆 Счёт: {match.p2_wins}:{match.p1_wins}\n"
+            f"💰 Выигрыш: **{prize} ⭐**\n\n"
+            f"Отличная игра! Ваши звёзды уже начислены на баланс."
+        )
+
+    # Отправляем персональные сообщения каждому игроку
     await asyncio.gather(
         safe_edit_caption(
             bot,
-            winner_text,
-            winner.id,
-            winner.message_id,
+            p1_final_text,
+            match.p1.id,
+            match.p1.message_id,
             reply_markup=back_to_duels_keyboard(),
         ),
         safe_edit_caption(
             bot,
-            loser_text,
-            loser.id,
-            loser.message_id,
+            p2_final_text,
+            match.p2.id,
+            match.p2.message_id,
             reply_markup=back_to_duels_keyboard(),
         ),
     )
-
     if match.match_id in active_duels:
         del active_duels[match.match_id]
 
@@ -288,6 +372,29 @@ async def find_duel_handler(
                 logging.info(
                     f"Duel match created successfully: {match_id}", extra=extra
                 )
+
+                # Показываем красивое сообщение о начале матча
+                prize = stake * 2 - int(stake * 2 * (settings.DUEL_RAKE_PERCENT / 100))
+                match_text = LEXICON["duel_match_found"].format(
+                    stake=stake, prize=prize
+                )
+
+                # Отправляем сообщение обоим игрокам
+                await asyncio.gather(
+                    safe_edit_caption(
+                        bot, match_text, opponent_id, opponent_msg_id, reply_markup=None
+                    ),
+                    safe_edit_caption(
+                        bot,
+                        match_text,
+                        callback.message.chat.id,
+                        callback.message.message_id,
+                        reply_markup=None,
+                    ),
+                )
+
+                # Небольшая пауза для драматического эффекта
+                await asyncio.sleep(2)
                 asyncio.create_task(
                     start_duel_game(
                         bot,
@@ -317,13 +424,13 @@ async def find_duel_handler(
             logging.info("User started duel search", extra=extra)
             if callback.message:
                 duel_queue[stake] = (user_id, callback.message.message_id, trace_id)
-                await safe_edit_caption(
-                    bot,
-                    f"🔎 Ищем соперника со ставкой {stake} ⭐...",
-                    callback.message.chat.id,
-                    callback.message.message_id,
-                    reply_markup=duel_searching_keyboard(stake),
-                )
+    await safe_edit_caption(
+        bot,
+        LEXICON["duel_searching"].format(stake=stake),
+        callback.message.chat.id,
+        callback.message.message_id,
+        reply_markup=duel_searching_keyboard(stake),
+    )
     await callback.answer()
 
 
@@ -379,7 +486,22 @@ async def play_card_handler(
             return await callback.answer("У вас нет такой карты!", show_alert=True)
         player.hand.remove(card_value)
         player.played_card = card_value
-        await callback.answer(f"Вы сыграли карту {card_value}")
+        # Красивые сообщения при игре карт
+        card_messages = {
+            1: "🃏 Скромно, но смело!",
+            2: "🃏 Начинаем с малого!",
+            3: "🃏 Осторожная стратегия!",
+            4: "🃏 Средняя карта в деле!",
+            5: "🃏 Золотая середина!",
+            6: "🃏 Неплохой выбор!",
+            7: "🔥 Сильная карта!",
+            8: "🔥 Отличный ход!",
+            9: "✨ Мощная атака!",
+            10: "🎆 МАКСИМАЛЬНАЯ МОЩЬ!",
+        }
+
+        message = card_messages.get(card_value, f"🃏 Карта {card_value} в игре!")
+        await callback.answer(message)
         if match.p1.played_card and match.p2.played_card:
             asyncio.create_task(resolve_round(bot, match))
         else:
@@ -443,7 +565,8 @@ async def boost_confirm_handler(
         player.hand[card_index] += 2
         player.has_boosted = True
         await callback.answer(
-            f"Карта {card_to_boost} усилена до {player.hand[card_index]}!",
+            f"⚡ **МАГИЧЕСКОЕ УСИЛЕНИЕ!** ⚡\n"
+            f"🃏 Карта {card_to_boost} превращается в мощную {player.hand[card_index]}! 🔥",
             show_alert=True,
         )
         await update_game_interface(bot, match)
@@ -489,7 +612,11 @@ async def reroll_hand_handler(
             return
         player.hand = deal_hand()
         player.has_rerolled = True
-        await callback.answer("Ваша рука была обновлена!", show_alert=True)
+        await callback.answer(
+            "🌀 **МАГИЯ ПЕРЕТАСОВКИ!** 🌀\n"
+            "🃏 Вы получили новые карты! Может, судьба будет к вам благосклоннее? ✨",
+            show_alert=True,
+        )
         await update_game_interface(bot, match)
 
 
@@ -532,3 +659,68 @@ async def duel_stuck_handler(callback: CallbackQuery, bot: Bot):
     )
     if callback.message:
         await safe_delete(bot, callback.message.chat.id, callback.message.message_id)
+
+
+# Новые обработчики для обучения и статистики
+@router.callback_query(
+    GameCallback.filter((F.name == "help") & (F.action == "duel_tutorial"))
+)
+async def duel_tutorial_handler(callback: CallbackQuery, bot: Bot):
+    """Обработчик обучения по дуэлям."""
+    if not callback.message:
+        return
+
+    await safe_edit_caption(
+        bot,
+        LEXICON["duel_tutorial"],
+        callback.message.chat.id,
+        callback.message.message_id,
+        reply_markup=back_to_duels_keyboard(),
+    )
+    await callback.answer()
+
+
+@router.callback_query(
+    GameCallback.filter((F.name == "help") & (F.action == "duel_stats"))
+)
+async def duel_stats_handler(callback: CallbackQuery, bot: Bot):
+    """Обработчик статистики дуэлей."""
+    if not callback.message:
+        return
+
+    user_id = callback.from_user.id
+    stats = await db.get_user_duel_stats(user_id)
+    balance = await db.get_user_balance(user_id)
+
+    total_games = stats.get("wins", 0) + stats.get("losses", 0)
+    win_rate = (stats.get("wins", 0) / total_games * 100) if total_games > 0 else 0
+
+    stats_text = (
+        f"📊 **ВАША СТАТИСТИКА В ДУЭЛЯХ** 📊\n\n"
+        f"💰 **Баланс:** {balance} ⭐\n\n"
+        f"⚔️ **ОБЩАЯ СТАТИСТИКА:**\n"
+        f"🏆 Побед: {stats.get('wins', 0)}\n"
+        f"❌ Поражений: {stats.get('losses', 0)}\n"
+        f"🎲 Всего игр: {total_games}\n"
+        f"💯 Процент побед: {win_rate:.1f}%\n\n"
+    )
+
+    if win_rate >= 70:
+        stats_text += "🎆 **ЛЕГЕНДА!** Невероятные результаты!"
+    elif win_rate >= 60:
+        stats_text += "🏅 **МАСТЕР!** Отличная игра!"
+    elif win_rate >= 50:
+        stats_text += "🔥 **ОПЫТНЫЙ!** Хорошие результаты!"
+    elif total_games > 0:
+        stats_text += "🌱 **НОВИЧОК!** Продолжай тренироваться!"
+    else:
+        stats_text += "🎆 **ГОТОВ К ПЕРВОЙ ДУЭЛИ!** Покажи на что способен!"
+
+    await safe_edit_caption(
+        bot,
+        stats_text,
+        callback.message.chat.id,
+        callback.message.message_id,
+        reply_markup=back_to_duels_keyboard(),
+    )
+    await callback.answer()

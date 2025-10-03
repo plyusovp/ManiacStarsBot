@@ -1,186 +1,480 @@
+# plyusovp/maniacstarsbot/ManiacStarsBot-68ffe9d3e979f3cc61bcf924e4b9ab182d77be5f/handlers/user_handlers.py
+
+import datetime
 import json
 import logging
 import uuid
-from typing import Dict  # <--- ДОБАВИЛ ЭТОТ ИМПОРТ
 
-from aiogram import F, Router
-from aiogram.filters import Command, CommandStart
-from aiogram.types import ContentType, Message
+from aiogram import Bot, F, Router
+from aiogram.filters import Command, CommandStart, StateFilter
+from aiogram.fsm.context import FSMContext
+from aiogram.fsm.state import State, StatesGroup
+from aiogram.types import CallbackQuery, ContentType, InputMediaPhoto, Message
 
-from database.db import get_referrals_count  # Добавлено
-from database.db import (
-    add_user,
-    get_daily_bonus,
-    get_top_users_by_balance,
-    get_user_balance,
-    get_user_gifts,
-    get_user_info,
-    spend_balance,
-)
+from config import settings
+from database import db
 from gifts import GIFTS_CATALOG
-from keyboards.inline import main_menu_keyboard
-
-# ИСПРАВЛЕНО: Импортируем весь словарь LEXICON
-from lexicon.texts import LEXICON
+from handlers.utils import check_subscription, safe_edit_caption, safe_edit_media
+from keyboards.factories import GiftCallback, UserCallback
+from keyboards.inline import (
+    back_to_menu_keyboard,
+    back_to_profile_keyboard,
+    daily_challenges_keyboard,
+    gift_confirm_keyboard,
+    promo_back_keyboard,
+    social_content_keyboard,
+)
+from keyboards.reply import get_main_menu_keyboard
+from lexicon.texts import LEXICON, LEXICON_ERRORS
 
 logger = logging.getLogger(__name__)
-
 router = Router()
 
-# Тексты, которых не было в лексиконе
-HELP_TEXT = (
-    "<b>Справка по боту Maniac Stars</b>\n\n"
-    "Это бот, где вы можете зарабатывать звезды ⭐, играя в игры и приглашая друзей.\n\n"
-    "<b>Основные команды:</b>\n"
-    "/start - Перезапустить бота\n"
-    "/menu - Открыть главное меню\n"
-    "/profile - Посмотреть ваш профиль\n"
-    "/top - Посмотреть топ игроков\n"
-    "/mygifts - Посмотреть ваши подарки\n"
-    "/bonus - Получить ежедневный бонус"
-)
-MY_GIFTS_TEXT = "<b>🎁 Ваши подарки</b>\n\n{gifts_list}"
-TOP_USERS_TEXT = "🏆 <b>Топ-10 игроков по балансу</b> 🏆\n\n{top_list}"
+
+class PromoCodeStates(StatesGroup):
+    waiting_for_promo_code = State()
 
 
-# Команда /start
 @router.message(CommandStart())
-async def process_start_command(message: Message):
-    """
-    Обработчик команды /start.
-    Добавляет пользователя в базу данных, если его там нет,
-    и отправляет приветственное сообщение с основной клавиатурой.
-    """
+async def command_start(message: Message, state: FSMContext):
+    await state.clear()
     if not message.from_user:
         return
+
     user_id = message.from_user.id
-    await add_user(user_id, message.from_user.username, message.from_user.full_name)
+    username = message.from_user.username or f"user_{user_id}"
+    full_name = message.from_user.full_name
+    logger.info(f"Получена команда /start от пользователя {user_id} ({username})")
+
+    args = message.text.split() if message.text else []
+    referrer_id = None
+    if len(args) > 1 and args[1].startswith("ref_"):
+        referrer_id_str = args[1][4:]
+        if referrer_id_str.isdigit() and int(referrer_id_str) != user_id:
+            referrer_id = int(referrer_id_str)
+
+    is_new_user = await db.add_user(user_id, username, full_name, referrer_id)
+
+    if is_new_user and referrer_id:
+        try:
+            idem_key = f"ref-{user_id}-{referrer_id}"
+            await db.add_balance_with_checks(
+                referrer_id, settings.REFERRAL_BONUS, "referral_bonus", idem_key
+            )
+            await message.bot.send_message(
+                referrer_id,
+                LEXICON["referral_success_notification"].format(
+                    bonus=settings.REFERRAL_BONUS, username=username
+                ),
+            )
+            logger.info(
+                f"Реферальный бонус {settings.REFERRAL_BONUS} отправлен {referrer_id} за нового пользователя {user_id}"
+            )
+        except Exception as e:
+            logger.error(f"Не удалось отправить реферальный бонус {referrer_id}: {e}")
+
     await message.answer(
-        # ИСПРАВЛЕНО: Используем ключ из словаря
         LEXICON["start_message"].format(full_name=message.from_user.full_name),
-        reply_markup=main_menu_keyboard(),
+        reply_markup=get_main_menu_keyboard(),
     )
 
 
-# Команда /help
-@router.message(Command(commands=["help"]))
-async def process_help_command(message: Message):
-    """
-    Обработчик команды /help.
-    Отправляет пользователю справочную информацию о боте.
-    """
-    await message.answer(HELP_TEXT)
+@router.message(F.text == "▶️ Старт")
+async def text_start(message: Message, state: FSMContext):
+    """Обработчик для кнопки '▶️ Старт'."""
+    await command_start(message, state)
 
 
-# Команда /profile
-@router.message(Command(commands=["profile"]))
-async def process_profile_command(message: Message):
-    """
-    Обработчик команды /profile.
-    Получает и отправляет информацию о профиле пользователя.
-    """
-    if not message.from_user:
+@router.callback_query(UserCallback.filter(F.action == "enter_promo"))
+async def enter_promo_handler(callback: CallbackQuery, state: FSMContext):
+    await state.set_state(PromoCodeStates.waiting_for_promo_code)
+    if callback.message:
+        await safe_edit_caption(
+            callback.bot,
+            caption=LEXICON["promo_prompt"],
+            chat_id=callback.message.chat.id,
+            message_id=callback.message.message_id,
+            reply_markup=promo_back_keyboard(),
+        )
+    await callback.answer()
+
+
+@router.callback_query(UserCallback.filter(F.action == "transactions"))
+async def transactions_handler(callback: CallbackQuery, state: FSMContext):
+    """Обработчик для показа истории транзакций пользователя."""
+    if not callback.from_user or not callback.message:
         return
-    user_id = message.from_user.id
-    profile_data = await get_user_info(user_id)
-    if profile_data:
-        referrals_count = await get_referrals_count(user_id)
-        # ИСПРАВЛЕНО: Собираем все данные для форматирования текста из LEXICON
-        await message.answer(
-            LEXICON["profile"].format(
-                full_name=profile_data.get("full_name", "N/A"),
-                user_id=user_id,
-                referrals_count=referrals_count,
-                duel_wins=profile_data.get("duel_wins", 0),
-                duel_losses=profile_data.get("duel_losses", 0),
-                balance=profile_data.get("balance", 0),
-                status_text="",  # Пока оставляем пустым
+
+    user_id = callback.from_user.id
+
+    # Получаем текущий баланс и историю транзакций
+    balance = await db.get_user_balance(user_id)
+    transactions = await db.get_user_transactions_history(user_id, limit=15)
+
+    if not transactions:
+        # Если транзакций нет
+        text = LEXICON["transactions_empty"].format(balance=balance)
+    else:
+        # Формируем список транзакций
+        text = LEXICON["transactions_title"].format(balance=balance)
+
+        for transaction in transactions:
+            # Форматируем дату
+            created_at = transaction["created_at"]
+            if isinstance(created_at, str):
+                # Если это строка, парсим её
+                try:
+                    # Пробуем разные форматы
+                    if "T" in created_at:
+                        # ISO формат
+                        date_obj = datetime.datetime.fromisoformat(
+                            created_at.replace("Z", "+00:00")
+                        )
+                    else:
+                        # Формат "YYYY-MM-DD HH:MM:SS"
+                        date_obj = datetime.datetime.strptime(
+                            created_at, "%Y-%m-%d %H:%M:%S"
+                        )
+                except Exception:
+                    date_obj = datetime.datetime.now()
+            else:
+                # Если это число (timestamp)
+                date_obj = datetime.datetime.fromtimestamp(created_at)
+            date_str = date_obj.strftime("%d.%m.%Y %H:%M")
+
+            # Определяем эмодзи и текст в зависимости от типа операции
+            amount = transaction["amount"]
+            reason = transaction["reason"]
+
+            if amount > 0:
+                emoji = "💰"
+                amount_text = f"+{amount} ⭐"
+            else:
+                emoji = "💸"
+                amount_text = f"{amount} ⭐"
+
+            # Переводим причину операции на русский
+            reason_text = get_transaction_reason_text(reason)
+
+            text += LEXICON["transaction_item"].format(
+                emoji=emoji,
+                amount_text=amount_text,
+                reason_text=reason_text,
+                date=date_str,
             )
-        )
-    else:
-        await message.answer("Не удалось получить данные профиля.")
+
+    await safe_edit_caption(
+        callback.bot,
+        caption=text,
+        chat_id=callback.message.chat.id,
+        message_id=callback.message.message_id,
+        reply_markup=back_to_profile_keyboard(),
+    )
+    await callback.answer()
 
 
-# Команда /top
-@router.message(Command(commands=["top"]))
-async def process_top_users_command(message: Message):
-    """
-    Обработчик команды /top.
-    Формирует и отправляет список топ-10 пользователей по балансу.
-    """
-    top_users = await get_top_users_by_balance()
-    if top_users:
-        top_list = "\n".join(
-            [
-                f"{i + 1}. ID: {user_id} - Баланс: {balance} 🪙"
-                for i, (user_id, balance) in enumerate(top_users)
-            ]
-        )
-        # ИСПРАВЛЕНО: Используем локальный текст
-        await message.answer(TOP_USERS_TEXT.format(top_list=top_list))
-    else:
-        await message.answer("Пока нет данных для отображения топа.")
+@router.callback_query(UserCallback.filter(F.action == "daily_challenges"))
+async def daily_challenges_handler(callback: CallbackQuery, state: FSMContext):
+    """Обработчик для показа ежедневных челленджей."""
+    if not callback.from_user or not callback.message:
+        return
+
+    user_id = callback.from_user.id
+
+    # Получаем количество рефералов за сегодня
+    today_referrals = await db.get_daily_referrals_count(user_id)
+
+    text = LEXICON["daily_challenges"].format(today_referrals=today_referrals)
+
+    await safe_edit_caption(
+        callback.bot,
+        caption=text,
+        chat_id=callback.message.chat.id,
+        message_id=callback.message.message_id,
+        reply_markup=daily_challenges_keyboard(),
+    )
+    await callback.answer()
 
 
-# **НОВЫЙ ХЕНДЛЕР ДЛЯ ПРОСМОТРА ПОДАРКОВ**
-@router.message(Command(commands=["mygifts"]))
-async def process_my_gifts_command(message: Message):
-    """
-    Обработчик команды /mygifts.
-    Показывает пользователю список его подарков.
-    """
+@router.callback_query(UserCallback.filter(F.action == "social_content"))
+async def social_content_handler(callback: CallbackQuery, state: FSMContext):
+    """Обработчик для показа меню социального контента."""
+    if not callback.from_user or not callback.message:
+        return
+
+    text = LEXICON["social_content"]
+
+    media = InputMediaPhoto(media=settings.PHOTO_PROFILE, caption=text, parse_mode=None)
+
+    await safe_edit_media(
+        callback.bot,
+        media=media,
+        chat_id=callback.message.chat.id,
+        message_id=callback.message.message_id,
+        reply_markup=social_content_keyboard(),
+    )
+    await callback.answer()
+
+
+@router.callback_query(UserCallback.filter(F.action == "tiktok_content"))
+async def tiktok_content_handler(callback: CallbackQuery, state: FSMContext):
+    """Обработчик для показа контента для TikTok."""
+    if not callback.from_user or not callback.message:
+        return
+
+    user_id = callback.from_user.id
+    balance = await db.get_user_balance(user_id)
+    ref_link = f"https://t.me/{settings.BOT_USERNAME}?start=ref_{user_id}"
+
+    text = LEXICON["tiktok_content"].format(balance=balance, ref_link=ref_link)
+
+    media = InputMediaPhoto(media=settings.PHOTO_PROFILE, caption=text, parse_mode=None)
+
+    await safe_edit_media(
+        callback.bot,
+        media=media,
+        chat_id=callback.message.chat.id,
+        message_id=callback.message.message_id,
+        reply_markup=social_content_keyboard(),
+    )
+    await callback.answer()
+
+
+@router.callback_query(UserCallback.filter(F.action == "instagram_content"))
+async def instagram_content_handler(callback: CallbackQuery, state: FSMContext):
+    """Обработчик для показа контента для Instagram."""
+    if not callback.from_user or not callback.message:
+        return
+
+    user_id = callback.from_user.id
+    balance = await db.get_user_balance(user_id)
+    ref_link = f"https://t.me/{settings.BOT_USERNAME}?start=ref_{user_id}"
+
+    text = LEXICON["instagram_content"].format(balance=balance, ref_link=ref_link)
+
+    media = InputMediaPhoto(media=settings.PHOTO_PROFILE, caption=text, parse_mode=None)
+
+    await safe_edit_media(
+        callback.bot,
+        media=media,
+        chat_id=callback.message.chat.id,
+        message_id=callback.message.message_id,
+        reply_markup=social_content_keyboard(),
+    )
+    await callback.answer()
+
+
+@router.callback_query(UserCallback.filter(F.action == "telegram_content"))
+async def telegram_content_handler(callback: CallbackQuery, state: FSMContext):
+    """Обработчик для показа контента для Telegram."""
+    if not callback.from_user or not callback.message:
+        return
+
+    user_id = callback.from_user.id
+    balance = await db.get_user_balance(user_id)
+    ref_link = f"https://t.me/{settings.BOT_USERNAME}?start=ref_{user_id}"
+
+    text = LEXICON["telegram_content"].format(balance=balance, ref_link=ref_link)
+
+    media = InputMediaPhoto(media=settings.PHOTO_PROFILE, caption=text, parse_mode=None)
+
+    await safe_edit_media(
+        callback.bot,
+        media=media,
+        chat_id=callback.message.chat.id,
+        message_id=callback.message.message_id,
+        reply_markup=social_content_keyboard(),
+    )
+    await callback.answer()
+
+
+def get_transaction_reason_text(reason: str) -> str:
+    """Переводит причину транзакции на русский язык."""
+    reason_translations = {
+        "referral_bonus": "Бонус за приглашение",
+        "daily_bonus": "Ежедневный бонус",
+        "passive_income": "Пассивный доход",
+        "promo_activation": "Активация промокода",
+        "duel_win": "Победа в дуэли",
+        "duel_loss": "Поражение в дуэли",
+        "duel_boost": "Усиление карты в дуэли",
+        "duel_reroll": "Смена руки в дуэли",
+        "duel_stake_hold": "Ставка в дуэли",
+        "coinflip_win": "Победа в орел/решка",
+        "coinflip_loss": "Поражение в орел/решка",
+        "slots_win": "Выигрыш в слотах",
+        "slots_loss": "Проигрыш в слотах",
+        "dice_win": "Победа в кубиках",
+        "dice_loss": "Поражение в кубиках",
+        "bowling_win": "Победа в боулинге",
+        "bowling_loss": "Поражение в боулинге",
+        "basketball_win": "Победа в баскетболе",
+        "basketball_loss": "Поражение в баскетболе",
+        "football_win": "Победа в футболе",
+        "football_loss": "Поражение в футболе",
+        "darts_win": "Победа в дартс",
+        "darts_loss": "Поражение в дартс",
+        "timer_win": "Победа в таймере",
+        "timer_loss": "Поражение в таймере",
+        "reward_request": "Заявка на вывод",
+        "admin_adjustment": "Корректировка администратора",
+        "admin_grant": "Начисление администратора",
+        "level_up_bonus": "Бонус за повышение уровня",
+        "streak_bonus": "Бонус за стрик",
+        "daily_challenge": "Ежедневный челлендж",
+    }
+    return reason_translations.get(reason, reason)
+
+
+@router.message(Command("promo"))
+async def promo_command(message: Message, state: FSMContext):
+    await state.set_state(PromoCodeStates.waiting_for_promo_code)
+    await message.answer(LEXICON["promo_prompt"], reply_markup=promo_back_keyboard())
+
+
+@router.message(StateFilter(PromoCodeStates.waiting_for_promo_code), F.text)
+async def process_promo_code(message: Message, state: FSMContext):
+    await state.clear()
+    promo_code = message.text or ""
     if not message.from_user:
         return
     user_id = message.from_user.id
-    gifts = await get_user_gifts(user_id)
+    idem_key = f"promo-{user_id}-{promo_code}-{uuid.uuid4()}"
 
-    if not gifts:
-        await message.answer("У вас пока нет подарков.")
+    try:
+        result = await db.activate_promo(user_id, promo_code, idem_key)
+        if isinstance(result, int):
+            await message.answer(
+                LEXICON["promo_success"].format(amount=result),
+                reply_markup=get_main_menu_keyboard(),
+            )
+        else:
+            await message.answer(
+                LEXICON["promo_fail"].format(reason=result),
+                reply_markup=get_main_menu_keyboard(),
+            )
+    except Exception as e:
+        logger.error(
+            f"Ошибка при обработке промокода '{promo_code}' для пользователя {user_id}: {e}"
+        )
+        await message.answer(
+            LEXICON["promo_fail"].format(reason="Произошла внутренняя ошибка."),
+            reply_markup=get_main_menu_keyboard(),
+        )
+
+
+# --- ОБРАБОТЧИКИ ВЫВОДА ПОДАРКОВ ---
+
+
+@router.callback_query(GiftCallback.filter(F.action == "select"))
+async def select_gift_handler(
+    callback: CallbackQuery, callback_data: GiftCallback, bot: Bot
+):
+    """Показывает подтверждение для вывода подарка."""
+    item_id = callback_data.item_id
+    cost = callback_data.cost
+
+    gift = next((g for g in GIFTS_CATALOG if g["id"] == item_id), None)
+    if not gift:
+        await callback.answer("Подарок не найден!", show_alert=True)
         return
 
-    # ИСПРАВЛЕНИЕ: Добавлена аннотация типа для словаря.
-    gift_counts: Dict[str, int] = {}
-    for gift_data in gifts:
-        gift_id = gift_data["item_id"]
-        gift_counts[gift_id] = gift_counts.get(gift_id, 0) + 1
+    text = LEXICON["gift_confirm"].format(
+        cost=cost, emoji=gift["emoji"], name=gift["name"]
+    )
 
-    gift_lines = []
-    for gift_id, count in gift_counts.items():
-        gift_info = next((g for g in GIFTS_CATALOG if g["id"] == gift_id), None)
-        if gift_info:
-            gift_lines.append(f"{gift_info['emoji']} {gift_info['name']} x{count}")
+    if callback.message:
+        await safe_edit_caption(
+            bot,
+            text,
+            callback.message.chat.id,
+            callback.message.message_id,
+            reply_markup=gift_confirm_keyboard(item_id, cost),
+        )
+    await callback.answer()
 
-    if gift_lines:
-        await message.answer(MY_GIFTS_TEXT.format(gifts_list="\n".join(gift_lines)))
+
+@router.callback_query(GiftCallback.filter(F.action == "confirm"))
+async def confirm_gift_handler(
+    callback: CallbackQuery, callback_data: GiftCallback, bot: Bot
+):
+    """Обрабатывает подтверждение вывода и создает заявку."""
+    if not callback.from_user or not callback.message:
+        return
+
+    user_id = callback.from_user.id
+    item_id = callback_data.item_id
+    cost = callback_data.cost
+
+    # 1. Проверка баланса
+    balance = await db.get_user_balance(user_id)
+    if balance < cost:
+        await callback.answer("У вас недостаточно средств.", show_alert=True)
+        return
+
+    # 2. Проверка количества рефералов (пропускаем для админов)
+    if user_id not in settings.ADMIN_IDS:
+        referrals_count = await db.get_referrals_count(user_id)
+        if referrals_count < settings.MIN_REFERRALS_FOR_WITHDRAW:
+            error_text = LEXICON_ERRORS["error_not_enough_referrals"].format(
+                min_refs=settings.MIN_REFERRALS_FOR_WITHDRAW,
+                current_refs=referrals_count,
+            )
+            await callback.answer(error_text, show_alert=True)
+            return
+
+    # 3. Проверка подписки на канал
+    is_subscribed = await check_subscription(bot, user_id)
+    if not is_subscribed:
+        await callback.answer(LEXICON_ERRORS["error_not_subscribed"], show_alert=True)
+        return
+
+    # Все проверки пройдены, создаем заявку
+    idem_key = f"reward-{user_id}-{item_id}-{uuid.uuid4()}"
+    result = await db.create_reward_request(user_id, item_id, cost, idem_key)
+
+    if result.get("success"):
+        gift = next((g for g in GIFTS_CATALOG if g["id"] == item_id), None)
+        if gift:
+            success_text = LEXICON["withdrawal_success"].format(
+                emoji=gift["emoji"], name=gift["name"], amount=cost
+            )
+            await safe_edit_caption(
+                bot,
+                success_text,
+                callback.message.chat.id,
+                callback.message.message_id,
+                reply_markup=back_to_menu_keyboard(),
+            )
+            await callback.answer("✅ Заявка создана!", show_alert=True)
     else:
-        await message.answer("У вас пока нет подарков.")
+        reason = result.get("reason", "unknown_error")
+        await callback.answer(
+            f"Не удалось создать заявку. Ошибка: {reason}", show_alert=True
+        )
 
 
-# Ежедневный бонус
-@router.message(F.text == "🎉 Бонус")
-async def process_daily_bonus(message: Message):
-    """
-    Обработчик для получения ежедневного бонуса.
-    """
+@router.message(F.text == "❌ Отмена")
+async def cancel_handler(message: Message, state: FSMContext):
+    current_state = await state.get_state()
+    if current_state is None:
+        return
+    await state.clear()
+    await message.answer("Действие отменено.", reply_markup=get_main_menu_keyboard())
+
+
+@router.message(Command("id"))
+async def get_id(message: Message):
     if not message.from_user:
         return
     user_id = message.from_user.id
-    result = await get_daily_bonus(user_id)
-    status = result.get("status")
-    bonus_amount = result.get("reward")
-    message_text = ""
-    if status == "success":
-        message_text = f"Вы получили {bonus_amount} ⭐!"
-    elif status == "wait":
-        seconds_left = result.get("seconds_left", 0)
-        hours = int(seconds_left // 3600)
-        minutes = int((seconds_left % 3600) // 60)
-        message_text = f"Следующий бонус будет доступен через {hours} ч. {minutes} мин."
-    else:
-        message_text = "Не удалось получить бонус. Попробуйте позже."
-
-    # ИСПРАВЛЕНО: Отправляем собранный текст напрямую
-    await message.answer(message_text)
+    username = message.from_user.username
+    chat_id = message.chat.id
+    await message.answer(
+        f"Твой ID: <code>{user_id}</code>\n"
+        f"Твой юзернейм: @{username}\n"
+        f"ID чата: <code>{chat_id}</code>"
+    )
 
 
 # Обработчик данных из WebApp игры
@@ -230,7 +524,7 @@ async def process_webapp_withdrawal(message: Message, data: dict):
     )
 
     # Проверяем баланс пользователя
-    current_balance = await get_user_balance(user_id)
+    current_balance = await db.get_user_balance(user_id)
     if current_balance < total_deducted:
         await message.reply_text(
             f"❌ Недостаточно средств!\n"
@@ -243,7 +537,7 @@ async def process_webapp_withdrawal(message: Message, data: dict):
     idem_key = f"webapp_withdraw-{user_id}-{uuid.uuid4()}"
 
     # Списываем средства с баланса
-    success = await spend_balance(
+    success = await db.spend_balance(
         user_id=user_id,
         amount=total_deducted,
         reason="webapp_withdrawal",
@@ -295,18 +589,3 @@ async def handle_webapp_init_data(message: Message):
     except Exception as e:
         logger.error(f"Ошибка обработки initData: {e}", exc_info=True)
         await message.reply_text("❌ Ошибка обработки данных")
-
-
-# Отладочный обработчик для WebApp сообщений (временно)
-@router.message(F.content_type == ContentType.WEB_APP_DATA)
-async def debug_webapp_messages(message: Message):
-    """Отладочный обработчик для WebApp сообщений"""
-    logger.info(
-        f"Получено WebApp сообщение: от={message.from_user.id if message.from_user else 'unknown'}"
-    )
-
-    if hasattr(message, "web_app_data") and message.web_app_data:
-        logger.info(f"WebApp данные найдены: {message.web_app_data.data}")
-
-    # Не отвечаем на WebApp сообщения, чтобы не мешать основному обработчику
-    return

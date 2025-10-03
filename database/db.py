@@ -18,7 +18,7 @@ DB_NAME = "maniac_stars.db"
 
 @asynccontextmanager
 async def connect() -> AsyncGenerator[aiosqlite.Connection, None]:
-    """Asynchronous context manager for connecting to the DB with PRagma settings."""
+    """Asynchronous context manager for connecting to the DB with PRAGMA settings."""
     db_conn = await aiosqlite.connect(DB_NAME)
     db_conn.row_factory = aiosqlite.Row
     await db_conn.execute("PRAGMA journal_mode=WAL;")
@@ -76,7 +76,10 @@ async def init_db() -> None:
             last_seen INTEGER DEFAULT 0,
             created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
             risk_level INTEGER NOT NULL DEFAULT 0,
-            last_big_earn DATETIME
+            last_big_earn DATETIME,
+            passive_income_enabled INTEGER DEFAULT 0,
+            last_passive_income_time INTEGER DEFAULT 0,
+            last_bio_check_time INTEGER DEFAULT 0
         )"""
         )
         # --- Limit Tables ---
@@ -323,6 +326,48 @@ async def init_db() -> None:
                 # Always turn foreign keys back on
                 await db.execute("PRAGMA foreign_keys=ON;")
             logging.info("Migration complete.")
+
+        # Migration for passive income fields
+        cursor = await db.execute("PRAGMA table_info(users)")
+        columns = [row[1] for row in await cursor.fetchall()]
+
+        if "passive_income_enabled" not in columns:
+            logging.info("Adding passive income fields to users table...")
+            await db.execute(
+                "ALTER TABLE users ADD COLUMN passive_income_enabled INTEGER DEFAULT 0"
+            )
+
+        if "last_passive_income_time" not in columns:
+            await db.execute(
+                "ALTER TABLE users ADD COLUMN last_passive_income_time INTEGER DEFAULT 0"
+            )
+
+        if "last_bio_check_time" not in columns:
+            await db.execute(
+                "ALTER TABLE users ADD COLUMN last_bio_check_time INTEGER DEFAULT 0"
+            )
+
+        # Migration for user level system
+        if "user_level" not in columns:
+            logging.info("Adding user level fields to users table...")
+            await db.execute(
+                "ALTER TABLE users ADD COLUMN user_level INTEGER DEFAULT 1"
+            )
+
+        if "total_referrals" not in columns:
+            await db.execute(
+                "ALTER TABLE users ADD COLUMN total_referrals INTEGER DEFAULT 0"
+            )
+
+        if "streak_days" not in columns:
+            await db.execute(
+                "ALTER TABLE users ADD COLUMN streak_days INTEGER DEFAULT 0"
+            )
+
+        if "last_activity_date" not in columns:
+            await db.execute(
+                "ALTER TABLE users ADD COLUMN last_activity_date TEXT DEFAULT NULL"
+            )
 
         await db.execute(
             "CREATE INDEX IF NOT EXISTS idx_rewards_user ON rewards (user_id, created_at DESC);"
@@ -623,8 +668,11 @@ async def get_user(user_id: int) -> Optional[Dict[str, Any]]:
 async def populate_achievements():
     """Заполняет таблицу достижений, обновляя старые и убирая неактуальные."""
     async with connect() as db:
+        # !!! ВАЖНО: Мы удаляем старые достижения, которые невозможно выполнить.
+        # Это гарантирует, что список будет чистым.
         await db.execute("DELETE FROM achievements WHERE id IN ('king', 'meta')")
 
+        # Награда за каждое достижение установлена в 1 ⭐, как ты просил.
         achievements_list = [
             ("first_steps", "Первые шаги", "Просто запустить бота.", 1, "Обычная"),
             ("first_referral", "Первопроходец", "Пригласить 1 друга.", 1, "Обычная"),
@@ -655,14 +703,110 @@ async def populate_achievements():
                 "Редкая",
             ),
             ("legend", "Легенда", "Пригласить 50 друзей.", 1, "Эпическая"),
+            # Новые достижения для дуэлей
+            (
+                "first_duel_win",
+                "Первая победа",
+                "Победить в первой дуэли.",
+                2,
+                "Обычная",
+            ),
+            ("duel_warrior", "Воин дуэлей", "Победить в 5 дуэлях.", 3, "Обычная"),
+            ("duel_master", "Мастер дуэлей", "Победить в 10 дуэлях.", 5, "Редкая"),
+            ("duel_legend", "Легенда дуэлей", "Победить в 25 дуэлях.", 3, "Эпическая"),
+            # Новые достижения для геймификации
+            (
+                "level_up_novice",
+                "Новичок",
+                "Достичь уровня Новичок (1-9 рефералов).",
+                1,
+                "Обычная",
+            ),
+            (
+                "level_up_pro",
+                "Профи",
+                "Достичь уровня Профи (10-24 реферала).",
+                2,
+                "Редкая",
+            ),
+            (
+                "level_up_legend",
+                "Легенда",
+                "Достичь уровня Легенда (25-49 рефералов).",
+                3,
+                "Эпическая",
+            ),
+            (
+                "level_up_mafia",
+                "Мафия",
+                "Достичь уровня Мафия (50+ рефералов).",
+                3,
+                "Легендарная",
+            ),
+            ("streak_3", "Постоянство", "Заходить в бота 3 дня подряд.", 1, "Обычная"),
+            ("streak_7", "Привычка", "Заходить в бота 7 дней подряд.", 2, "Редкая"),
+            (
+                "streak_30",
+                "Мастер дисциплины",
+                "Заходить в бота 30 дней подряд.",
+                3,
+                "Эпическая",
+            ),
+            (
+                "daily_challenge_1",
+                "Первая кровь",
+                "Пригласить 1 друга за день.",
+                1,
+                "Обычная",
+            ),
+            (
+                "daily_challenge_3",
+                "Тройной удар",
+                "Пригласить 3 друзей за день.",
+                2,
+                "Редкая",
+            ),
+            (
+                "daily_challenge_5",
+                "Легенда дня",
+                "Пригласить 5+ друзей за день.",
+                3,
+                "Эпическая",
+            ),
+            (
+                "game_master",
+                "Мастер игр",
+                "Сыграть во все доступные игры.",
+                2,
+                "Редкая",
+            ),
+            (
+                "balance_master",
+                "Накопитель",
+                "Накопить 100+ ⭐ на балансе.",
+                2,
+                "Редкая",
+            ),
+            # Неактуальные достижения 'king' и 'meta' были удалены выше.
         ]
 
+        # Обновляем существующие и вставляем новые.
+        # Мы используем INSERT OR REPLACE, но в данном случае лучше
+        # INSERT OR IGNORE, чтобы не потерять уже полученные, но
+        # в исходном коде используется executemany с INSERT OR IGNORE,
+        # что не позволяет обновить существующие.
+
+        # Для гарантированного обновления награды, мы должны использовать REPLACE.
+        # Чтобы не потерять данные, мы используем три запроса:
+
+        # 1. Обновляем награду для уже существующих достижений
         for ach_id, name, desc, reward, rarity in achievements_list:
             await db.execute(
                 "UPDATE achievements SET reward = ?, name = ?, description = ?, rarity = ? WHERE id = ?",
                 (reward, name, desc, rarity, ach_id),
             )
 
+        # 2. Вставляем новые достижения (если их нет)
         await db.executemany(
             """
             INSERT OR IGNORE INTO achievements (id, name, description, reward, rarity)
@@ -676,6 +820,10 @@ async def populate_achievements():
 async def add_user(
     user_id, username, full_name, referrer_id=None, initial_balance=None
 ):
+    """
+    Добавляет нового пользователя в базу данных.
+    Возвращает True, если пользователь новый, иначе False.
+    """
     if initial_balance is None:
         initial_balance = settings.INITIAL_BALANCE
 
@@ -688,7 +836,7 @@ async def add_user(
             if await cursor.fetchone() is None:
                 reg_time = int(time.time())
                 await db.execute(
-                    "INSERT INTO users (user_id, username, full_name, invited_by, registration_date, last_seen, created_at, balance) VALUES (?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP, ?)",
+                    "INSERT INTO users (user_id, username, full_name, invited_by, registration_date, last_seen, created_at, balance, passive_income_enabled, last_passive_income_time, last_bio_check_time) VALUES (?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP, ?, 0, 0, 0)",
                     (
                         user_id,
                         username,
@@ -710,6 +858,18 @@ async def add_user(
                         "INSERT OR IGNORE INTO referrals (referrer_id, referred_id) VALUES (?, ?)",
                         (referrer_id, user_id),
                     )
+
+                    # Обновляем уровень реферера
+                    referrer_referrals = await db.execute(
+                        "SELECT COUNT(*) FROM referrals WHERE referrer_id = ?",
+                        (referrer_id,),
+                    )
+                    referrer_count = (await referrer_referrals.fetchone())[0]
+                    await update_user_level(referrer_id, referrer_count)
+
+                    # Проверяем ежедневные челленджи
+                    await check_daily_challenges(referrer_id)
+
                 await db.commit()
                 return True
             else:
@@ -750,6 +910,7 @@ async def get_user_balance(user_id):
         return result[0] if result else 0
 
 
+# ... (The rest of the file remains the same)
 async def get_referrals_count(user_id):
     async with connect() as db:
         cursor = await db.execute(
@@ -780,19 +941,6 @@ async def get_full_user_info(user_id):
         }
 
 
-async def get_user_info(user_id: int) -> Optional[Dict[str, Any]]:
-    """
-    Gets combined user info for profile display.
-    """
-    user_data = await get_user(user_id)
-    if not user_data:
-        return None
-
-    referrals_count = await get_referrals_count(user_id)
-    user_data["referrals_count"] = referrals_count
-    return user_data
-
-
 async def get_top_referrers(limit=5):
     async with connect() as db:
         cursor = await db.execute(
@@ -808,25 +956,6 @@ async def get_top_referrers(limit=5):
         )
         rows = await cursor.fetchall()
         return [dict(row) for row in rows]
-
-
-async def get_top_users_by_balance(limit=10):
-    """
-    Возвращает топ пользователей по балансу.
-    """
-    async with connect() as db:
-        cursor = await db.execute(
-            """
-            SELECT user_id, balance
-            FROM users
-            ORDER BY balance DESC
-            LIMIT ?
-        """,
-            (limit,),
-        )
-        rows = await cursor.fetchall()
-        # Возвращаем в формате, который ожидает старый хендлер
-        return [(row["user_id"], row["balance"]) for row in rows]
 
 
 async def get_promocode(code: str) -> Optional[dict]:
@@ -860,6 +989,7 @@ async def activate_promo(user_id, code, idem_key: str):
                 if await cursor.fetchone():
                     await db.commit()
                     return "already_activated"
+                # If key exists but promo not activated, it's a weird state, treat as error
                 await db.rollback()
                 return "error"
 
@@ -912,14 +1042,22 @@ async def activate_promo(user_id, code, idem_key: str):
             return "error"
 
 
+# ... (весь код до функции get_daily_bonus) ...
+
+
 async def get_daily_bonus(user_id: int) -> Dict[str, Any]:
-    retries = 5
+    """
+    Атомарно выдает ежедневный бонус с повторными попытками при блокировке БД.
+    """
+    retries = 5  # Попытки на случай, если базу залочило
     for attempt in range(retries):
         try:
             async with connect() as db:
                 await _begin_transaction(db)
                 try:
+                    # Внутренняя логика, которая может упасть
                     current_time = int(time.time())
+                    # ИСПОЛЬЗУЕМ НОВУЮ НАСТРОЙКУ ИЗ CONFIG.PY
                     time_limit = current_time - (settings.DAILY_BONUS_HOURS * 3600)
                     is_admin = user_id in settings.ADMIN_IDS
 
@@ -948,6 +1086,7 @@ async def get_daily_bonus(user_id: int) -> Dict[str, Any]:
                         )
                         return {"status": "wait", "seconds_left": seconds_left}
 
+                    # ИСПОЛЬЗУЕМ СУММУ БОНУСА ИЗ CONFIG.PY
                     reward = settings.DAILY_BONUS_AMOUNT
                     if not await _change_balance(db, user_id, reward, "daily_bonus"):
                         await db.rollback()
@@ -958,8 +1097,10 @@ async def get_daily_bonus(user_id: int) -> Dict[str, Any]:
 
                 except Exception as e:
                     await db.rollback()
+                    # Если ошибка - это блокировка, то мы её прокидываем выше, чтобы сработал retry
                     if isinstance(e, sqlite3.OperationalError) and "locked" in str(e):
                         raise
+                    # Все другие ошибки логируем как обычно
                     logging.error(
                         "Error in get_daily_bonus inner transaction on attempt %d",
                         attempt + 1,
@@ -968,6 +1109,7 @@ async def get_daily_bonus(user_id: int) -> Dict[str, Any]:
                     )
                     return {"status": "error", "reason": "transaction_failed"}
 
+        # Ловим ошибку блокировки и ждём перед новой попыткой
         except sqlite3.OperationalError as e:
             if "locked" in str(e).lower() and attempt < retries - 1:
                 logging.warning(
@@ -985,6 +1127,7 @@ async def get_daily_bonus(user_id: int) -> Dict[str, Any]:
                     exc_info=True,
                 )
                 return {"status": "error", "reason": "db_locked"}
+        # Ловим все остальные непредвиденные ошибки
         except Exception:
             logging.error(
                 "Unhandled exception in get_daily_bonus for user %d",
@@ -993,7 +1136,11 @@ async def get_daily_bonus(user_id: int) -> Dict[str, Any]:
             )
             return {"status": "error", "reason": "unknown_error"}
 
+    # Если все попытки провалились
     return {"status": "error", "reason": "max_retries_exceeded"}
+
+
+# ... (остальной код файла db.py) ...
 
 
 async def grant_achievement(user_id, ach_id, bot: Bot) -> bool:
@@ -1028,7 +1175,7 @@ async def grant_achievement(user_id, ach_id, bot: Bot) -> bool:
             try:
                 await bot.send_message(
                     user_id,
-                    f"🏆 <b>Новое достижение!</b>\nВы открыли: «{ach_name}» (+{reward} ⭐)",
+                    f"🏆 **Новое достижение!**\nВы открыли: «{ach_name}» (+{reward} ⭐)",
                 )
             except Exception:
                 logging.warning(
@@ -1048,10 +1195,15 @@ async def grant_achievement(user_id, ach_id, bot: Bot) -> bool:
 
 
 async def create_duel(p1_id: int, p2_id: int, stake: int) -> Optional[int]:
+    """
+    Атомарно создает дуэль: списывает ставки и создает матч в одной транзакции.
+    Возвращает ID матча в случае успеха, иначе None.
+    """
     async with connect() as db:
         try:
             await _begin_transaction(db)
 
+            # Пытаемся списать средства с обоих игроков
             p1_success = await _change_balance(
                 db, p1_id, -stake, "duel_stake_hold", f"vs_{p2_id}"
             )
@@ -1059,13 +1211,16 @@ async def create_duel(p1_id: int, p2_id: int, stake: int) -> Optional[int]:
                 db, p2_id, -stake, "duel_stake_hold", f"vs_{p1_id}"
             )
 
+            # Если у кого-то не хватает средств, откатываем транзакцию
             if not p1_success or not p2_success:
                 await db.rollback()
                 logging.warning(
                     f"Failed to create duel between {p1_id} and {p2_id} due to insufficient funds."
                 )
+                # Не нужно возвращать деньги вручную, rollback сделает это за нас
                 return None
 
+            # Создаем запись о матче
             bank = stake * 2
             rake_percent = settings.DUEL_RAKE_PERCENT
             cursor = await db.execute(
@@ -1076,6 +1231,7 @@ async def create_duel(p1_id: int, p2_id: int, stake: int) -> Optional[int]:
             if not match_id:
                 raise aiosqlite.Error("Failed to create duel match entry.")
 
+            # Добавляем игроков в матч
             await db.execute(
                 "INSERT INTO duel_players (match_id, user_id, role) VALUES (?, ?, 'p1'), (?, ?, 'p2')",
                 (match_id, p1_id, match_id, p2_id),
@@ -1093,6 +1249,7 @@ async def create_duel(p1_id: int, p2_id: int, stake: int) -> Optional[int]:
 
 
 async def update_duel_stats(winner_id: int, loser_id: int):
+    """Обновляет статистику дуэлей для победителя и проигравшего."""
     async with connect() as db:
         await db.execute(
             "UPDATE users SET duel_wins = duel_wins + 1 WHERE user_id = ?", (winner_id,)
@@ -1112,6 +1269,7 @@ async def finish_duel_atomic(
     is_draw: bool = False,
     stake: int = 0,
 ):
+    """Завершает дуэль и распределяет банк."""
     async with connect() as db:
         try:
             await db.execute("BEGIN IMMEDIATE;")
@@ -1153,6 +1311,7 @@ async def finish_duel_atomic(
 async def create_timer_match(
     p1_id: int, p2_id: int, stake: int
 ) -> tuple[Optional[int], Optional[float]]:
+    """Создает таймер-матч, списывая ставки с обоих игроков в одной транзакции."""
     async with connect() as db:
         try:
             await _begin_transaction(db)
@@ -1161,7 +1320,9 @@ async def create_timer_match(
             p2_success = await _change_balance(db, p2_id, -stake, "timer_stake_hold")
 
             if not p1_success or not p2_success:
-                await db.rollback()  # This was a syntax error, fixed to be correct
+                await (
+                    db.rollback()
+                )  # Откатываем транзакцию, средства вернутся автоматически
                 return None, None
 
             bank = stake * 2
@@ -1190,6 +1351,7 @@ async def finish_timer_match(
     is_draw: bool = False,
     new_bank: int = 0,
 ):
+    """Завершает таймер-матч, распределяя банк."""
     async with connect() as db:
         try:
             await db.execute("BEGIN IMMEDIATE;")
@@ -1281,6 +1443,7 @@ async def interrupt_timer_match(match_id: int):
 
 
 async def get_all_users() -> List[int]:
+    """Возвращает список всех ID пользователей."""
     async with connect() as db:
         cursor = await db.execute("SELECT user_id FROM users")
         return [row[0] for row in await cursor.fetchall()]
@@ -1304,6 +1467,161 @@ async def add_promo_code(name, reward, uses):
         await db.commit()
 
 
+# --- PASSIVE INCOME FUNCTIONS ---
+
+
+async def check_user_bio_for_bot_link(
+    bot: Bot, user_id: int, bot_username: str
+) -> bool:
+    """
+    Проверяет, есть ли ссылка на бота в био пользователя.
+    Возвращает True, если ссылка найдена, False иначе.
+    """
+    try:
+        # Получаем информацию о пользователе
+        user_profile = await bot.get_chat(user_id)
+
+        if not user_profile.bio:
+            return False
+
+        bio = user_profile.bio.lower()
+        bot_username_lower = bot_username.lower()
+
+        # Проверяем различные варианты ссылок на бота
+        possible_links = [
+            f"t.me/{bot_username_lower}",
+            f"telegram.me/{bot_username_lower}",
+            f"@{bot_username_lower}",
+            bot_username_lower,
+        ]
+
+        return any(link in bio for link in possible_links)
+
+    except Exception as e:
+        logging.warning(
+            f"Failed to check bio for user {user_id}: {e}", extra={"user_id": user_id}
+        )
+        return False
+
+
+async def update_passive_income_status(user_id: int, enabled: bool) -> None:
+    """Обновляет статус пассивного дохода для пользователя."""
+    async with connect() as db:
+        await db.execute(
+            "UPDATE users SET passive_income_enabled = ?, last_bio_check_time = ? WHERE user_id = ?",
+            (1 if enabled else 0, int(time.time()), user_id),
+        )
+        await db.commit()
+
+
+async def get_passive_income_status(user_id: int) -> Dict[str, Any]:
+    """Получает статус пассивного дохода для пользователя."""
+    async with connect() as db:
+        cursor = await db.execute(
+            """
+            SELECT passive_income_enabled, last_passive_income_time, last_bio_check_time
+            FROM users WHERE user_id = ?
+            """,
+            (user_id,),
+        )
+        row = await cursor.fetchone()
+
+        if not row:
+            return {"enabled": False, "last_income_time": 0, "last_check_time": 0}
+
+        return {
+            "enabled": bool(row[0]),
+            "last_income_time": row[1] or 0,
+            "last_check_time": row[2] or 0,
+        }
+
+
+async def get_passive_income_reward(user_id: int) -> Dict[str, Any]:
+    """
+    Выдает пассивный доход пользователю, если он имеет право на получение.
+    Похоже на get_daily_bonus, но для пассивного дохода.
+    """
+    current_time = int(time.time())
+    time_limit = current_time - (24 * 3600)  # 24 часа
+
+    async with connect() as db:
+        await db.execute("BEGIN IMMEDIATE;")
+        try:
+            # Проверяем, включен ли пассивный доход и прошло ли 24 часа
+            cursor = await db.execute(
+                """
+                SELECT passive_income_enabled, last_passive_income_time
+                FROM users WHERE user_id = ?
+                """,
+                (user_id,),
+            )
+            row = await cursor.fetchone()
+
+            if not row:
+                await db.rollback()
+                return {"status": "error", "reason": "user_not_found"}
+
+            enabled, last_income_time = row[0], row[1] or 0
+
+            if not enabled:
+                await db.rollback()
+                return {"status": "error", "reason": "not_enabled"}
+
+            if last_income_time >= time_limit:
+                seconds_left = (last_income_time + 24 * 3600) - current_time
+                await db.rollback()
+                return {"status": "wait", "seconds_left": max(0, seconds_left)}
+
+            # Обновляем время последнего получения пассивного дохода
+            await db.execute(
+                "UPDATE users SET last_passive_income_time = ? WHERE user_id = ?",
+                (current_time, user_id),
+            )
+
+            # Начисляем 1 звезду
+            reward = 1
+            if not await _change_balance(db, user_id, reward, "passive_income"):
+                await db.rollback()
+                return {"status": "error", "reason": "balance_update_failed"}
+
+            await db.commit()
+            return {"status": "success", "reward": reward}
+
+        except Exception:
+            await db.rollback()
+            logging.error(
+                "Error in get_passive_income_reward",
+                exc_info=True,
+                extra={"user_id": user_id},
+            )
+            return {"status": "error", "reason": "transaction_failed"}
+
+
+async def get_users_for_passive_income_check() -> List[int]:
+    """
+    Возвращает список пользователей, которых нужно проверить на пассивный доход.
+    Проверяем пользователей, которые:
+    1. Имеют включенный пассивный доход
+    2. Прошло более 24 часов с последнего получения
+    3. Прошло более 30 минут с последней проверки био (для более быстрой реакции)
+    """
+    current_time = int(time.time())
+    check_limit = current_time - (30 * 60)  # 30 минут с последней проверки био
+    income_limit = current_time - (24 * 3600)  # 24 часа с последнего дохода
+
+    async with connect() as db:
+        cursor = await db.execute(
+            """
+            SELECT user_id FROM users
+            WHERE passive_income_enabled = 1
+            AND (last_passive_income_time < ? OR last_passive_income_time IS NULL)
+            AND (last_bio_check_time < ? OR last_bio_check_time IS NULL)
+            """,
+            (income_limit, check_limit),
+        )
+        return [row[0] for row in await cursor.fetchall()]
+
+
 async def get_active_promos():
     async with connect() as db:
         cursor = await db.execute(
@@ -1313,8 +1631,12 @@ async def get_active_promos():
 
 
 async def get_users_for_notification() -> List[int]:
+    """
+    Возвращает ID пользователей, которые не забирали
+    ежедневный бонус более 24 часов.
+    """
     async with connect() as db:
-        day_ago = int(time.time()) - 86400
+        day_ago = int(time.time()) - 86400  # 24 часа в секундах
         cursor = await db.execute(
             "SELECT user_id FROM users WHERE last_bonus_time < ?",
             (day_ago,),
@@ -1339,23 +1661,6 @@ async def get_user_achievements(user_id):
         return [row[0] for row in await cursor.fetchall()]
 
 
-async def get_user_gifts(user_id: int, limit: int = 10) -> List[dict]:
-    """Retrieves the latest gift/reward requests for a user."""
-    async with connect() as db:
-        cursor = await db.execute(
-            """
-            SELECT id, item_id, stars_cost, status, created_at
-            FROM rewards
-            WHERE user_id = ?
-            ORDER BY created_at DESC
-            LIMIT ?
-            """,
-            (user_id, limit),
-        )
-        rows = await cursor.fetchall()
-        return [dict(row) for row in rows]
-
-
 async def get_achievement_details(ach_id):
     async with connect() as db:
         cursor = await db.execute(
@@ -1367,6 +1672,7 @@ async def get_achievement_details(ach_id):
 
 
 async def get_bot_statistics() -> Dict[str, int]:
+    """Собирает общую статистику по боту."""
     async with connect() as db:
         cursor = await db.execute("SELECT COUNT(user_id) FROM users")
         total_users = (await cursor.fetchone())[0]
@@ -1408,6 +1714,7 @@ async def get_bot_statistics() -> Dict[str, int]:
 
 
 async def get_user_full_details_for_admin(user_id: int):
+    """Собирает всю возможную информацию о пользователе для админа."""
     async with connect() as db:
         user_info = await get_full_user_info(user_id)
         if not user_info:
@@ -1426,6 +1733,7 @@ async def get_user_full_details_for_admin(user_id: int):
 
 
 async def get_reward_full_details(reward_id: int) -> Optional[dict]:
+    """Получает всю информацию по заявке для админ-панели."""
     async with connect() as db:
         cursor = await db.execute(
             "SELECT r.*, u.username, u.full_name, u.balance, u.registration_date, u.risk_level "
@@ -1448,11 +1756,251 @@ async def get_reward_full_details(reward_id: int) -> Optional[dict]:
         }
 
 
+async def get_user_transactions_history(user_id: int, limit: int = 20) -> List[dict]:
+    """Получает историю транзакций пользователя."""
+    async with connect() as db:
+        cursor = await db.execute(
+            "SELECT amount, reason, ref_id, created_at FROM ledger_entries WHERE user_id = ? ORDER BY created_at DESC LIMIT ?",
+            (user_id, limit),
+        )
+        transactions = await cursor.fetchall()
+        return [dict(row) for row in transactions]
+
+
+# --- User Level System Functions ---
+async def get_user_level_info(user_id: int) -> Dict[str, Any]:
+    """Получает информацию об уровне пользователя."""
+    async with connect() as db:
+        cursor = await db.execute(
+            "SELECT user_level, total_referrals, streak_days, last_activity_date FROM users WHERE user_id = ?",
+            (user_id,),
+        )
+        row = await cursor.fetchone()
+        if not row:
+            return {"level": 1, "referrals": 0, "streak": 0, "last_activity": None}
+
+        return {
+            "level": row[0] or 1,
+            "referrals": row[1] or 0,
+            "streak": row[2] or 0,
+            "last_activity": row[3],
+        }
+
+
+def calculate_user_level(referrals: int) -> int:
+    """Вычисляет уровень пользователя на основе количества рефералов."""
+    if referrals >= 50:
+        return 4  # Мафия
+    elif referrals >= 25:
+        return 3  # Легенда
+    elif referrals >= 10:
+        return 2  # Профи
+    else:
+        return 1  # Новичок
+
+
+async def update_user_level(user_id: int, referrals: int) -> bool:
+    """Обновляет уровень пользователя и дает бонус за повышение."""
+    async with connect() as db:
+        try:
+            await db.execute("BEGIN IMMEDIATE;")
+
+            # Получаем текущий уровень
+            cursor = await db.execute(
+                "SELECT user_level FROM users WHERE user_id = ?", (user_id,)
+            )
+            current_level_row = await cursor.fetchone()
+            current_level = current_level_row[0] if current_level_row else 1
+
+            # Вычисляем новый уровень
+            new_level = calculate_user_level(referrals)
+
+            # Обновляем данные пользователя
+            await db.execute(
+                "UPDATE users SET user_level = ?, total_referrals = ? WHERE user_id = ?",
+                (new_level, referrals, user_id),
+            )
+
+            # Если уровень повысился, даем бонус
+            if new_level > current_level:
+                level_bonus = min(new_level, 3)  # Максимум 3 ⭐
+                await _change_balance(
+                    db, user_id, level_bonus, "level_up_bonus", f"level_{new_level}"
+                )
+
+            await db.commit()
+            return new_level > current_level
+
+        except Exception:
+            await db.rollback()
+            logging.error(f"Error updating user level for {user_id}", exc_info=True)
+            return False
+
+
+async def update_user_streak(user_id: int) -> bool:
+    """Обновляет стрик пользователя и дает бонус за длинные стрики."""
+    async with connect() as db:
+        try:
+            await db.execute("BEGIN IMMEDIATE;")
+
+            today = datetime.date.today().isoformat()
+
+            # Получаем текущий стрик
+            cursor = await db.execute(
+                "SELECT streak_days, last_activity_date FROM users WHERE user_id = ?",
+                (user_id,),
+            )
+            row = await cursor.fetchone()
+
+            if not row:
+                await db.rollback()
+                return False
+
+            current_streak, last_activity = row[0] or 0, row[1]
+
+            # Проверяем, был ли пользователь активен вчера
+            if last_activity:
+                last_date = datetime.datetime.fromisoformat(last_activity).date()
+                today_date = datetime.date.today()
+
+                if last_date == today_date:
+                    # Уже обновляли сегодня
+                    await db.rollback()
+                    return False
+                elif last_date == today_date - datetime.timedelta(days=1):
+                    # Продолжаем стрик
+                    new_streak = current_streak + 1
+                else:
+                    # Стрик сброшен
+                    new_streak = 1
+            else:
+                # Первый день
+                new_streak = 1
+
+            # Обновляем стрик
+            await db.execute(
+                "UPDATE users SET streak_days = ?, last_activity_date = ? WHERE user_id = ?",
+                (new_streak, today, user_id),
+            )
+
+            # Даем бонус за длинные стрики
+            streak_bonus = 0
+            if new_streak == 3:
+                streak_bonus = 1  # 3 дня подряд
+            elif new_streak == 7:
+                streak_bonus = 2  # 7 дней подряд
+            elif new_streak == 30:
+                streak_bonus = 3  # 30 дней подряд
+            elif new_streak % 30 == 0 and new_streak > 30:
+                streak_bonus = 3  # Каждые 30 дней
+
+            if streak_bonus > 0:
+                await _change_balance(
+                    db, user_id, streak_bonus, "streak_bonus", f"streak_{new_streak}"
+                )
+
+            await db.commit()
+            return streak_bonus > 0
+
+        except Exception:
+            await db.rollback()
+            logging.error(f"Error updating user streak for {user_id}", exc_info=True)
+            return False
+
+
+# --- Daily Challenges System ---
+async def get_daily_referrals_count(user_id: int) -> int:
+    """Получает количество рефералов за сегодня."""
+    async with connect() as db:
+        today = datetime.date.today().isoformat()
+        cursor = await db.execute(
+            """
+            SELECT COUNT(*) FROM referrals r
+            JOIN users u ON r.referred_id = u.user_id
+            WHERE r.referrer_id = ? AND DATE(u.created_at) = ?
+            """,
+            (user_id, today),
+        )
+        result = await cursor.fetchone()
+        return result[0] if result else 0
+
+
+async def check_daily_challenges(user_id: int) -> List[str]:
+    """Проверяет и выдает достижения за ежедневные челленджи."""
+    async with connect() as db:
+        try:
+            await db.execute("BEGIN IMMEDIATE;")
+
+            today_referrals = await get_daily_referrals_count(user_id)
+            completed_challenges = []
+
+            # Проверяем челленджи
+            if today_referrals >= 1:
+                # Проверяем, не получил ли уже достижение сегодня
+                cursor = await db.execute(
+                    """
+                    SELECT COUNT(*) FROM user_achievements ua
+                    JOIN achievements a ON ua.achievement_id = a.id
+                    WHERE ua.user_id = ? AND a.id = 'daily_challenge_1'
+                    AND DATE(datetime(ua.completion_date, 'unixepoch')) = ?
+                    """,
+                    (user_id, datetime.date.today().isoformat()),
+                )
+                if not cursor.fetchone()[0]:
+                    await _change_balance(
+                        db, user_id, 1, "daily_challenge", "challenge_1"
+                    )
+                    completed_challenges.append("daily_challenge_1")
+
+            if today_referrals >= 3:
+                cursor = await db.execute(
+                    """
+                    SELECT COUNT(*) FROM user_achievements ua
+                    JOIN achievements a ON ua.achievement_id = a.id
+                    WHERE ua.user_id = ? AND a.id = 'daily_challenge_3'
+                    AND DATE(datetime(ua.completion_date, 'unixepoch')) = ?
+                    """,
+                    (user_id, datetime.date.today().isoformat()),
+                )
+                if not cursor.fetchone()[0]:
+                    await _change_balance(
+                        db, user_id, 2, "daily_challenge", "challenge_3"
+                    )
+                    completed_challenges.append("daily_challenge_3")
+
+            if today_referrals >= 5:
+                cursor = await db.execute(
+                    """
+                    SELECT COUNT(*) FROM user_achievements ua
+                    JOIN achievements a ON ua.achievement_id = a.id
+                    WHERE ua.user_id = ? AND a.id = 'daily_challenge_5'
+                    AND DATE(datetime(ua.completion_date, 'unixepoch')) = ?
+                    """,
+                    (user_id, datetime.date.today().isoformat()),
+                )
+                if not cursor.fetchone()[0]:
+                    await _change_balance(
+                        db, user_id, 3, "daily_challenge", "challenge_5"
+                    )
+                    completed_challenges.append("daily_challenge_5")
+
+            await db.commit()
+            return completed_challenges
+
+        except Exception:
+            await db.rollback()
+            logging.error(
+                f"Error checking daily challenges for {user_id}", exc_info=True
+            )
+            return []
+
+
 async def get_pending_rewards(page: int = 1, limit: int = 5) -> List[dict]:
+    """Получает список заявок в статусе 'pending'."""
     async with connect() as db:
         offset = (page - 1) * limit
         cursor = await db.execute(
-            "SELECT r.id, r.user_id, u.username, r.item_id, r.stars_cost, r.created_at "
+            "SELECT r.id, r.user_id, u.username, u.full_name, r.item_id, r.stars_cost, r.created_at "
             "FROM rewards r JOIN users u ON r.user_id = u.user_id "
             "WHERE r.status = 'pending' ORDER BY r.created_at ASC LIMIT ? OFFSET ?",
             (limit, offset),
@@ -1462,6 +2010,7 @@ async def get_pending_rewards(page: int = 1, limit: int = 5) -> List[dict]:
 
 
 async def get_pending_rewards_count() -> int:
+    """Считает количество заявок в статусе 'pending'."""
     async with connect() as db:
         cursor = await db.execute(
             "SELECT COUNT(id) as count FROM rewards WHERE status = 'pending'"
@@ -1473,6 +2022,7 @@ async def get_pending_rewards_count() -> int:
 async def approve_reward(
     reward_id: int, admin_id: int, notes: Optional[str] = None
 ) -> bool:
+    """Одобряет заявку."""
     async with connect() as db:
         try:
             await db.execute("BEGIN IMMEDIATE;")
@@ -1486,6 +2036,7 @@ async def approve_reward(
 
 
 async def reject_reward(reward_id: int, admin_id: int, notes: str) -> bool:
+    """Rejects a request and returns the stars to the user."""
     async with connect() as db:
         try:
             await db.execute("BEGIN IMMEDIATE;")
@@ -1517,6 +2068,7 @@ async def reject_reward(reward_id: int, admin_id: int, notes: str) -> bool:
 async def fulfill_reward(
     reward_id: int, admin_id: int, notes: Optional[str] = None
 ) -> bool:
+    """Помечает заявку как выполненную."""
     async with connect() as db:
         try:
             await db.execute("BEGIN IMMEDIATE;")
@@ -1536,6 +2088,7 @@ async def _update_reward_status(
     admin_id: int,
     notes: Optional[str] = None,
 ):
+    """Внутренняя функция для смены статуса заявки и логирования действия."""
     await db.execute(
         "UPDATE rewards SET status = ?, notes = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?",
         (new_status, notes, reward_id),

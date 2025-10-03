@@ -32,8 +32,8 @@ class Settings(BaseSettings):
     # --- Настройки экономики и игр ---
     INITIAL_BALANCE: int = 0
     DUEL_RAKE_PERCENT: int
-    DUEL_BOOST_COST: int = 2
-    DUEL_REROLL_COST: int = 3
+    DUEL_BOOST_COST: int = 1
+    DUEL_REROLL_COST: int = 2
     REFERRAL_BONUS: int = 5
     MIN_REFERRALS_FOR_WITHDRAW: int = 5
     DAILY_BONUS_HOURS: int = 24
@@ -70,6 +70,8 @@ class Settings(BaseSettings):
     PHOTO_EARN_STARS: str = "AgACAgQAAxkBAAIH8WjEmyW1XdLZSG_qd4z-nEfewxUDAAI9yjEb8oIpUvfGPlFenoImAQADAgADeQADNgQ"
     PHOTO_ACHIEVEMENTS: str = "AgACAgQAAxkBAAIH72jEmf5nIhZVIeyHkl7o4i3PUrV3AAI7yjEb8oIpUi4QwQoZ0aMDAQADAgADeQADNgQ"
     PHOTO_RESOURCES: str = "AgACAgQAAxkBAAEBRahoxtbkPuDr2vkDniunHd1eDQRjfwACGs8xGyhxIVIL4TQKmD6kGwEAAwIAA3kAAzYE"
+    PHOTO_DUEL_MENU: str = "AgACAgQAAxkBAAEBRbloxtd_hT3U2PWdnDfyISJsQkYS9AACmcsxG4K_IFLOUIM0qh2bfwEAAwIAA3kAAzYE"
+    PHOTO_COINFLIP_MENU: str = "AgACAgQAAxkBAAEBRatoxtb8z0zCYYgYO9AdMkKTi5FwgAACFc8xGyhxIVJz7d0SDKi2oQEAAwIAA3kAAzYE"
     PHOTO_COINFLIP_PROCESS: str = "AgACAgQAAxkBAAEBRa5oxtcE-LOFVz26ZnIrRx7SZR9WsgACocsxG4K_IFLHLjFwpfluEgEAAwIAA3kAAzYE"
 
     model_config = SettingsConfigDict(
@@ -80,15 +82,15 @@ class Settings(BaseSettings):
 settings = Settings()
 
 # --- Ставки для всех игр ---
-# Устанавливаем единые ставки 1, 2, 3, 4, 5 для всех игр
-COMMON_STAKES = [1, 2, 3, 4, 5]
+# Сложные игры
+DUEL_STAKES = [1, 2, 3, 4, 5]
+TIMER_STAKES = [1, 2, 3, 4, 5]
+COINFLIP_STAKES = [10, 25, 50, 100, 250, 500]
 
-DUEL_STAKES = COMMON_STAKES.copy()
-TIMER_STAKES = COMMON_STAKES.copy()
-COINFLIP_STAKES = COMMON_STAKES.copy()
-SLOTS_STAKES = COMMON_STAKES.copy()
-BOWLING_STAKES = COMMON_STAKES.copy()
-FOOTBALL_STAKES = COMMON_STAKES.copy()
-BASKETBALL_STAKES = COMMON_STAKES.copy()
-DARTS_STAKES = COMMON_STAKES.copy()
-DICE_STAKES = COMMON_STAKES.copy()
+# Игры с маленькими ставками
+SLOTS_STAKES = [1, 3, 5, 10]
+BOWLING_STAKES = [1, 3, 5, 10]
+FOOTBALL_STAKES = [1, 3, 5, 10]
+BASKETBALL_STAKES = [1, 3, 5, 10]
+DARTS_STAKES = [1, 3, 5, 10]
+DICE_STAKES = [1, 3, 5, 10]

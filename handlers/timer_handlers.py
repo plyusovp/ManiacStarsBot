@@ -1,4 +1,4 @@
-# handlers/timer_handlers.py
+# plyusovp/maniacstarsbot/ManiacStarsBot-4df23ef8bd5b8766acddffe6bca30a128458c7a5/handlers/timer_handlers.py
 
 import asyncio
 import logging
@@ -74,27 +74,27 @@ async def live_timer_updater(bot: Bot, match: TimerMatch):
 
                     await db.finish_timer_match(match_id=match.match_id, is_draw=True)
                     text = (
-                        f"⏳ Время вышло! (10.00 сек)\n\n"
-                        f"Ничья. Ставки в размере {match.stake} ⭐ возвращены."
+                        f"⏰ **ВРЕМЯ ВЫШЛО!** ⏰\n\n"
+                        f"🕐 Максимальное время: 10.00 сек\n\n"
+                        f"🤝 **НИЧЬЯ**\n"
+                        f"🔄 Ставки возвращены: {match.stake} ⭐"
                     )
-                    # ИСПРАВЛЕНИЕ: Добавлена проверка на None
-                    if match.p1_msg_id:
-                        await safe_edit_caption(
+                    await asyncio.gather(
+                        safe_edit_caption(
                             bot,
                             text,
                             match.p1_id,
                             match.p1_msg_id,
                             reply_markup=timer_finish_keyboard(),
-                        )
-                    # ИСПРАВЛЕНИЕ: Добавлена проверка на None
-                    if match.p2_msg_id:
-                        await safe_edit_caption(
+                        ),
+                        safe_edit_caption(
                             bot,
                             text,
                             match.p2_id,
                             match.p2_msg_id,
                             reply_markup=timer_finish_keyboard(),
-                        )
+                        ),
+                    )
                     break
 
                 if match.p1_stopped_time > 0 and match.p2_stopped_time > 0:
@@ -102,27 +102,24 @@ async def live_timer_updater(bot: Bot, match: TimerMatch):
 
                 text = LEXICON["timer_live"].format(elapsed_time=elapsed_time)
                 tasks = []
-                keyboard = timer_game_keyboard(match.match_id)
-                # ИСПРАВЛЕНИЕ: Добавлена проверка на None
-                if match.p1_stopped_time == 0 and match.p1_msg_id:
+                if match.p1_stopped_time == 0:
                     tasks.append(
                         safe_edit_caption(
                             bot,
                             text,
                             match.p1_id,
                             match.p1_msg_id,
-                            reply_markup=keyboard,
+                            reply_markup=timer_game_keyboard(match.match_id),
                         )
                     )
-                # ИСПРАВЛЕНИЕ: Добавлена проверка на None
-                if match.p2_stopped_time == 0 and match.p2_msg_id:
+                if match.p2_stopped_time == 0:
                     tasks.append(
                         safe_edit_caption(
                             bot,
                             text,
                             match.p2_id,
                             match.p2_msg_id,
-                            reply_markup=keyboard,
+                            reply_markup=timer_game_keyboard(match.match_id),
                         )
                     )
                 if tasks:
@@ -239,90 +236,92 @@ async def resolve_timer_game(bot: Bot, match_id: int):
 
         if is_draw:
             await db.finish_timer_match(match_id=match_id, is_draw=True)
+            # Одинаковое сообщение для ничьи
             text = LEXICON["timer_draw"].format(
-                target_time=f"{match.target_time:.3f}",
-                p1_res=f"{p1_result:.3f}",
-                p2_res=f"{p2_result:.3f}",
+                target_time=f"{match.target_time:.2f}",
+                p1_res=f"{p1_result:.2f}",
+                p2_res=f"{p2_result:.2f}",
                 stake=match.stake,
             )
-            tasks = []
-            if match.p1_msg_id:
-                tasks.append(
-                    safe_edit_caption(
-                        bot,
-                        text,
-                        match.p1_id,
-                        match.p1_msg_id,
-                        reply_markup=timer_finish_keyboard(),
-                    )
+            await asyncio.gather(
+                safe_edit_caption(
+                    bot,
+                    text,
+                    match.p1_id,
+                    match.p1_msg_id,
+                    reply_markup=timer_finish_keyboard(),
                 )
-            if match.p2_msg_id:
-                tasks.append(
-                    safe_edit_caption(
-                        bot,
-                        text,
-                        match.p2_id,
-                        match.p2_msg_id,
-                        reply_markup=timer_finish_keyboard(),
-                    )
+                if match.p1_msg_id
+                else asyncio.sleep(0),
+                safe_edit_caption(
+                    bot,
+                    text,
+                    match.p2_id,
+                    match.p2_msg_id,
+                    reply_markup=timer_finish_keyboard(),
                 )
-            await asyncio.gather(*tasks)
+                if match.p2_msg_id
+                else asyncio.sleep(0),
+            )
         else:
             winner_id, loser_id = (
                 (match.p1_id, match.p2_id)
                 if p1_diff < p2_diff
                 else (match.p2_id, match.p1_id)
             )
-            winner_res, loser_res = (
-                (p1_result, p2_result)
-                if winner_id == match.p1_id
-                else (p2_result, p1_result)
-            )
-
             await db.finish_timer_match(match_id, winner_id=winner_id, new_bank=prize)
 
-            winner_text = LEXICON["timer_win"].format(
-                target_time=f"{match.target_time:.3f}",
-                your_res=f"{winner_res:.3f}",
-                opponent_res=f"{loser_res:.3f}",
-                prize=prize,
-            )
-            loser_text = LEXICON["timer_lose"].format(
-                target_time=f"{match.target_time:.3f}",
-                your_res=f"{loser_res:.3f}",
-                opponent_res=f"{winner_res:.3f}",
-                stake=match.stake,
-            )
-
-            winner_msg_id = (
-                match.p1_msg_id if winner_id == match.p1_id else match.p2_msg_id
-            )
-            loser_msg_id = (
-                match.p2_msg_id if winner_id == match.p1_id else match.p1_msg_id
-            )
-
-            tasks = []
-            if winner_msg_id:
-                tasks.append(
-                    safe_edit_caption(
-                        bot,
-                        winner_text,
-                        winner_id,
-                        winner_msg_id,
-                        reply_markup=timer_finish_keyboard(),
-                    )
+            # Создаем персональные сообщения
+            if winner_id == match.p1_id:
+                # P1 победил
+                p1_text = LEXICON["timer_win"].format(
+                    target_time=f"{match.target_time:.2f}",
+                    p1_res=f"{p1_result:.2f}",
+                    p2_res=f"{p2_result:.2f}",
+                    prize=prize,
                 )
-            if loser_msg_id:
-                tasks.append(
-                    safe_edit_caption(
-                        bot,
-                        loser_text,
-                        loser_id,
-                        loser_msg_id,
-                        reply_markup=timer_finish_keyboard(),
-                    )
+                p2_text = LEXICON["timer_lose"].format(
+                    target_time=f"{match.target_time:.2f}",
+                    p1_res=f"{p2_result:.2f}",
+                    p2_res=f"{p1_result:.2f}",
+                    stake=match.stake,
                 )
-            await asyncio.gather(*tasks)
+            else:
+                # P2 победил
+                p1_text = LEXICON["timer_lose"].format(
+                    target_time=f"{match.target_time:.2f}",
+                    p1_res=f"{p1_result:.2f}",
+                    p2_res=f"{p2_result:.2f}",
+                    stake=match.stake,
+                )
+                p2_text = LEXICON["timer_win"].format(
+                    target_time=f"{match.target_time:.2f}",
+                    p1_res=f"{p2_result:.2f}",
+                    p2_res=f"{p1_result:.2f}",
+                    prize=prize,
+                )
+
+            # Отправляем персональные сообщения
+            await asyncio.gather(
+                safe_edit_caption(
+                    bot,
+                    p1_text,
+                    match.p1_id,
+                    match.p1_msg_id,
+                    reply_markup=timer_finish_keyboard(),
+                )
+                if match.p1_msg_id
+                else asyncio.sleep(0),
+                safe_edit_caption(
+                    bot,
+                    p2_text,
+                    match.p2_id,
+                    match.p2_msg_id,
+                    reply_markup=timer_finish_keyboard(),
+                )
+                if match.p2_msg_id
+                else asyncio.sleep(0),
+            )
 
 
 @router.callback_query(GameCallback.filter((F.name == "timer") & (F.action == "start")))
@@ -334,9 +333,7 @@ async def timer_menu_handler(callback: CallbackQuery, state: FSMContext, bot: Bo
     balance = await db.get_user_balance(callback.from_user.id)
     await safe_edit_caption(
         bot,
-        caption=LEXICON["timer_menu"].format(
-            balance=balance, rake_percent=settings.DUEL_RAKE_PERCENT
-        ),
+        caption=LEXICON["timer_menu"].format(balance=balance),
         chat_id=callback.message.chat.id,
         message_id=callback.message.message_id,
         reply_markup=timer_stake_keyboard(),
@@ -461,7 +458,6 @@ async def stop_timer_handler(
         caption="✅ Ваше время принято! Ожидаем соперника...",
         chat_id=callback.message.chat.id,
         message_id=callback.message.message_id,
-        reply_markup=None,  # Убираем кнопку после нажатия
     )
     await callback.answer()
 

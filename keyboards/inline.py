@@ -42,7 +42,7 @@ def main_menu_keyboard() -> InlineKeyboardMarkup:
     builder = InlineKeyboardBuilder()
     builder.row(
         InlineKeyboardButton(
-            text="🌟 Заработать на хлеб 🌟",
+            text="💰 Заработать",
             callback_data=MenuCallback(name="earn_bread").pack(),
         )
     )
@@ -56,10 +56,10 @@ def main_menu_keyboard() -> InlineKeyboardMarkup:
     )
     builder.row(
         InlineKeyboardButton(
-            text="💸 Вывод", callback_data=MenuCallback(name="gifts").pack()
+            text="🎁 Призы", callback_data=MenuCallback(name="gifts").pack()
         ),
         InlineKeyboardButton(
-            text="📈 Топ игроков",
+            text="🏆 Лидеры",
             callback_data=MenuCallback(name="top_users").pack(),
         ),
     )
@@ -193,8 +193,76 @@ def profile_keyboard() -> InlineKeyboardMarkup:
     )
     builder.row(
         InlineKeyboardButton(
+            text="📊 Мои транзакции",
+            callback_data=UserCallback(action="transactions").pack(),
+        ),
+        InlineKeyboardButton(
+            text="⚡ Челленджи",
+            callback_data=UserCallback(action="daily_challenges").pack(),
+        ),
+    )
+    builder.row(
+        InlineKeyboardButton(
+            text="📱 Контент для репостов",
+            callback_data=UserCallback(action="social_content").pack(),
+        )
+    )
+    builder.row(
+        InlineKeyboardButton(
             text="⬅️ Назад в меню",
             callback_data=MenuCallback(name="main_menu").pack(),
+        )
+    )
+    return builder.as_markup()
+
+
+def back_to_profile_keyboard() -> InlineKeyboardMarkup:
+    """Кнопка 'Назад в профиль'."""
+    builder = InlineKeyboardBuilder()
+    builder.row(
+        InlineKeyboardButton(
+            text="⬅️ Назад в профиль",
+            callback_data=MenuCallback(name="profile").pack(),
+        )
+    )
+    return builder.as_markup()
+
+
+def daily_challenges_keyboard() -> InlineKeyboardMarkup:
+    """Клавиатура для ежедневных челленджей."""
+    builder = InlineKeyboardBuilder()
+    builder.row(
+        InlineKeyboardButton(
+            text="⬅️ Назад в профиль",
+            callback_data=MenuCallback(name="profile").pack(),
+        )
+    )
+    return builder.as_markup()
+
+
+def social_content_keyboard() -> InlineKeyboardMarkup:
+    """Клавиатура для выбора платформы социального контента."""
+    builder = InlineKeyboardBuilder()
+    builder.row(
+        InlineKeyboardButton(
+            text="🎵 TikTok",
+            callback_data=UserCallback(action="tiktok_content").pack(),
+        ),
+        InlineKeyboardButton(
+            text="📸 Instagram",
+            callback_data=UserCallback(action="instagram_content").pack(),
+        ),
+    )
+    builder.row(
+        InlineKeyboardButton(
+            text="📱 Telegram",
+            callback_data=UserCallback(action="telegram_content").pack(),
+        )
+    )
+    builder.row(
+        InlineKeyboardButton(
+            text="⬅️ Назад в профиль",
+            callback_data=MenuCallback(name="profile").pack(),
         )
     )
     return builder.as_markup()
@@ -271,14 +339,29 @@ def gift_confirm_keyboard(item_id: str, cost: int) -> InlineKeyboardMarkup:
 # --- Duel Keyboards ---
 def duel_stake_keyboard() -> InlineKeyboardMarkup:
     builder = InlineKeyboardBuilder()
-    buttons = [
-        InlineKeyboardButton(
-            text=f"{stake} ⭐",
-            callback_data=DuelCallback(action="stake", value=stake).pack(),
+    stake_emojis = ["🪙", "💰", "🔥", "⭐", "💎"]
+
+    buttons = []
+    for i, stake in enumerate(DUEL_STAKES):
+        emoji = stake_emojis[i] if i < len(stake_emojis) else "💰"
+        buttons.append(
+            InlineKeyboardButton(
+                text=f"{emoji} {stake} ⭐",
+                callback_data=DuelCallback(action="stake", value=stake).pack(),
+            )
         )
-        for stake in DUEL_STAKES
-    ]
+
     builder.row(*buttons, width=3)
+    builder.row(
+        InlineKeyboardButton(
+            text="🎓 Обучение",
+            callback_data=GameCallback(name="help", action="duel_tutorial").pack(),
+        ),
+        InlineKeyboardButton(
+            text="📊 Статистика",
+            callback_data=GameCallback(name="help", action="duel_stats").pack(),
+        ),
+    )
     builder.row(
         InlineKeyboardButton(
             text="⬅️ Назад", callback_data=MenuCallback(name="games").pack()
@@ -291,8 +374,14 @@ def duel_searching_keyboard(stake: int) -> InlineKeyboardMarkup:
     builder = InlineKeyboardBuilder()
     builder.row(
         InlineKeyboardButton(
-            text="❌ Отменить поиск",
+            text="⏹️ Отменить поиск",
             callback_data=DuelCallback(action="cancel_search", value=stake).pack(),
+        )
+    )
+    builder.row(
+        InlineKeyboardButton(
+            text="🎓 Как играть?",
+            callback_data=GameCallback(name="help", action="duel_tutorial").pack(),
         )
     )
     return builder.as_markup()
@@ -306,30 +395,44 @@ def duel_game_keyboard(
     can_reroll: bool,
 ) -> InlineKeyboardMarkup:
     builder = InlineKeyboardBuilder()
-    card_buttons = [
-        InlineKeyboardButton(
-            text=f"{card}",
-            callback_data=DuelCallback(
-                action="play", match_id=match_id, value=card
-            ).pack(),
-        )
-        for card in hand
-    ]
-    builder.row(*card_buttons, width=len(hand) or 1)
-    if can_boost:
-        builder.row(
+    # Создаем красивые кнопки для карт с эмодзи
+    card_emojis = ["1️⃣", "2️⃣", "3️⃣", "4️⃣", "5️⃣", "6️⃣", "7️⃣", "8️⃣", "9️⃣", "🔟"]
+    card_buttons = []
+
+    for card in sorted(hand):
+        emoji = card_emojis[card - 1] if card <= 10 else f"{card}"
+        card_buttons.append(
             InlineKeyboardButton(
-                text=f"💥 Усилить ({settings.DUEL_BOOST_COST} ⭐)",
+                text=f"🃏 {emoji}",
+                callback_data=DuelCallback(
+                    action="play", match_id=match_id, value=card
+                ).pack(),
+            )
+        )
+    builder.row(*card_buttons, width=len(hand) or 1)
+    # Кнопки улучшений
+    improvement_buttons = []
+    if can_boost:
+        improvement_buttons.append(
+            InlineKeyboardButton(
+                text=f"⚡ Усилить карту ({settings.DUEL_BOOST_COST} ⭐)",
                 callback_data=DuelCallback(action="boost", match_id=match_id).pack(),
             )
         )
     if can_reroll:
-        builder.row(
+        improvement_buttons.append(
             InlineKeyboardButton(
-                text=f"♻️ Сменить карты ({settings.DUEL_REROLL_COST} ⭐)",
+                text=f"🔄 Новые карты ({settings.DUEL_REROLL_COST} ⭐)",
                 callback_data=DuelCallback(action="reroll", match_id=match_id).pack(),
             )
         )
+
+    if improvement_buttons:
+        if len(improvement_buttons) == 2:
+            builder.row(*improvement_buttons)
+        else:
+            builder.row(improvement_buttons[0])
+
     builder.row(
         InlineKeyboardButton(
             text="🏳️ Сдаться",
@@ -376,13 +479,18 @@ def back_to_duels_keyboard() -> InlineKeyboardMarkup:
 # --- Timer Keyboards ---
 def timer_stake_keyboard() -> InlineKeyboardMarkup:
     builder = InlineKeyboardBuilder()
-    buttons = [
-        InlineKeyboardButton(
-            text=f"{stake} ⭐",
-            callback_data=TimerCallback(action="stake", value=stake).pack(),
+    stake_emojis = ["⏱️", "⚡", "🔥", "🎆", "💎"]
+
+    buttons = []
+    for i, stake in enumerate(TIMER_STAKES):
+        emoji = stake_emojis[i] if i < len(stake_emojis) else "⏱️"
+        buttons.append(
+            InlineKeyboardButton(
+                text=f"{emoji} {stake} ⭐",
+                callback_data=TimerCallback(action="stake", value=stake).pack(),
+            )
         )
-        for stake in TIMER_STAKES
-    ]
+
     builder.row(*buttons, width=3)
     builder.row(
         InlineKeyboardButton(
@@ -396,7 +504,7 @@ def timer_searching_keyboard() -> InlineKeyboardMarkup:
     builder = InlineKeyboardBuilder()
     builder.row(
         InlineKeyboardButton(
-            text="❌ Отменить поиск",
+            text="⏹️ Отменить поиск",
             callback_data=TimerCallback(action="cancel_search").pack(),
         )
     )
@@ -407,7 +515,7 @@ def timer_game_keyboard(match_id: int) -> InlineKeyboardMarkup:
     builder = InlineKeyboardBuilder()
     builder.row(
         InlineKeyboardButton(
-            text="🛑 СТОП",
+            text="🚨 СТОП! 🚨",
             callback_data=TimerCallback(action="stop", match_id=match_id).pack(),
         )
     )

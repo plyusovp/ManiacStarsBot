@@ -1,7 +1,7 @@
 # plyusovp/maniacstarsbot/ManiacStarsBot-4df23ef8bd5b8766acddffe6bca30a128458c7a5/handlers/menu_handler.py
 
 import logging
-import uuid
+import time
 from typing import Optional
 
 from aiogram import Bot, F, Router
@@ -11,9 +11,7 @@ from aiogram.types import CallbackQuery, InputMediaPhoto, Message
 
 from config import settings
 from database import db
-from gifts import GIFTS_CATALOG
 from handlers.utils import (
-    check_subscription,
     clean_junk_message,
     generate_referral_link,
     get_user_info_text,
@@ -21,20 +19,19 @@ from handlers.utils import (
     safe_edit_caption,
     safe_edit_media,
 )
-from keyboards.factories import AchievementCallback, GiftCallback, MenuCallback
+from keyboards.factories import AchievementCallback, MenuCallback
 from keyboards.inline import (
     achievements_keyboard,
     back_to_achievements_keyboard,
     back_to_menu_keyboard,
     games_menu_keyboard,
-    gift_confirm_keyboard,
     gifts_catalog_keyboard,
     main_menu_keyboard,
     profile_keyboard,
     resources_keyboard,
     top_users_keyboard,
 )
-from lexicon.texts import LEXICON, LEXICON_ERRORS
+from lexicon.texts import LEXICON
 
 router = Router()
 logger = logging.getLogger(__name__)
@@ -172,10 +169,14 @@ async def referral_handler(callback: CallbackQuery, state: FSMContext, bot: Bot)
     if callback.message:
         referral_link = generate_referral_link(callback.from_user.id)
         referrals_count = await db.get_referrals_count(callback.from_user.id)
+        # Вычисляем заработанную сумму
+        earned = referrals_count * settings.REFERRAL_BONUS
+
         text = LEXICON["referral_menu"].format(
             ref_link=referral_link,
             invited_count=referrals_count,
             ref_bonus=settings.REFERRAL_BONUS,
+            earned=earned,
         )
         media = InputMediaPhoto(media=settings.PHOTO_EARN_STARS, caption=text)
         await bot.edit_message_media(
@@ -243,97 +244,6 @@ async def gifts_handler(callback: CallbackQuery, state: FSMContext, bot: Bot):
     await callback.answer()
 
 
-@router.callback_query(GiftCallback.filter(F.action == "select"))
-async def select_gift_handler(
-    callback: CallbackQuery, callback_data: GiftCallback, bot: Bot
-):
-    """Handles the selection of a gift and shows the confirmation screen."""
-    item_id = callback_data.item_id
-    cost = callback_data.cost
-
-    gift = next((g for g in GIFTS_CATALOG if g["id"] == item_id), None)
-    if not gift or not callback.message:
-        await callback.answer("Подарок не найден!", show_alert=True)
-        return
-
-    text = LEXICON["gift_confirm"].format(
-        cost=cost,
-        emoji=gift["emoji"],
-        name=gift["name"],
-    )
-
-    await safe_edit_caption(
-        bot=bot,
-        caption=text,
-        chat_id=callback.message.chat.id,
-        message_id=callback.message.message_id,
-        reply_markup=gift_confirm_keyboard(item_id, cost),
-    )
-    await callback.answer()
-
-
-@router.callback_query(GiftCallback.filter(F.action == "confirm"))
-async def confirm_gift_handler(
-    callback: CallbackQuery, callback_data: GiftCallback, bot: Bot, state: FSMContext
-):
-    """Handles the final confirmation and processes the withdrawal request."""
-    if not callback.from_user:
-        return
-    user_id = callback.from_user.id
-    cost = callback_data.cost
-    item_id = callback_data.item_id
-
-    # --- Pre-checks ---
-    errors = []
-    is_admin = user_id in settings.ADMIN_IDS
-
-    if not is_admin:
-        # 1. Subscription check for regular users
-        is_subscribed = await check_subscription(bot, user_id)
-        if not is_subscribed:
-            errors.append(LEXICON_ERRORS["error_not_subscribed"])
-
-        # 2. Referrals check for regular users
-        referrals_count = await db.get_referrals_count(user_id)
-        if referrals_count < settings.MIN_REFERRALS_FOR_WITHDRAW:
-            errors.append(
-                LEXICON_ERRORS["error_not_enough_referrals"].format(
-                    min_refs=settings.MIN_REFERRALS_FOR_WITHDRAW,
-                    current_refs=referrals_count,
-                )
-            )
-
-    # 3. Balance check (for everyone)
-    balance = await db.get_user_balance(user_id)
-    if balance < cost:
-        errors.append("Недостаточно средств на балансе.")
-
-    if errors:
-        error_text = "\n\n".join(errors)
-        await callback.answer(error_text, show_alert=True)
-        return
-
-    # --- Processing ---
-    idem_key = f"reward-{user_id}-{uuid.uuid4()}"
-    result = await db.create_reward_request(user_id, item_id, cost, idem_key)
-
-    if result.get("success"):
-        gift = next((g for g in GIFTS_CATALOG if g["id"] == item_id), None)
-        if gift:
-            success_text = LEXICON["withdrawal_success"].format(
-                emoji=gift["emoji"], name=gift["name"], amount=cost
-            )
-            await callback.answer(success_text, show_alert=True)
-            # Go back to main menu
-            if callback.message:
-                await show_main_menu(
-                    bot, callback.message.chat.id, callback.message.message_id, state
-                )
-    else:
-        reason = result.get("reason", "unknown_error")
-        await callback.answer(f"Ошибка: {reason}. Попробуйте позже.", show_alert=True)
-
-
 @router.callback_query(MenuCallback.filter(F.name == "games"))
 async def games_menu_handler(callback: CallbackQuery, state: FSMContext, bot: Bot):
     """Отображает меню 'Игры'."""
@@ -391,13 +301,85 @@ async def placeholder_game_handler(callback: CallbackQuery):
 
 
 @router.callback_query(MenuCallback.filter(F.name == "passive_income"))
-async def passive_income_handler(callback: CallbackQuery):
+async def passive_income_handler(callback: CallbackQuery, bot: Bot):
     """Обработчик для кнопки пассивного дохода."""
-    text = (
-        "Вы можете разместить реферальную ссылку на нашего бота в описании "
-        "своего профиля и получать 1 ⭐ каждый день.\n\n"
-        "(Функция автоматической проверки находится в разработке)"
-    )
+    if not callback.from_user:
+        return
+
+    user_id = callback.from_user.id
+
+    # Получаем статус пассивного дохода
+    status = await db.get_passive_income_status(user_id)
+
+    # Проверяем, есть ли ссылка в био
+    has_link = await db.check_user_bio_for_bot_link(bot, user_id, settings.BOT_USERNAME)
+
+    if has_link and not status["enabled"]:
+        # Активируем пассивный доход
+        await db.update_passive_income_status(user_id, True)
+        text = (
+            "🎉 **Пассивный доход активирован!**\n\n"
+            "Отлично! Вы разместили ссылку на бота в своем профиле.\n\n"
+            "💰 **Теперь вы будете получать:**\n"
+            "• 1 ⭐ каждый день\n"
+            "• 30 ⭐ в месяц автоматически\n\n"
+            "🔄 Выдача происходит автоматически каждые 24 часа\n"
+            "📩 Вы получите уведомление о начислении\n\n"
+            "⚠️ **Важно:** Не удаляйте ссылку из профиля!"
+        )
+    elif has_link and status["enabled"]:
+        # Пользователь уже активировал, показываем статус
+        current_time = int(time.time())
+        last_income = status["last_income_time"]
+
+        if last_income == 0:
+            text = (
+                "✅ **Пассивный доход активен!**\n\n"
+                "💰 **Ваши доходы:**\n"
+                "• 1 ⭐ каждый день\n"
+                "• 30 ⭐ в месяц автоматически\n\n"
+                "🎁 Первое начисление произойдет в течение 24 часов"
+            )
+        else:
+            time_since_last = current_time - last_income
+            if time_since_last >= 24 * 3600:
+                text = (
+                    "✅ **Пассивный доход активен!**\n\n"
+                    "💰 **Ваши доходы:**\n"
+                    "• 1 ⭐ каждый день\n"
+                    "• 30 ⭐ в месяц автоматически\n\n"
+                    "🎁 Новое начисление готово к выдаче!"
+                )
+            else:
+                hours_left = (24 * 3600 - time_since_last) // 3600
+                minutes_left = ((24 * 3600 - time_since_last) % 3600) // 60
+                text = (
+                    "✅ **Пассивный доход активен!**\n\n"
+                    "💰 **Ваши доходы:**\n"
+                    "• 1 ⭐ каждый день\n"
+                    "• 30 ⭐ в месяц автоматически\n\n"
+                    f"⏰ Следующее начисление через: {hours_left}ч {minutes_left}м"
+                )
+    else:
+        # Ссылки нет в bio или пассивный доход отключен
+        text = (
+            "📈 **Пассивный доход**\n\n"
+            "💰 **Зарабатывайте автоматически:**\n"
+            "• 1 ⭐ каждый день\n"
+            "• 30 ⭐ в месяц пассивно\n\n"
+            "🔗 **Что нужно сделать:**\n"
+            f"Разместите эту ссылку в своем профиле:\n`t.me/{settings.BOT_USERNAME}`\n\n"
+            "📝 **Пошаговая инструкция:**\n"
+            "1. Откройте настройки Telegram\n"
+            "2. Нажмите «Изменить профиль»\n"
+            "3. В поле «О себе» добавьте ссылку\n"
+            "4. Сохраните изменения\n"
+            "5. Вернитесь сюда и нажмите кнопку снова\n\n"
+            "🔄 После активации деньги будут приходить автоматически!\n"
+            "📩 Вы получите уведомление о каждом начислении\n\n"
+            "⚠️ **Важно:** Ссылка должна оставаться в профиле"
+        )
+
     await callback.answer(text, show_alert=True)
 
 
@@ -516,10 +498,10 @@ async def achievement_info_handler(
     status = "✅ Получено" if ach_id in user_achs_set else "❌ Не получено"
 
     text = (
-        f"<b>{details['name']}</b> ({details['rarity']})\n\n"
-        f"<i>{details['description']}</i>\n\n"
-        f"<b>Награда:</b> {details['reward']} ⭐\n"
-        f"<b>Статус:</b> {status}"
+        f"**{details['name']}** ({details['rarity']})\n\n"
+        f"_{details['description']}_\n\n"
+        f"**Награда:** {details['reward']} ⭐\n"
+        f"**Статус:** {status}"
     )
     if callback.message:
         await safe_edit_caption(
