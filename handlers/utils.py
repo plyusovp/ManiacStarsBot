@@ -91,6 +91,11 @@ async def get_user_info_text(user_id: int, for_admin: bool = False) -> str:
 
     referrals_count = await db.get_referrals_count(user_id)
 
+    # Получаем дополнительную информацию
+    level_info = await db.get_user_level_info(user_id)
+    level_name = level_info.get("level_name", "Новичок")
+    streak_days = level_info.get("streak_days", 0)
+
     text = LEXICON["profile"].format(
         user_id=user["user_id"],
         full_name=user["full_name"],
@@ -98,6 +103,8 @@ async def get_user_info_text(user_id: int, for_admin: bool = False) -> str:
         referrals_count=referrals_count,
         duel_wins=user["duel_wins"],
         duel_losses=user["duel_losses"],
+        level_name=level_name,
+        streak_days=streak_days,
         status_text="",
     )
     if for_admin:

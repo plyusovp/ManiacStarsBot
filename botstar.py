@@ -82,7 +82,9 @@ async def main():
 
     storage = MemoryStorage()
 
-    bot = Bot(token=settings.BOT_TOKEN, default=DefaultBotProperties(parse_mode="HTML"))
+    bot = Bot(
+        token=settings.BOT_TOKEN, default=DefaultBotProperties(parse_mode="Markdown")
+    )
 
     dp = Dispatcher(storage=storage)
 
