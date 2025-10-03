@@ -204,7 +204,9 @@ async def social_content_handler(callback: CallbackQuery, state: FSMContext):
 
     text = LEXICON["social_content"]
 
-    media = InputMediaPhoto(media=settings.PHOTO_PROFILE, caption=text, parse_mode=None)
+    media = InputMediaPhoto(
+        media=settings.PHOTO_PROFILE, caption=text, parse_mode="Markdown"
+    )
 
     await safe_edit_media(
         callback.bot,
@@ -228,7 +230,9 @@ async def tiktok_content_handler(callback: CallbackQuery, state: FSMContext):
 
     text = LEXICON["tiktok_content"].format(balance=balance, ref_link=ref_link)
 
-    media = InputMediaPhoto(media=settings.PHOTO_PROFILE, caption=text, parse_mode=None)
+    media = InputMediaPhoto(
+        media=settings.PHOTO_PROFILE, caption=text, parse_mode="Markdown"
+    )
 
     await safe_edit_media(
         callback.bot,
@@ -252,7 +256,9 @@ async def instagram_content_handler(callback: CallbackQuery, state: FSMContext):
 
     text = LEXICON["instagram_content"].format(balance=balance, ref_link=ref_link)
 
-    media = InputMediaPhoto(media=settings.PHOTO_PROFILE, caption=text, parse_mode=None)
+    media = InputMediaPhoto(
+        media=settings.PHOTO_PROFILE, caption=text, parse_mode="Markdown"
+    )
 
     await safe_edit_media(
         callback.bot,
@@ -276,7 +282,9 @@ async def telegram_content_handler(callback: CallbackQuery, state: FSMContext):
 
     text = LEXICON["telegram_content"].format(balance=balance, ref_link=ref_link)
 
-    media = InputMediaPhoto(media=settings.PHOTO_PROFILE, caption=text, parse_mode=None)
+    media = InputMediaPhoto(
+        media=settings.PHOTO_PROFILE, caption=text, parse_mode="Markdown"
+    )
 
     await safe_edit_media(
         callback.bot,
