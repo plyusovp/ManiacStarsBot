@@ -26,6 +26,7 @@ from handlers import (
     slots_handlers,
     timer_handlers,
     user_handlers,
+    webapp_handler,
 )
 from keyboards.reply import get_main_menu_keyboard
 from logger_config import setup_logging
@@ -109,6 +110,7 @@ async def main():
     dp.include_router(basketball_handlers.router)
     dp.include_router(darts_handlers.router)
     dp.include_router(dice_handlers.router)
+    dp.include_router(webapp_handler.router)
 
     # --- ИЗМЕНЕНИЕ: Роутер-ловушка регистрируется ПОСЛЕДНИМ ---
     dp.include_router(debug_handlers.router)
