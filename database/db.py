@@ -1675,7 +1675,8 @@ async def get_bot_statistics() -> Dict[str, int]:
     """Собирает общую статистику по боту."""
     async with connect() as db:
         cursor = await db.execute("SELECT COUNT(user_id) FROM users")
-        total_users = (await cursor.fetchone())[0]
+        result = await cursor.fetchone()
+        total_users = result[0] if result else 0
 
         today_start = datetime.datetime.now().replace(
             hour=0, minute=0, second=0, microsecond=0
@@ -1686,23 +1687,27 @@ async def get_bot_statistics() -> Dict[str, int]:
             "SELECT COUNT(user_id) FROM users WHERE registration_date >= ?",
             (today_start_ts,),
         )
-        new_today = (await cursor.fetchone())[0]
+        result = await cursor.fetchone()
+        new_today = result[0] if result else 0
 
         week_ago_ts = int((today_start - datetime.timedelta(days=7)).timestamp())
         cursor = await db.execute(
             "SELECT COUNT(user_id) FROM users WHERE registration_date >= ?",
             (week_ago_ts,),
         )
-        new_week = (await cursor.fetchone())[0]
+        result = await cursor.fetchone()
+        new_week = result[0] if result else 0
 
         day_ago_ts = int((today_start - datetime.timedelta(days=1)).timestamp())
         cursor = await db.execute(
             "SELECT COUNT(user_id) FROM users WHERE last_seen >= ?", (day_ago_ts,)
         )
-        active_day = (await cursor.fetchone())[0]
+        result = await cursor.fetchone()
+        active_day = result[0] if result else 0
 
         cursor = await db.execute("SELECT SUM(balance) FROM users")
-        total_balance = (await cursor.fetchone())[0] or 0
+        result = await cursor.fetchone()
+        total_balance = (result[0] if result else 0) or 0
 
         return {
             "total_users": total_users,
@@ -1946,7 +1951,8 @@ async def check_daily_challenges(user_id: int) -> List[str]:
                     """,
                     (user_id, datetime.date.today().isoformat()),
                 )
-                if not cursor.fetchone()[0]:
+                result = await cursor.fetchone()
+                if not (result and result[0]):
                     await _change_balance(
                         db, user_id, 1, "daily_challenge", "challenge_1"
                     )
@@ -1962,7 +1968,8 @@ async def check_daily_challenges(user_id: int) -> List[str]:
                     """,
                     (user_id, datetime.date.today().isoformat()),
                 )
-                if not cursor.fetchone()[0]:
+                result = await cursor.fetchone()
+                if not (result and result[0]):
                     await _change_balance(
                         db, user_id, 2, "daily_challenge", "challenge_3"
                     )
@@ -1978,7 +1985,8 @@ async def check_daily_challenges(user_id: int) -> List[str]:
                     """,
                     (user_id, datetime.date.today().isoformat()),
                 )
-                if not cursor.fetchone()[0]:
+                result = await cursor.fetchone()
+                if not (result and result[0]):
                     await _change_balance(
                         db, user_id, 3, "daily_challenge", "challenge_5"
                     )
