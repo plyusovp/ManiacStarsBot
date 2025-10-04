@@ -64,7 +64,7 @@ async def coinflip_stake_selected_handler(
     """Обрабатывает выбор ставки."""
     user_id = callback.from_user.id
     try:
-        if not isinstance(callback_data.value, (int, float)) or not callback.message:
+        if not isinstance(callback_data.value, int) or not callback.message:
             return
 
         stake = int(callback_data.value)

@@ -29,7 +29,7 @@ class CoinflipCallback(CallbackData, prefix="cf"):  # type: ignore
     """Фабрика для действий в игре 'Орёл и Решка'."""
 
     action: str
-    value: Optional[float] = None
+    value: Optional[int] = None
     choice: Optional[str] = None
 
 
@@ -38,8 +38,8 @@ class DuelCallback(CallbackData, prefix="duel"):  # type: ignore
 
     action: str
     match_id: Optional[int] = None
-    value: Optional[float] = None
-    original_value: Optional[float] = None
+    value: Optional[int] = None
+    original_value: Optional[int] = None
     opponent_id: Optional[int] = None
 
 
@@ -48,7 +48,7 @@ class TimerCallback(CallbackData, prefix="timer"):  # type: ignore
 
     action: str
     match_id: Optional[int] = None
-    value: Optional[float] = None
+    value: Optional[int] = None
 
 
 class AdminCallback(CallbackData, prefix="admin"):  # type: ignore
@@ -81,7 +81,7 @@ class SlotsCallback(CallbackData, prefix="slots"):  # type: ignore
     """Фабрика для действий в игре 'Слоты'."""
 
     action: str
-    value: Optional[float] = None
+    value: Optional[int] = None
 
 
 class FootballCallback(CallbackData, prefix="football"):  # type: ignore
