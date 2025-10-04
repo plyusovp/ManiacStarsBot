@@ -8,11 +8,11 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 
 class Settings(BaseSettings):
     # --- Секреты ---
-    BOT_TOKEN: str
-    ADMIN_IDS: List[int]
-    CHANNEL_ID: int
-    PAYLOAD_HMAC_SECRET: str
-    BOT_USERNAME: str
+    BOT_TOKEN: str = ""
+    ADMIN_IDS: List[int] = []
+    CHANNEL_ID: int = 0
+    PAYLOAD_HMAC_SECRET: str = ""
+    BOT_USERNAME: str = ""
 
     @field_validator("ADMIN_IDS", mode="before")
     @classmethod
@@ -31,7 +31,7 @@ class Settings(BaseSettings):
 
     # --- Настройки экономики и игр ---
     INITIAL_BALANCE: int = 0
-    DUEL_RAKE_PERCENT: int
+    DUEL_RAKE_PERCENT: int = 10
     DUEL_BOOST_COST: int = 1
     DUEL_REROLL_COST: int = 2
     REFERRAL_BONUS: int = 5
