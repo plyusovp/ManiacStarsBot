@@ -8,7 +8,7 @@ import json
 import logging
 from typing import Dict, Any
 
-from aiohttp import web, ClientSession
+from aiohttp import web
 from aiohttp.web import Request, Response
 
 from api_withdrawal import create_app_withdrawal_api, get_app_withdrawal_status
@@ -26,10 +26,9 @@ async def create_withdrawal_handler(request: Request) -> Response:
     
     POST /api/withdrawal/create
     Body: {
-        "user_id": int,
         "amount": int,
         "app_transaction_id": str,
-        "signature": str,
+        "initData": str,
         "notes": str (optional)
     }
     """
@@ -38,7 +37,7 @@ async def create_withdrawal_handler(request: Request) -> Response:
         data = await request.json()
         
         # Проверяем обязательные поля
-        required_fields = ["user_id", "amount", "app_transaction_id", "signature"]
+        required_fields = ["amount", "app_transaction_id", "initData"]
         for field in required_fields:
             if field not in data:
                 return web.json_response({
@@ -48,20 +47,12 @@ async def create_withdrawal_handler(request: Request) -> Response:
                 }, status=400)
         
         # Получаем параметры
-        user_id = data["user_id"]
         amount = data["amount"]
         app_transaction_id = data["app_transaction_id"]
-        signature = data["signature"]
+        init_data = data["initData"]
         notes = data.get("notes")
         
         # Валидация данных
-        if not isinstance(user_id, int) or user_id <= 0:
-            return web.json_response({
-                "success": False,
-                "error": "invalid_user_id",
-                "message": "Неверный user_id"
-            }, status=400)
-        
         if not isinstance(amount, int) or amount <= 0:
             return web.json_response({
                 "success": False,
@@ -76,13 +67,19 @@ async def create_withdrawal_handler(request: Request) -> Response:
                 "message": "Неверный app_transaction_id"
             }, status=400)
         
+        if not isinstance(init_data, str) or not init_data:
+            return web.json_response({
+                "success": False,
+                "error": "invalid_init_data",
+                "message": "Неверный initData"
+            }, status=400)
+        
         # Создаем заявку
         result = await create_app_withdrawal_api(
-            user_id=user_id,
             amount=amount,
             app_transaction_id=app_transaction_id,
-            signature=signature,
-            secret_key=settings.PAYLOAD_HMAC_SECRET,
+            init_data=init_data,
+            bot_token=settings.BOT_TOKEN,
             notes=notes
         )
         
@@ -163,9 +160,13 @@ def create_app() -> web.Application:
     return app
 
 
-async def start_server(host: str = "0.0.0.0", port: int = 8080):
+async def start_server(host: str = None, port: int = None):
     """Запускает веб-сервер."""
     app = create_app()
+    
+    # Используем переменные окружения или значения по умолчанию
+    host = host or getattr(settings, 'WEB_SERVER_HOST', '0.0.0.0')
+    port = port or getattr(settings, 'WEB_SERVER_PORT', 8080)
     
     logger.info(f"Запуск сервера на {host}:{port}")
     

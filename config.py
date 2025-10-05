@@ -11,8 +11,11 @@ class Settings(BaseSettings):
     BOT_TOKEN: str = ""
     ADMIN_IDS: List[int] = []
     CHANNEL_ID: int = 0
-    PAYLOAD_HMAC_SECRET: str = ""
     BOT_USERNAME: str = ""
+    
+    # --- Настройки веб-сервера ---
+    WEB_SERVER_HOST: str = "0.0.0.0"
+    WEB_SERVER_PORT: int = 8080
 
     @field_validator("ADMIN_IDS", mode="before")
     @classmethod
