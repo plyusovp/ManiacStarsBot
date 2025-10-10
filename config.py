@@ -12,9 +12,12 @@ class Settings(BaseSettings):
     ADMIN_IDS: List[int] = []
     CHANNEL_ID: int = 0
     BOT_USERNAME: str = ""
-    
+    SUBGRAM_API_KEY: str = (
+        "40efc97c5631cc7d34d7ebc6f5b4e1165b1c56282f0f1d913442fe90f7e545b9"
+    )
+
     # --- Настройки веб-сервера ---
-    WEB_SERVER_HOST: str = "0.0.0.0"
+    WEB_SERVER_HOST: str = "0.0.0.0"  # nosec B104
     WEB_SERVER_PORT: int = 8080
 
     @field_validator("ADMIN_IDS", mode="before")

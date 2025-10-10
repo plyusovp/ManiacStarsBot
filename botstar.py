@@ -11,7 +11,7 @@ from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from config import settings
 from database import db
 
-# --- ИЗМЕНЕНИЕ: Добавлен импорт debug_handlers ---
+# --- ИЗМЕНЕНИЕ: Добавлен импорт debug_handlers и subgram_handlers ---
 from handlers import (
     admin_handlers,
     basketball_handlers,
@@ -24,6 +24,7 @@ from handlers import (
     game_handlers,
     menu_handler,
     slots_handlers,
+    subgram_handlers,
     timer_handlers,
     user_handlers,
     webapp_handler,
@@ -32,6 +33,7 @@ from keyboards.reply import get_main_menu_keyboard
 from logger_config import setup_logging
 from middlewares.error_handler import ErrorHandler
 from middlewares.middlewares import LastSeenMiddleware
+from middlewares.subgram_middleware import SubgramMiddleware
 from middlewares.throttling import ThrottlingMiddleware
 from middlewares.tracing import TracingMiddleware
 from utils.commands import set_bot_commands
@@ -95,9 +97,15 @@ async def main():
     dp.update.outer_middleware(ErrorHandler())
     dp.update.outer_middleware(TracingMiddleware())
     dp.update.outer_middleware(LastSeenMiddleware())
+    dp.update.outer_middleware(
+        SubgramMiddleware(enabled=False)
+    )  # Проверка подписки временно отключена
     dp.update.middleware(ThrottlingMiddleware())
 
     # Регистрируем все основные роутеры
+    dp.include_router(
+        subgram_handlers.router
+    )  # Обработчики подписки (высокий приоритет)
     dp.include_router(user_handlers.router)
     dp.include_router(menu_handler.router)
     dp.include_router(admin_handlers.router)

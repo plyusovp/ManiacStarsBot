@@ -2,12 +2,13 @@
 
 import datetime
 import logging
+import uuid
 
 from aiogram import Bot, F, Router
 from aiogram.filters import Command, CommandStart, StateFilter
 from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import State, StatesGroup
-from aiogram.types import CallbackQuery, ContentType, InputMediaPhoto, Message
+from aiogram.types import CallbackQuery, InputMediaPhoto, Message
 
 from config import settings
 from database import db
@@ -481,5 +482,3 @@ async def get_id(message: Message):
         f"Твой юзернейм: @{username}\n"
         f"ID чата: <code>{chat_id}</code>"
     )
-
-
