@@ -2030,10 +2030,33 @@ async def get_pending_rewards_count() -> int:
 async def approve_reward(
     reward_id: int, admin_id: int, notes: Optional[str] = None
 ) -> bool:
-    """Одобряет заявку."""
+    """Одобряет заявку и начисляет звёзды на баланс пользователя."""
     async with connect() as db:
         try:
             await db.execute("BEGIN IMMEDIATE;")
+
+            # Получаем данные заявки
+            cursor = await db.execute(
+                "SELECT user_id, stars_cost, status FROM rewards WHERE id = ?",
+                (reward_id,),
+            )
+            reward_data = await cursor.fetchone()
+            if not reward_data or reward_data["status"] != "pending":
+                await db.rollback()
+                return False
+
+            user_id = reward_data["user_id"]
+            stars_cost = reward_data["stars_cost"]
+
+            # Начисляем звёзды на баланс пользователя
+            success = await _change_balance(
+                db, user_id, stars_cost, "reward_approval", str(reward_id)
+            )
+            if not success:
+                await db.rollback()
+                return False
+
+            # Обновляем статус заявки
             await _update_reward_status(db, reward_id, "approved", admin_id, notes)
             await db.commit()
             return True

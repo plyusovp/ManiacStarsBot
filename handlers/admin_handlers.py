@@ -276,7 +276,7 @@ async def reward_approve_handler(
             await safe_send_message(
                 bot,
                 reward["user_id"],
-                f"✅ Ваша заявка #{reward_id} на вывод {reward['stars_cost']} ⭐ была одобрена. Скоро с вами свяжутся.",
+                f"Пополнение баланса: +{reward['stars_cost']} звёзды 🌟 (Maniac Clic)",
             )
         await callback.answer("Заявка одобрена.", show_alert=True)
         await rewards_list_handler(
@@ -717,4 +717,3 @@ async def reset_fsm_confirm_handler(callback: CallbackQuery, state: FSMContext):
             reply_markup=admin_back_keyboard(),
         )
     await callback.answer()
-    
