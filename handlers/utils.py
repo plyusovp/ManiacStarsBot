@@ -9,7 +9,7 @@ from aiogram.types import InlineKeyboardMarkup, InputMediaPhoto, Message
 
 from config import settings
 from database import db
-from lexicon.texts import LEXICON
+from lexicon.languages import get_text
 
 logger = logging.getLogger(__name__)
 
@@ -26,16 +26,37 @@ async def safe_send_message(bot: Bot, user_id: int, text: str, **kwargs: Any) ->
     return False
 
 
+def get_safe_media(photo_id: str, caption: str) -> Optional[InputMediaPhoto]:
+    """Возвращает InputMediaPhoto только если photo_id не пустой."""
+    if photo_id and photo_id.strip():
+        return InputMediaPhoto(media=photo_id, caption=caption)
+    return None
+
+
 async def safe_edit_caption(
     bot: Bot,
     caption: str,
     chat_id: Union[int, str],
     message_id: int,
     reply_markup: Optional[InlineKeyboardMarkup] = None,
+    photo: Optional[str] = None,
     **kwargs: Any,
 ) -> Union[Message, bool]:
     """Безопасно изменяет подпись к медиа, с логированием ошибок."""
     try:
+        # Если указана новая картинка, используем edit_message_media
+        if photo:
+            media = get_safe_media(photo, caption)
+            if media:
+                return await bot.edit_message_media(
+                    media=media,
+                    chat_id=chat_id,
+                    message_id=message_id,
+                    reply_markup=reply_markup,
+                    **kwargs,
+                )
+
+        # Иначе просто меняем подпись
         return await bot.edit_message_caption(
             caption=caption,
             chat_id=chat_id,
@@ -87,16 +108,20 @@ async def get_user_info_text(user_id: int, for_admin: bool = False) -> str:
     """Формирует текст с информацией о пользователе."""
     user = await db.get_user(user_id)
     if not user:
-        return "Пользователь не найден."
+        user_language = await db.get_user_language(user_id)
+        return get_text("error_unknown", user_language)
 
     referrals_count = await db.get_referrals_count(user_id)
+    user_language = await db.get_user_language(user_id)
 
     # Получаем дополнительную информацию
     level_info = await db.get_user_level_info(user_id)
     level_name = level_info.get("level_name", "Новичок")
     streak_days = level_info.get("streak_days", 0)
 
-    text = LEXICON["profile"].format(
+    text = get_text(
+        "profile",
+        user_language,
         user_id=user["user_id"],
         full_name=user["full_name"],
         balance=user["balance"],
@@ -123,6 +148,34 @@ async def get_user_info_text(user_id: int, for_admin: bool = False) -> str:
 def generate_referral_link(user_id: int) -> str:
     """Генерирует правильную реферальную ссылку с префиксом ref_."""
     return f"https://t.me/{settings.BOT_USERNAME}?start=ref_{user_id}"
+
+
+def escape_markdown_v1(text: str) -> str:
+    """Экранирует специальные символы Markdown v1 для безопасного отображения."""
+    # Экранируем символы, которые могут вызвать проблемы с парсингом
+    escape_chars = [
+        "_",
+        "*",
+        "[",
+        "]",
+        "(",
+        ")",
+        "~",
+        "`",
+        ">",
+        "#",
+        "+",
+        "-",
+        "=",
+        "|",
+        "{",
+        "}",
+        ".",
+        "!",
+    ]
+    for char in escape_chars:
+        text = text.replace(char, f"\\{char}")
+    return text
 
 
 async def clean_junk_message(state: FSMContext, bot: Bot):

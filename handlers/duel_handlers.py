@@ -337,12 +337,14 @@ async def duel_menu_handler(callback: CallbackQuery, state: FSMContext, bot: Bot
         wins=stats.get("wins", 0),
         losses=stats.get("losses", 0),
     )
+    user_language = await db.get_user_language(callback.from_user.id)
     await safe_edit_caption(
         bot,
         caption,
         callback.message.chat.id,
         callback.message.message_id,
-        reply_markup=duel_stake_keyboard(),
+        reply_markup=duel_stake_keyboard(user_language),
+        photo=settings.PHOTO_DUEL_MENU,
     )
     await callback.answer()
 

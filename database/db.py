@@ -369,6 +369,10 @@ async def init_db() -> None:
                 "ALTER TABLE users ADD COLUMN last_activity_date TEXT DEFAULT NULL"
             )
 
+        if "language" not in columns:
+            logging.info("Adding language field to users table...")
+            await db.execute("ALTER TABLE users ADD COLUMN language TEXT DEFAULT 'ru'")
+
         await db.execute(
             "CREATE INDEX IF NOT EXISTS idx_rewards_user ON rewards (user_id, created_at DESC);"
         )
@@ -2128,3 +2132,27 @@ async def _update_reward_status(
         "INSERT INTO reward_actions (reward_id, admin_id, action, notes) VALUES (?, ?, ?, ?)",
         (reward_id, admin_id, new_status, notes),
     )
+
+
+# --- Language Management Functions ---
+async def get_user_language(user_id: int) -> str:
+    """Получает язык пользователя."""
+    async with connect() as db:
+        cursor = await db.execute(
+            "SELECT language FROM users WHERE user_id = ?", (user_id,)
+        )
+        row = await cursor.fetchone()
+        return row[0] if row and row[0] else "ru"
+
+
+async def set_user_language(user_id: int, language: str) -> bool:
+    """Устанавливает язык пользователя."""
+    if language not in ["ru", "en", "uk", "es"]:
+        return False
+
+    async with connect() as db:
+        cursor = await db.execute(
+            "UPDATE users SET language = ? WHERE user_id = ?", (language, user_id)
+        )
+        await db.commit()
+        return cursor.rowcount > 0

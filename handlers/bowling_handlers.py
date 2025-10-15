@@ -7,6 +7,7 @@ from aiogram import Bot, F, Router
 from aiogram.fsm.context import FSMContext
 from aiogram.types import CallbackQuery, Message
 
+from config import settings
 from database import db
 from handlers.utils import safe_delete, safe_edit_caption
 from keyboards.factories import BowlingCallback, GameCallback
@@ -26,6 +27,7 @@ async def bowling_menu_handler(callback: CallbackQuery, state: FSMContext, bot: 
         return
 
     balance = await db.get_user_balance(callback.from_user.id)
+    user_language = await db.get_user_language(callback.from_user.id)
     text = LEXICON["bowling_menu"].format(balance=balance)
 
     await safe_edit_caption(
@@ -33,7 +35,8 @@ async def bowling_menu_handler(callback: CallbackQuery, state: FSMContext, bot: 
         caption=text,
         chat_id=callback.message.chat.id,
         message_id=callback.message.message_id,
-        reply_markup=bowling_stake_keyboard(),
+        reply_markup=bowling_stake_keyboard(user_language),
+        photo=settings.PHOTO_BOWLING,
     )
     await callback.answer()
 
@@ -54,6 +57,7 @@ async def throw_bowling_handler(
     stake = int(stake_value)
     user_id = callback.from_user.id
     balance = await db.get_user_balance(user_id)
+    user_language = await db.get_user_language(user_id)
 
     if balance < stake:
         await callback.answer("Недостаточно средств для игры.", show_alert=True)
@@ -70,10 +74,11 @@ async def throw_bowling_handler(
         new_balance = await db.get_user_balance(user_id)
         error_text = "Не удалось списать ставку, попробуйте снова."
         menu_text = LEXICON["bowling_menu"].format(balance=new_balance)
-        await bot.send_message(
+        await bot.send_photo(
             user_id,
-            f"{error_text}\n\n{menu_text}",
-            reply_markup=bowling_stake_keyboard(),
+            settings.PHOTO_BOWLING,
+            caption=f"{error_text}\n\n{menu_text}",
+            reply_markup=bowling_stake_keyboard(user_language),
         )
         return
 
@@ -104,4 +109,9 @@ async def throw_bowling_handler(
 
     menu_text = LEXICON["bowling_menu"].format(balance=new_balance)
     final_text = f"{result_text}\n\n{menu_text}"
-    await bot.send_message(user_id, final_text, reply_markup=bowling_stake_keyboard())
+    await bot.send_photo(
+        user_id,
+        settings.PHOTO_BOWLING,
+        caption=final_text,
+        reply_markup=bowling_stake_keyboard(user_language),
+    )

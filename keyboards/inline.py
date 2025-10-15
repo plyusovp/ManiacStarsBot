@@ -2,7 +2,7 @@
 from typing import Optional, Union
 from urllib.parse import quote_plus
 
-from aiogram.types import InlineKeyboardButton, InlineKeyboardMarkup, WebAppInfo
+from aiogram.types import InlineKeyboardButton, InlineKeyboardMarkup
 from aiogram.utils.keyboard import InlineKeyboardBuilder
 
 from config import (
@@ -30,48 +30,63 @@ from keyboards.factories import (
     FootballCallback,
     GameCallback,
     GiftCallback,
+    LanguageCallback,
     MenuCallback,
     SlotsCallback,
     TimerCallback,
     UserCallback,
 )
+from lexicon.languages import get_available_languages
 
 
-def main_menu_keyboard() -> InlineKeyboardMarkup:
+def main_menu_keyboard(language: str = "ru") -> InlineKeyboardMarkup:
     """Генерирует новую клавиатуру главного меню."""
+    from lexicon.languages import get_text
+
     builder = InlineKeyboardBuilder()
     builder.row(
         InlineKeyboardButton(
-            text="💰 Заработать",
+            text="💰 " + get_text("earn_button", language, default="Заработать"),
             callback_data=MenuCallback(name="earn_bread").pack(),
         )
     )
     builder.row(
         InlineKeyboardButton(
-            text="👾 Развлечения", callback_data=MenuCallback(name="games").pack()
+            text="👾 " + get_text("games_button", language, default="Развлечения"),
+            callback_data=MenuCallback(name="games").pack(),
         ),
         InlineKeyboardButton(
-            text="💳 Профиль", callback_data=MenuCallback(name="profile").pack()
+            text="💳 " + get_text("profile_button", language, default="Профиль"),
+            callback_data=MenuCallback(name="profile").pack(),
         ),
     )
     builder.row(
         InlineKeyboardButton(
-            text="🎁 Призы", callback_data=MenuCallback(name="gifts").pack()
+            text="🎁 " + get_text("gifts_button", language, default="Призы"),
+            callback_data=MenuCallback(name="gifts").pack(),
         ),
         InlineKeyboardButton(
-            text="🏆 Лидеры",
+            text="🏆 " + get_text("leaders_button", language, default="Лидеры"),
             callback_data=MenuCallback(name="top_users").pack(),
         ),
     )
     builder.row(
         InlineKeyboardButton(
-            text="🧑‍💻 Наши ресурсы",
+            text="🧑‍💻 "
+            + get_text("resources_button", language, default="Наши ресурсы"),
             callback_data=MenuCallback(name="resources").pack(),
         ),
         InlineKeyboardButton(
-            text="🏆 Достижения",
+            text="🏆 "
+            + get_text("achievements_button", language, default="Достижения"),
             callback_data=MenuCallback(name="achievements").pack(),
         ),
+    )
+    builder.row(
+        InlineKeyboardButton(
+            text="⚙️ " + get_text("settings_button", language, default="Настройки"),
+            callback_data=MenuCallback(name="language_settings").pack(),
+        )
     )
     support_text = quote_plus("Здравствуйте, у меня проблема с ботом, дело в том что..")
     builder.row(
@@ -83,220 +98,247 @@ def main_menu_keyboard() -> InlineKeyboardMarkup:
     return builder.as_markup()
 
 
-def resources_keyboard() -> InlineKeyboardMarkup:
+def resources_keyboard(language: str = "ru") -> InlineKeyboardMarkup:
     """Генерирует клавиатуру для раздела 'Наши ресурсы'."""
+    from lexicon.languages import get_text
+
     builder = InlineKeyboardBuilder()
     builder.row(
-        InlineKeyboardButton(text="Наш канал", url=settings.URL_CHANNEL),
-        InlineKeyboardButton(text="Наш чат", url=settings.URL_CHAT),
-    )
-    builder.row(
-        InlineKeyboardButton(text="Наши выводы", url=settings.URL_WITHDRAWALS),
-        InlineKeyboardButton(text="Наш мануал", url=settings.URL_MANUAL),
+        InlineKeyboardButton(
+            text=get_text("our_channel_button", language, default="Наш канал"),
+            url=settings.URL_CHANNEL,
+        ),
+        InlineKeyboardButton(
+            text=get_text("our_chat_button", language, default="Наш чат"),
+            url=settings.URL_CHAT,
+        ),
     )
     builder.row(
         InlineKeyboardButton(
-            text="⬅️ Назад в меню",
+            text=get_text("our_withdrawals_button", language, default="Наши выводы"),
+            url=settings.URL_WITHDRAWALS,
+        ),
+        InlineKeyboardButton(
+            text=get_text("our_manual_button", language, default="Наш мануал"),
+            url=settings.URL_MANUAL,
+        ),
+    )
+    builder.row(
+        InlineKeyboardButton(
+            text="⬅️ " + get_text("back_to_menu", language),
             callback_data=MenuCallback(name="main_menu").pack(),
         )
     )
     return builder.as_markup()
 
 
-def games_menu_keyboard() -> InlineKeyboardMarkup:
+def games_menu_keyboard(language: str = "ru") -> InlineKeyboardMarkup:
     """Генерирует клавиатуру выбора игр."""
+    from lexicon.languages import get_text
+
     builder = InlineKeyboardBuilder()
     # Наши игры
     builder.row(
         InlineKeyboardButton(
-            text="🃏 Дуэли",
+            text="🃏 " + get_text("duels_button", language, default="Дуэли"),
             callback_data=GameCallback(name="duel", action="start").pack(),
         ),
         InlineKeyboardButton(
-            text="⏱️ Таймер",
+            text="⏱️ " + get_text("timer_button", language, default="Таймер"),
             callback_data=GameCallback(name="timer", action="start").pack(),
         ),
         InlineKeyboardButton(
-            text="🪙Орёл/Решка",
+            text="🪙 " + get_text("coinflip_button", language, default="Орёл/Решка"),
             callback_data=GameCallback(name="coinflip", action="start").pack(),
         ),
     )
     builder.row(
         InlineKeyboardButton(
-            text="🎰 Слоты",
+            text="🎰 " + get_text("slots_button", language, default="Слоты"),
             callback_data=GameCallback(name="slots", action="start").pack(),
         ),
         InlineKeyboardButton(
-            text="⚽️ Футбол",
+            text="⚽️ " + get_text("football_button", language, default="Футбол"),
             callback_data=GameCallback(name="football", action="start").pack(),
         ),
         InlineKeyboardButton(
-            text="🎳 Боулинг",
+            text="🎳 " + get_text("bowling_button", language, default="Боулинг"),
             callback_data=GameCallback(name="bowling", action="start").pack(),
         ),
     )
     builder.row(
         InlineKeyboardButton(
-            text="🏀 Баскетбол",
+            text="🏀 " + get_text("basketball_button", language, default="Баскетбол"),
             callback_data=GameCallback(name="basketball", action="start").pack(),
         ),
         InlineKeyboardButton(
-            text="🎯 Дартс",
+            text="🎯 " + get_text("darts_button", language, default="Дартс"),
             callback_data=GameCallback(name="darts", action="start").pack(),
         ),
         InlineKeyboardButton(
-            text="🎲 Кости",
+            text="🎲 " + get_text("dice_button", language, default="Кости"),
             callback_data=GameCallback(name="dice", action="start").pack(),
         ),
     )
     # Игры-заглушки (теперь их нет)
 
-    # WebApp игра
-    builder.row(
-        InlineKeyboardButton(
-            text="🎮 Maniac Clic Game", web_app=WebAppInfo(url=settings.URL_WEBAPP_GAME)
-        )
-    )
     # Дополнительные кнопки
     builder.row(
         InlineKeyboardButton(
-            text="📈 Пассивный доход",
+            text="📈 "
+            + get_text("passive_income_button", language, default="Пассивный доход"),
             callback_data=MenuCallback(name="passive_income").pack(),
         )
     )
     builder.row(
         InlineKeyboardButton(
-            text="💰 Получить ежедневный бонус",
-            callback_data=MenuCallback(name="get_daily_bonus").pack(),
-        )
-    )
-    builder.row(
-        InlineKeyboardButton(
-            text="⬅️ Назад в меню",
+            text="⬅️ " + get_text("back_to_menu", language),
             callback_data=MenuCallback(name="main_menu").pack(),
         )
     )
     # Управляем количеством кнопок в ряду для красивого отображения
-    builder.adjust(3, 3, 3, 1, 1, 1)
+    builder.adjust(3, 3, 3, 1, 1)
 
     return builder.as_markup()
 
 
 # --- Profile & User Keyboards ---
-def profile_keyboard() -> InlineKeyboardMarkup:
+def profile_keyboard(language: str = "ru") -> InlineKeyboardMarkup:
+    from lexicon.languages import get_text
+
     builder = InlineKeyboardBuilder()
     builder.row(
         InlineKeyboardButton(
-            text="🎁 Активировать промокод",
+            text="🎁 "
+            + get_text(
+                "activate_promo_button", language, default="Активировать промокод"
+            ),
             callback_data=UserCallback(action="enter_promo").pack(),
         )
     )
     builder.row(
         InlineKeyboardButton(
-            text="📊 Мои транзакции",
+            text="📊 "
+            + get_text("my_transactions_button", language, default="Мои транзакции"),
             callback_data=UserCallback(action="transactions").pack(),
         ),
         InlineKeyboardButton(
-            text="⚡ Челленджи",
+            text="⚡ " + get_text("challenges_button", language, default="Челленджи"),
             callback_data=UserCallback(action="daily_challenges").pack(),
         ),
     )
     builder.row(
         InlineKeyboardButton(
-            text="📱 Контент для репостов",
+            text="📱 "
+            + get_text(
+                "social_content_button", language, default="Контент для репостов"
+            ),
             callback_data=UserCallback(action="social_content").pack(),
         )
     )
     builder.row(
         InlineKeyboardButton(
-            text="⬅️ Назад в меню",
+            text="⬅️ " + get_text("back_to_menu", language),
             callback_data=MenuCallback(name="main_menu").pack(),
         )
     )
     return builder.as_markup()
 
 
-def back_to_profile_keyboard() -> InlineKeyboardMarkup:
+def back_to_profile_keyboard(language: str = "ru") -> InlineKeyboardMarkup:
     """Кнопка 'Назад в профиль'."""
+    from lexicon.languages import get_text
+
     builder = InlineKeyboardBuilder()
     builder.row(
         InlineKeyboardButton(
-            text="⬅️ Назад в профиль",
+            text="⬅️ " + get_text("back_to_profile", language),
             callback_data=MenuCallback(name="profile").pack(),
         )
     )
     return builder.as_markup()
 
 
-def daily_challenges_keyboard() -> InlineKeyboardMarkup:
+def daily_challenges_keyboard(language: str = "ru") -> InlineKeyboardMarkup:
     """Клавиатура для ежедневных челленджей."""
+    from lexicon.languages import get_text
+
     builder = InlineKeyboardBuilder()
     builder.row(
         InlineKeyboardButton(
-            text="⬅️ Назад в профиль",
+            text="⬅️ " + get_text("back_to_profile", language),
             callback_data=MenuCallback(name="profile").pack(),
         )
     )
     return builder.as_markup()
 
 
-def social_content_keyboard() -> InlineKeyboardMarkup:
+def social_content_keyboard(language: str = "ru") -> InlineKeyboardMarkup:
     """Клавиатура для выбора платформы социального контента."""
+    from lexicon.languages import get_text
+
     builder = InlineKeyboardBuilder()
     builder.row(
         InlineKeyboardButton(
-            text="🎵 TikTok",
+            text="🎵 " + get_text("tiktok_button", language, default="TikTok"),
             callback_data=UserCallback(action="tiktok_content").pack(),
         ),
         InlineKeyboardButton(
-            text="📸 Instagram",
+            text="📸 " + get_text("instagram_button", language, default="Instagram"),
             callback_data=UserCallback(action="instagram_content").pack(),
         ),
     )
     builder.row(
         InlineKeyboardButton(
-            text="📱 Telegram",
+            text="📱 " + get_text("telegram_button", language, default="Telegram"),
             callback_data=UserCallback(action="telegram_content").pack(),
         )
     )
     builder.row(
         InlineKeyboardButton(
-            text="⬅️ Назад в профиль",
+            text="⬅️ " + get_text("back_to_profile", language),
             callback_data=MenuCallback(name="profile").pack(),
         )
     )
     return builder.as_markup()
 
 
-def back_to_menu_keyboard() -> InlineKeyboardMarkup:
+def back_to_menu_keyboard(language: str = "ru") -> InlineKeyboardMarkup:
     """Универсальная кнопка 'Назад в меню'."""
+    from lexicon.languages import get_text
+
     builder = InlineKeyboardBuilder()
     builder.row(
         InlineKeyboardButton(
-            text="⬅️ Назад в меню",
+            text="⬅️ " + get_text("back_to_menu", language),
             callback_data=MenuCallback(name="main_menu").pack(),
         )
     )
     return builder.as_markup()
 
 
-def promo_back_keyboard() -> InlineKeyboardMarkup:
+def promo_back_keyboard(language: str = "ru") -> InlineKeyboardMarkup:
     """Клавиатура для возврата из ввода промокода."""
+    from lexicon.languages import get_text
+
     builder = InlineKeyboardBuilder()
     builder.row(
         InlineKeyboardButton(
-            text="⬅️ Назад", callback_data=MenuCallback(name="profile").pack()
+            text="⬅️ " + get_text("back_to_profile", language),
+            callback_data=MenuCallback(name="profile").pack(),
         )
     )
     return builder.as_markup()
 
 
-def top_users_keyboard() -> InlineKeyboardMarkup:
-    return back_to_menu_keyboard()
+def top_users_keyboard(language: str = "ru") -> InlineKeyboardMarkup:
+    return back_to_menu_keyboard(language)
 
 
-def gifts_catalog_keyboard() -> InlineKeyboardMarkup:
+def gifts_catalog_keyboard(language: str = "ru") -> InlineKeyboardMarkup:
     """Генерирует клавиатуру с каталогом подарков."""
+    from lexicon.languages import get_text
+
     builder = InlineKeyboardBuilder()
     for gift in GIFTS_CATALOG:
         builder.add(
@@ -310,19 +352,23 @@ def gifts_catalog_keyboard() -> InlineKeyboardMarkup:
     builder.adjust(2)
     builder.row(
         InlineKeyboardButton(
-            text="⬅️ Назад в меню",
+            text="⬅️ " + get_text("back_to_menu", language),
             callback_data=MenuCallback(name="main_menu").pack(),
         )
     )
     return builder.as_markup()
 
 
-def gift_confirm_keyboard(item_id: str, cost: int) -> InlineKeyboardMarkup:
+def gift_confirm_keyboard(
+    item_id: str, cost: int, language: str = "ru"
+) -> InlineKeyboardMarkup:
     """Клавиатура подтверждения вывода подарка."""
+    from lexicon.languages import get_text
+
     builder = InlineKeyboardBuilder()
     builder.row(
         InlineKeyboardButton(
-            text="✅ Подтвердить",
+            text="✅ " + get_text("confirm", language),
             callback_data=GiftCallback(
                 action="confirm", item_id=item_id, cost=cost
             ).pack(),
@@ -330,14 +376,17 @@ def gift_confirm_keyboard(item_id: str, cost: int) -> InlineKeyboardMarkup:
     )
     builder.row(
         InlineKeyboardButton(
-            text="❌ Отмена", callback_data=MenuCallback(name="gifts").pack()
+            text="❌ " + get_text("cancel", language),
+            callback_data=MenuCallback(name="gifts").pack(),
         )
     )
     return builder.as_markup()
 
 
 # --- Duel Keyboards ---
-def duel_stake_keyboard() -> InlineKeyboardMarkup:
+def duel_stake_keyboard(language: str = "ru") -> InlineKeyboardMarkup:
+    from lexicon.languages import get_text
+
     builder = InlineKeyboardBuilder()
     stake_emojis = ["🪙", "💰", "🔥", "⭐", "💎"]
 
@@ -354,33 +403,38 @@ def duel_stake_keyboard() -> InlineKeyboardMarkup:
     builder.row(*buttons, width=3)
     builder.row(
         InlineKeyboardButton(
-            text="🎓 Обучение",
+            text="🎓 " + get_text("training_button", language, default="Обучение"),
             callback_data=GameCallback(name="help", action="duel_tutorial").pack(),
         ),
         InlineKeyboardButton(
-            text="📊 Статистика",
+            text="📊 " + get_text("stats_button", language, default="Статистика"),
             callback_data=GameCallback(name="help", action="duel_stats").pack(),
         ),
     )
     builder.row(
         InlineKeyboardButton(
-            text="⬅️ Назад", callback_data=MenuCallback(name="games").pack()
+            text="⬅️ " + get_text("back_to_games", language, default="Назад"),
+            callback_data=MenuCallback(name="games").pack(),
         )
     )
     return builder.as_markup()
 
 
-def duel_searching_keyboard(stake: int) -> InlineKeyboardMarkup:
+def duel_searching_keyboard(stake: int, language: str = "ru") -> InlineKeyboardMarkup:
+    from lexicon.languages import get_text
+
     builder = InlineKeyboardBuilder()
     builder.row(
         InlineKeyboardButton(
-            text="⏹️ Отменить поиск",
+            text="⏹️ "
+            + get_text("cancel_search_button", language, default="Отменить поиск"),
             callback_data=DuelCallback(action="cancel_search", value=stake).pack(),
         )
     )
     builder.row(
         InlineKeyboardButton(
-            text="🎓 Как играть?",
+            text="🎓 "
+            + get_text("how_to_play_button", language, default="Как играть?"),
             callback_data=GameCallback(name="help", action="duel_tutorial").pack(),
         )
     )
@@ -393,6 +447,7 @@ def duel_game_keyboard(
     opponent_id: int,
     can_boost: bool,
     can_reroll: bool,
+    language: str = "ru",
 ) -> InlineKeyboardMarkup:
     builder = InlineKeyboardBuilder()
     # Создаем красивые кнопки для карт с эмодзи
@@ -411,18 +466,20 @@ def duel_game_keyboard(
         )
     builder.row(*card_buttons, width=len(hand) or 1)
     # Кнопки улучшений
+    from lexicon.languages import get_text
+
     improvement_buttons = []
     if can_boost:
         improvement_buttons.append(
             InlineKeyboardButton(
-                text=f"⚡ Усилить карту ({settings.DUEL_BOOST_COST} ⭐)",
+                text=f"⚡ {get_text('boost_card_button', language, default='Усилить карту')} ({settings.DUEL_BOOST_COST} ⭐)",
                 callback_data=DuelCallback(action="boost", match_id=match_id).pack(),
             )
         )
     if can_reroll:
         improvement_buttons.append(
             InlineKeyboardButton(
-                text=f"🔄 Новые карты ({settings.DUEL_REROLL_COST} ⭐)",
+                text=f"🔄 {get_text('new_cards_button', language, default='Новые карты')} ({settings.DUEL_REROLL_COST} ⭐)",
                 callback_data=DuelCallback(action="reroll", match_id=match_id).pack(),
             )
         )
@@ -435,7 +492,7 @@ def duel_game_keyboard(
 
     builder.row(
         InlineKeyboardButton(
-            text="🏳️ Сдаться",
+            text="🏳️ " + get_text("surrender_button", language, default="Сдаться"),
             callback_data=DuelCallback(
                 action="surrender", match_id=match_id, opponent_id=opponent_id
             ).pack(),
@@ -444,11 +501,15 @@ def duel_game_keyboard(
     return builder.as_markup()
 
 
-def duel_boost_choice_keyboard(match_id: int, hand: list[int]) -> InlineKeyboardMarkup:
+def duel_boost_choice_keyboard(
+    match_id: int, hand: list[int], language: str = "ru"
+) -> InlineKeyboardMarkup:
+    from lexicon.languages import get_text
+
     builder = InlineKeyboardBuilder()
     buttons = [
         InlineKeyboardButton(
-            text=f"Усилить {card}",
+            text=f"{get_text('boost_card_button', language, default='Усилить')} {card}",
             callback_data=DuelCallback(
                 action="boost_confirm", match_id=match_id, value=card
             ).pack(),
@@ -458,18 +519,20 @@ def duel_boost_choice_keyboard(match_id: int, hand: list[int]) -> InlineKeyboard
     builder.row(*buttons, width=3)
     builder.row(
         InlineKeyboardButton(
-            text="❌ Отмена",
+            text="❌ " + get_text("cancel", language),
             callback_data=DuelCallback(action="boost_cancel", match_id=match_id).pack(),
         )
     )
     return builder.as_markup()
 
 
-def back_to_duels_keyboard() -> InlineKeyboardMarkup:
+def back_to_duels_keyboard(language: str = "ru") -> InlineKeyboardMarkup:
+    from lexicon.languages import get_text
+
     builder = InlineKeyboardBuilder()
     builder.add(
         InlineKeyboardButton(
-            text="⬅️ Назад к дуэлям",
+            text="⬅️ " + get_text("back_to_games", language, default="Назад к дуэлям"),
             callback_data=GameCallback(name="duel", action="start").pack(),
         )
     )
@@ -477,7 +540,9 @@ def back_to_duels_keyboard() -> InlineKeyboardMarkup:
 
 
 # --- Timer Keyboards ---
-def timer_stake_keyboard() -> InlineKeyboardMarkup:
+def timer_stake_keyboard(language: str = "ru") -> InlineKeyboardMarkup:
+    from lexicon.languages import get_text
+
     builder = InlineKeyboardBuilder()
     stake_emojis = ["⏱️", "⚡", "🔥", "🎆", "💎"]
 
@@ -494,46 +559,57 @@ def timer_stake_keyboard() -> InlineKeyboardMarkup:
     builder.row(*buttons, width=3)
     builder.row(
         InlineKeyboardButton(
-            text="⬅️ Назад", callback_data=MenuCallback(name="games").pack()
+            text="⬅️ " + get_text("back_to_games", language, default="Назад"),
+            callback_data=MenuCallback(name="games").pack(),
         )
     )
     return builder.as_markup()
 
 
-def timer_searching_keyboard() -> InlineKeyboardMarkup:
+def timer_searching_keyboard(language: str = "ru") -> InlineKeyboardMarkup:
+    from lexicon.languages import get_text
+
     builder = InlineKeyboardBuilder()
     builder.row(
         InlineKeyboardButton(
-            text="⏹️ Отменить поиск",
+            text="⏹️ "
+            + get_text("cancel_search_button", language, default="Отменить поиск"),
             callback_data=TimerCallback(action="cancel_search").pack(),
         )
     )
     return builder.as_markup()
 
 
-def timer_game_keyboard(match_id: int) -> InlineKeyboardMarkup:
+def timer_game_keyboard(match_id: int, language: str = "ru") -> InlineKeyboardMarkup:
+    from lexicon.languages import get_text
+
     builder = InlineKeyboardBuilder()
     builder.row(
         InlineKeyboardButton(
-            text="🚨 СТОП! 🚨",
+            text="🚨 " + get_text("stop_button", language, default="СТОП!") + " 🚨",
             callback_data=TimerCallback(action="stop", match_id=match_id).pack(),
         )
     )
     return builder.as_markup()
 
 
-def timer_finish_keyboard() -> InlineKeyboardMarkup:
+def timer_finish_keyboard(language: str = "ru") -> InlineKeyboardMarkup:
+    from lexicon.languages import get_text
+
     builder = InlineKeyboardBuilder()
     builder.row(
         InlineKeyboardButton(
-            text="⬅️ Назад к играм", callback_data=MenuCallback(name="games").pack()
+            text="⬅️ " + get_text("back_to_games", language, default="Назад к играм"),
+            callback_data=MenuCallback(name="games").pack(),
         )
     )
     return builder.as_markup()
 
 
 # --- Coinflip Keyboards ---
-def coinflip_stake_keyboard() -> InlineKeyboardMarkup:
+def coinflip_stake_keyboard(language: str = "ru") -> InlineKeyboardMarkup:
+    from lexicon.languages import get_text
+
     builder = InlineKeyboardBuilder()
     stakes = [
         InlineKeyboardButton(
@@ -545,55 +621,66 @@ def coinflip_stake_keyboard() -> InlineKeyboardMarkup:
     builder.row(*stakes, width=3)
     builder.row(
         InlineKeyboardButton(
-            text="⬅️ Назад", callback_data=MenuCallback(name="games").pack()
+            text="⬅️ " + get_text("back_to_games", language, default="Назад"),
+            callback_data=MenuCallback(name="games").pack(),
         )
     )
     return builder.as_markup()
 
 
-def coinflip_choice_keyboard() -> InlineKeyboardMarkup:
+def coinflip_choice_keyboard(language: str = "ru") -> InlineKeyboardMarkup:
+    from lexicon.languages import get_text
+
     builder = InlineKeyboardBuilder()
     builder.row(
         InlineKeyboardButton(
-            text="Орёл",
+            text=get_text("heads_button", language, default="Орёл"),
             callback_data=CoinflipCallback(action="choice", choice="орел").pack(),
         ),
         InlineKeyboardButton(
-            text="Решка",
+            text=get_text("tails_button", language, default="Решка"),
             callback_data=CoinflipCallback(action="choice", choice="решка").pack(),
         ),
     )
     return builder.as_markup()
 
 
-def coinflip_continue_keyboard() -> InlineKeyboardMarkup:
+def coinflip_continue_keyboard(language: str = "ru") -> InlineKeyboardMarkup:
+    from lexicon.languages import get_text
+
     builder = InlineKeyboardBuilder()
     builder.row(
         InlineKeyboardButton(
-            text="🎲 Рискнуть!",
+            text="🎲 " + get_text("risk_button", language, default="Рискнуть!"),
             callback_data=CoinflipCallback(action="continue").pack(),
         )
     )
     builder.row(
         InlineKeyboardButton(
-            text="💰 Забрать выигрыш",
+            text="💰 "
+            + get_text("cashout_button", language, default="Забрать выигрыш"),
             callback_data=CoinflipCallback(action="cashout").pack(),
         )
     )
     return builder.as_markup()
 
 
-def coinflip_play_again_keyboard() -> InlineKeyboardMarkup:
+def coinflip_play_again_keyboard(language: str = "ru") -> InlineKeyboardMarkup:
+    from lexicon.languages import get_text
+
     builder = InlineKeyboardBuilder()
     builder.row(
         InlineKeyboardButton(
-            text="🎲 Играть снова",
+            text="🎲 "
+            + get_text("play_again_button", language, default="Играть снова"),
             callback_data=GameCallback(name="coinflip", action="start").pack(),
         )
     )
     builder.row(
         InlineKeyboardButton(
-            text="⬅️ К другим играм", callback_data=MenuCallback(name="games").pack()
+            text="⬅️ "
+            + get_text("to_other_games_button", language, default="К другим играм"),
+            callback_data=MenuCallback(name="games").pack(),
         )
     )
     return builder.as_markup()
@@ -601,7 +688,7 @@ def coinflip_play_again_keyboard() -> InlineKeyboardMarkup:
 
 # --- Achievements Keyboards ---
 def achievements_keyboard(
-    all_achs: list, user_achs: set, page: int, total_pages: int
+    all_achs: list, user_achs: set, page: int, total_pages: int, language: str = "ru"
 ) -> InlineKeyboardMarkup:
     builder = InlineKeyboardBuilder()
     for ach in all_achs:
@@ -633,20 +720,24 @@ def achievements_keyboard(
         )
     if len(nav_buttons) > 1:
         builder.row(*nav_buttons)
+    from lexicon.languages import get_text
+
     builder.row(
         InlineKeyboardButton(
-            text="⬅️ Назад в меню",
+            text="⬅️ " + get_text("back_to_menu", language),
             callback_data=MenuCallback(name="main_menu").pack(),
         )
     )
     return builder.as_markup()
 
 
-def back_to_achievements_keyboard() -> InlineKeyboardMarkup:
+def back_to_achievements_keyboard(language: str = "ru") -> InlineKeyboardMarkup:
+    from lexicon.languages import get_text
+
     builder = InlineKeyboardBuilder()
     builder.row(
         InlineKeyboardButton(
-            text="⬅️ К списку",
+            text="⬅️ " + get_text("back_to_menu", language, default="К списку"),
             callback_data=MenuCallback(name="achievements").pack(),
         )
     )
@@ -919,8 +1010,10 @@ def admin_manage_menu() -> InlineKeyboardMarkup:
 
 
 # --- Slots Keyboards ---
-def slots_stake_keyboard() -> InlineKeyboardMarkup:
+def slots_stake_keyboard(language: str = "ru") -> InlineKeyboardMarkup:
     """Генерирует клавиатуру для выбора ставки в слотах."""
+    from lexicon.languages import get_text
+
     builder = InlineKeyboardBuilder()
     buttons = [
         InlineKeyboardButton(
@@ -932,7 +1025,9 @@ def slots_stake_keyboard() -> InlineKeyboardMarkup:
     builder.row(*buttons, width=4)
     builder.row(
         InlineKeyboardButton(
-            text="⬅️ К другим играм", callback_data=MenuCallback(name="games").pack()
+            text="⬅️ "
+            + get_text("to_other_games_button", language, default="К другим играм"),
+            callback_data=MenuCallback(name="games").pack(),
         )
     )
     return builder.as_markup()
@@ -943,8 +1038,10 @@ def slots_stake_keyboard() -> InlineKeyboardMarkup:
 # ЭТОТ БЛОК НУЖНО ДОБАВИТЬ
 
 
-def football_stake_keyboard() -> InlineKeyboardMarkup:
+def football_stake_keyboard(language: str = "ru") -> InlineKeyboardMarkup:
     """Генерирует клавиатуру для выбора ставки в футболе."""
+    from lexicon.languages import get_text
+
     builder = InlineKeyboardBuilder()
     buttons = [
         InlineKeyboardButton(
@@ -958,14 +1055,18 @@ def football_stake_keyboard() -> InlineKeyboardMarkup:
     # Добавляем кнопку "Назад"
     builder.row(
         InlineKeyboardButton(
-            text="⬅️ К другим играм", callback_data=MenuCallback(name="games").pack()
+            text="⬅️ "
+            + get_text("to_other_games_button", language, default="К другим играм"),
+            callback_data=MenuCallback(name="games").pack(),
         )
     )
     return builder.as_markup()
 
 
-def bowling_stake_keyboard() -> InlineKeyboardMarkup:
+def bowling_stake_keyboard(language: str = "ru") -> InlineKeyboardMarkup:
     """Генерирует клавиатуру для выбора ставки в боулинге."""
+    from lexicon.languages import get_text
+
     builder = InlineKeyboardBuilder()
     buttons = [
         InlineKeyboardButton(
@@ -977,24 +1078,31 @@ def bowling_stake_keyboard() -> InlineKeyboardMarkup:
     builder.row(*buttons, width=4)
     builder.row(
         InlineKeyboardButton(
-            text="⬅️ К другим играм", callback_data=MenuCallback(name="games").pack()
+            text="⬅️ "
+            + get_text("to_other_games_button", language, default="К другим играм"),
+            callback_data=MenuCallback(name="games").pack(),
         )
     )
     return builder.as_markup()
 
 
-def bowling_play_again_keyboard() -> InlineKeyboardMarkup:
+def bowling_play_again_keyboard(language: str = "ru") -> InlineKeyboardMarkup:
     """Генерирует клавиатуру для боулинга с кнопкой 'Играть снова'."""
+    from lexicon.languages import get_text
+
     builder = InlineKeyboardBuilder()
     builder.row(
         InlineKeyboardButton(
-            text="🎳 Играть снова",
+            text="🎳 "
+            + get_text("play_again_button", language, default="Играть снова"),
             callback_data=GameCallback(name="bowling", action="start").pack(),
         )
     )
     builder.row(
         InlineKeyboardButton(
-            text="⬅️ К другим играм", callback_data=MenuCallback(name="games").pack()
+            text="⬅️ "
+            + get_text("to_other_games_button", language, default="К другим играм"),
+            callback_data=MenuCallback(name="games").pack(),
         )
     )
     return builder.as_markup()
@@ -1005,8 +1113,10 @@ def bowling_play_again_keyboard() -> InlineKeyboardMarkup:
 # ЭТОТ БЛОК НУЖНО ДОБАВИТЬ
 
 
-def basketball_stake_keyboard() -> InlineKeyboardMarkup:
+def basketball_stake_keyboard(language: str = "ru") -> InlineKeyboardMarkup:
     """Генерирует клавиатуру для выбора ставки в баскетболе."""
+    from lexicon.languages import get_text
+
     builder = InlineKeyboardBuilder()
     buttons = [
         InlineKeyboardButton(
@@ -1018,7 +1128,9 @@ def basketball_stake_keyboard() -> InlineKeyboardMarkup:
     builder.row(*buttons, width=4)
     builder.row(
         InlineKeyboardButton(
-            text="⬅️ К другим игам", callback_data=MenuCallback(name="games").pack()
+            text="⬅️ "
+            + get_text("to_other_games_button", language, default="К другим играм"),
+            callback_data=MenuCallback(name="games").pack(),
         )
     )
     return builder.as_markup()
@@ -1029,8 +1141,10 @@ def basketball_stake_keyboard() -> InlineKeyboardMarkup:
 # ЭТОТ БЛОК НУЖНО ДОБАВИТЬ
 
 
-def darts_stake_keyboard() -> InlineKeyboardMarkup:
+def darts_stake_keyboard(language: str = "ru") -> InlineKeyboardMarkup:
     """Генерирует клавиатуру для выбора ставки в дартсе."""
+    from lexicon.languages import get_text
+
     builder = InlineKeyboardBuilder()
     buttons = [
         InlineKeyboardButton(
@@ -1042,7 +1156,9 @@ def darts_stake_keyboard() -> InlineKeyboardMarkup:
     builder.row(*buttons, width=4)
     builder.row(
         InlineKeyboardButton(
-            text="⬅️ К другим играм", callback_data=MenuCallback(name="games").pack()
+            text="⬅️ "
+            + get_text("to_other_games_button", language, default="К другим играм"),
+            callback_data=MenuCallback(name="games").pack(),
         )
     )
     return builder.as_markup()
@@ -1051,8 +1167,10 @@ def darts_stake_keyboard() -> InlineKeyboardMarkup:
 # ЭТОТ БЛОК НУЖНО ДОБАВИТЬ ПЕРЕД ФУНКЦИЕЙ ВЫШЕ
 
 
-def dice_stake_keyboard() -> InlineKeyboardMarkup:
+def dice_stake_keyboard(language: str = "ru") -> InlineKeyboardMarkup:
     """Генерирует клавиатуру для выбора ставки в костях."""
+    from lexicon.languages import get_text
+
     builder = InlineKeyboardBuilder()
     buttons = [
         InlineKeyboardButton(
@@ -1064,29 +1182,96 @@ def dice_stake_keyboard() -> InlineKeyboardMarkup:
     builder.row(*buttons, width=4)
     builder.row(
         InlineKeyboardButton(
-            text="⬅️ К другим играм", callback_data=MenuCallback(name="games").pack()
+            text="⬅️ "
+            + get_text("to_other_games_button", language, default="К другим играм"),
+            callback_data=MenuCallback(name="games").pack(),
         )
     )
     return builder.as_markup()
 
 
+# --- Language Selection Keyboards ---
+def language_selection_keyboard() -> InlineKeyboardMarkup:
+    """Генерирует клавиатуру для выбора языка."""
+    builder = InlineKeyboardBuilder()
+    languages = get_available_languages()
+
+    buttons = []
+    for lang_code, lang_name in languages.items():
+        buttons.append(
+            InlineKeyboardButton(
+                text=lang_name,
+                callback_data=LanguageCallback(
+                    action="select", language=lang_code
+                ).pack(),
+            )
+        )
+
+    # Размещаем кнопки по 2 в ряд
+    for i in range(0, len(buttons), 2):
+        row_buttons = buttons[i : i + 2]
+        builder.row(*row_buttons)
+
+    return builder.as_markup()
+
+
+def language_settings_keyboard(current_language: str) -> InlineKeyboardMarkup:
+    """Генерирует клавиатуру настроек языка."""
+    from lexicon.languages import get_text
+
+    builder = InlineKeyboardBuilder()
+
+    # Показываем текущий язык
+    languages = get_available_languages()
+    current_lang_name = languages.get(current_language, "🇷🇺 Русский")
+
+    builder.row(
+        InlineKeyboardButton(text=f"🌍 {current_lang_name}", callback_data="noop")
+    )
+
+    # Кнопка смены языка
+    builder.row(
+        InlineKeyboardButton(
+            text="🔄 "
+            + get_text("change_language", current_language, default="Сменить язык"),
+            callback_data=LanguageCallback(action="change").pack(),
+        )
+    )
+
+    # Кнопка назад
+    builder.row(
+        InlineKeyboardButton(
+            text="⬅️ " + get_text("back_to_menu", current_language),
+            callback_data=MenuCallback(name="main_menu").pack(),
+        )
+    )
+
+    return builder.as_markup()
+
+
 # --- Dice Keyboards ---
-def dice_range_choice_keyboard() -> InlineKeyboardMarkup:
+def dice_range_choice_keyboard(language: str = "ru") -> InlineKeyboardMarkup:
     """Генерирует клавиатуру для игры в кости с выбором диапазона."""
+    from lexicon.languages import get_text
+
     builder = InlineKeyboardBuilder()
     builder.row(
         InlineKeyboardButton(
-            text="🎲 Поставить на 1-3",
+            text="🎲 "
+            + get_text("bet_low_button", language, default="Поставить на 1-3"),
             callback_data=DiceCallback(action="choice", choice="low").pack(),
         ),
         InlineKeyboardButton(
-            text="🎲 Поставить на 4-6",
+            text="🎲 "
+            + get_text("bet_high_button", language, default="Поставить на 4-6"),
             callback_data=DiceCallback(action="choice", choice="high").pack(),
         ),
     )
     builder.row(
         InlineKeyboardButton(
-            text="⬅️ К другим играм", callback_data=MenuCallback(name="games").pack()
+            text="⬅️ "
+            + get_text("to_other_games_button", language, default="К другим играм"),
+            callback_data=MenuCallback(name="games").pack(),
         )
     )
     return builder.as_markup()

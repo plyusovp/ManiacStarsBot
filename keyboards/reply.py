@@ -10,4 +10,7 @@ def get_main_menu_keyboard() -> ReplyKeyboardMarkup:
         KeyboardButton(text="▶️ Старт"),
         KeyboardButton(text="📖 Меню"),
     )
+    builder.row(
+        KeyboardButton(text="⚙️ Настройки"),
+    )
     return builder.as_markup(resize_keyboard=True)

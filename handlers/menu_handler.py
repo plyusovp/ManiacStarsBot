@@ -13,7 +13,9 @@ from config import settings
 from database import db
 from handlers.utils import (
     clean_junk_message,
+    escape_markdown_v1,
     generate_referral_link,
+    get_safe_media,
     get_user_info_text,
     safe_delete,
     safe_edit_caption,
@@ -31,7 +33,7 @@ from keyboards.inline import (
     resources_keyboard,
     top_users_keyboard,
 )
-from lexicon.texts import LEXICON
+from lexicon.languages import get_text
 
 router = Router()
 logger = logging.getLogger(__name__)
@@ -45,8 +47,9 @@ async def show_main_menu(
 ):
     """Отображает или обновляет главное меню."""
     balance = await db.get_user_balance(chat_id)
-    caption = LEXICON["main_menu"].format(balance=balance)
-    media = InputMediaPhoto(media=settings.PHOTO_MAIN_MENU, caption=caption)
+    user_language = await db.get_user_language(chat_id)
+    caption = get_text("main_menu", user_language, balance=balance)
+    media = get_safe_media(settings.PHOTO_MAIN_MENU, caption)
 
     success = False
     if message_id is not None:
@@ -56,7 +59,7 @@ async def show_main_menu(
             media=media,
             chat_id=chat_id,
             message_id=message_id,
-            reply_markup=main_menu_keyboard(),
+            reply_markup=main_menu_keyboard(user_language),
         )
 
     if not success:
@@ -68,14 +71,14 @@ async def show_main_menu(
                 chat_id=chat_id,
                 photo=settings.PHOTO_MAIN_MENU,
                 caption=caption,
-                reply_markup=main_menu_keyboard(),
+                reply_markup=main_menu_keyboard(user_language),
             )
         except Exception as e:
             logger.error(f"Failed to send main menu photo: {e}")
             await bot.send_message(
                 chat_id,
                 caption,
-                reply_markup=main_menu_keyboard(),
+                reply_markup=main_menu_keyboard(user_language),
             )
 
     # Always update the state to reflect the current view
@@ -88,6 +91,17 @@ async def show_main_menu(
 @router.message(F.text == "📖 Меню")
 async def menu_handler(message: Message, state: FSMContext, bot: Bot):
     """Handler for the /menu command and '📖 Меню' button."""
+    if not message.from_user:
+        return
+
+    # Проверяем подписку перед показом меню
+    from handlers.subscription_checker import check_subscription_and_block
+
+    if not await check_subscription_and_block(
+        message, message.from_user.id, message.chat.id
+    ):
+        return  # Пользователь заблокирован, сообщение уже отправлено
+
     if message.chat.type == "private":
         try:
             # Удаляем сообщение пользователя (команду или текст), чтобы чат был чище
@@ -105,6 +119,14 @@ async def bonus_handler(message: Message):
     """Handler for the /bonus command and '🎁 Бонус' button."""
     if not message.from_user:
         return
+
+    # Проверяем подписку перед выдачей бонуса
+    from handlers.subscription_checker import check_subscription_and_block
+
+    if not await check_subscription_and_block(
+        message, message.from_user.id, message.chat.id
+    ):
+        return  # Пользователь заблокирован, сообщение уже отправлено
 
     result = await db.get_daily_bonus(message.from_user.id)
     status = result.get("status")
@@ -132,6 +154,17 @@ async def back_to_main_menu_handler(
     callback: CallbackQuery, state: FSMContext, bot: Bot
 ):
     """Central handler for all 'Back to main menu' buttons."""
+    if not callback.from_user:
+        return
+
+    # Проверяем подписку перед показом главного меню
+    from handlers.subscription_checker import check_subscription_and_block
+
+    if not await check_subscription_and_block(
+        callback, callback.from_user.id, callback.message.chat.id
+    ):
+        return  # Пользователь заблокирован, сообщение уже отправлено
+
     data = await state.get_data()
     # Prevent re-editing if already on the main menu
     if data.get("current_view") == "main_menu":
@@ -149,15 +182,27 @@ async def back_to_main_menu_handler(
 
 @router.callback_query(MenuCallback.filter(F.name == "profile"))
 async def profile_handler(callback: CallbackQuery, state: FSMContext, bot: Bot):
+    if not callback.from_user:
+        return
+
+    # Проверяем подписку перед показом профиля
+    from handlers.subscription_checker import check_subscription_and_block
+
+    if not await check_subscription_and_block(
+        callback, callback.from_user.id, callback.message.chat.id
+    ):
+        return  # Пользователь заблокирован, сообщение уже отправлено
+
     await clean_junk_message(state, bot)
     if callback.message:
         profile_text = await get_user_info_text(callback.from_user.id)
         media = InputMediaPhoto(media=settings.PHOTO_PROFILE, caption=profile_text)
+        user_language = await db.get_user_language(callback.from_user.id)
         await bot.edit_message_media(
             media=media,
             chat_id=callback.message.chat.id,
             message_id=callback.message.message_id,
-            reply_markup=profile_keyboard(),
+            reply_markup=profile_keyboard(user_language),
         )
         await state.update_data(current_view="profile")
     await callback.answer()
@@ -165,15 +210,30 @@ async def profile_handler(callback: CallbackQuery, state: FSMContext, bot: Bot):
 
 @router.callback_query(MenuCallback.filter(F.name == "earn_bread"))
 async def referral_handler(callback: CallbackQuery, state: FSMContext, bot: Bot):
+    if not callback.from_user:
+        return
+
+    # Проверяем подписку перед показом реферального меню
+    from handlers.subscription_checker import check_subscription_and_block
+
+    if not await check_subscription_and_block(
+        callback, callback.from_user.id, callback.message.chat.id
+    ):
+        return  # Пользователь заблокирован, сообщение уже отправлено
+
     await clean_junk_message(state, bot)
     if callback.message:
         referral_link = generate_referral_link(callback.from_user.id)
+        referral_link_escaped = escape_markdown_v1(referral_link)
         referrals_count = await db.get_referrals_count(callback.from_user.id)
         # Вычисляем заработанную сумму
         earned = referrals_count * settings.REFERRAL_BONUS
 
-        text = LEXICON["referral_menu"].format(
-            ref_link=referral_link,
+        user_language = await db.get_user_language(callback.from_user.id)
+        text = get_text(
+            "referral_menu",
+            user_language,
+            ref_link=referral_link_escaped,
             invited_count=referrals_count,
             ref_bonus=settings.REFERRAL_BONUS,
             earned=earned,
@@ -183,7 +243,7 @@ async def referral_handler(callback: CallbackQuery, state: FSMContext, bot: Bot)
             media=media,
             chat_id=callback.message.chat.id,
             message_id=callback.message.message_id,
-            reply_markup=back_to_menu_keyboard(),
+            reply_markup=back_to_menu_keyboard(user_language),
         )
         await state.update_data(current_view="earn_bread")
     await callback.answer()
@@ -203,13 +263,14 @@ async def top_users_handler(callback: CallbackQuery, state: FSMContext, bot: Bot
         else:
             top_users_text = "Пока никто не пригласил друзей."
 
-        text = LEXICON["top_menu"].format(top_users_text=top_users_text)
+        user_language = await db.get_user_language(callback.from_user.id)
+        text = get_text("top_menu", user_language, top_users_text=top_users_text)
         media = InputMediaPhoto(media=settings.PHOTO_TOP, caption=text)
         await bot.edit_message_media(
             media=media,
             chat_id=callback.message.chat.id,
             message_id=callback.message.message_id,
-            reply_markup=top_users_keyboard(),
+            reply_markup=top_users_keyboard(user_language),
         )
         await state.update_data(current_view="top_users")
     await callback.answer()
@@ -217,6 +278,17 @@ async def top_users_handler(callback: CallbackQuery, state: FSMContext, bot: Bot
 
 @router.callback_query(MenuCallback.filter(F.name == "gifts"))
 async def gifts_handler(callback: CallbackQuery, state: FSMContext, bot: Bot):
+    if not callback.from_user:
+        return
+
+    # Проверяем подписку перед показом подарков
+    from handlers.subscription_checker import check_subscription_and_block
+
+    if not await check_subscription_and_block(
+        callback, callback.from_user.id, callback.message.chat.id
+    ):
+        return  # Пользователь заблокирован, сообщение уже отправлено
+
     await state.clear()
     await clean_junk_message(state, bot)
     if not callback.message:
@@ -226,7 +298,10 @@ async def gifts_handler(callback: CallbackQuery, state: FSMContext, bot: Bot):
     balance = await db.get_user_balance(user_id)
     referrals = await db.get_referrals_count(user_id)
 
-    text = LEXICON["gifts_menu"].format(
+    user_language = await db.get_user_language(user_id)
+    text = get_text(
+        "gifts_menu",
+        user_language,
         balance=balance,
         min_refs=settings.MIN_REFERRALS_FOR_WITHDRAW,
         referrals_count=referrals,
@@ -238,7 +313,7 @@ async def gifts_handler(callback: CallbackQuery, state: FSMContext, bot: Bot):
         media=media,
         chat_id=callback.message.chat.id,
         message_id=callback.message.message_id,
-        reply_markup=gifts_catalog_keyboard(),
+        reply_markup=gifts_catalog_keyboard(user_language),
     )
     await state.update_data(current_view="gifts")
     await callback.answer()
@@ -247,10 +322,22 @@ async def gifts_handler(callback: CallbackQuery, state: FSMContext, bot: Bot):
 @router.callback_query(MenuCallback.filter(F.name == "games"))
 async def games_menu_handler(callback: CallbackQuery, state: FSMContext, bot: Bot):
     """Отображает меню 'Игры'."""
+    if not callback.from_user:
+        return
+
+    # Проверяем подписку перед показом игр
+    from handlers.subscription_checker import check_subscription_and_block
+
+    if not await check_subscription_and_block(
+        callback, callback.from_user.id, callback.message.chat.id
+    ):
+        return  # Пользователь заблокирован, сообщение уже отправлено
+
     await state.clear()
     await clean_junk_message(state, bot)
+    user_language = await db.get_user_language(callback.from_user.id)
     media = InputMediaPhoto(
-        media=settings.PHOTO_GAMES_MENU, caption=LEXICON["games_menu"]
+        media=settings.PHOTO_GAMES_MENU, caption=get_text("games_menu", user_language)
     )
     if callback.message:
         await safe_edit_media(
@@ -258,7 +345,7 @@ async def games_menu_handler(callback: CallbackQuery, state: FSMContext, bot: Bo
             media=media,
             chat_id=callback.message.chat.id,
             message_id=callback.message.message_id,
-            reply_markup=games_menu_keyboard(),
+            reply_markup=games_menu_keyboard(user_language),
         )
         await state.update_data(current_view="games")
     await callback.answer()
@@ -276,9 +363,10 @@ async def resources_menu_handler(callback: CallbackQuery, state: FSMContext, bot
 
     chat_id = callback.message.chat.id
     message_id = callback.message.message_id
-    caption = LEXICON["resources_menu"]
-    # Используем фото из раздела выводов
-    media = InputMediaPhoto(media=settings.PHOTO_WITHDRAW, caption=caption)
+    user_language = await db.get_user_language(callback.from_user.id)
+    caption = get_text("resources_menu", user_language)
+    # Используем фото для ресурсов
+    media = InputMediaPhoto(media=settings.PHOTO_RESOURCES, caption=caption)
 
     # Пытаемся изменить существующее сообщение
     await safe_edit_media(
@@ -286,7 +374,7 @@ async def resources_menu_handler(callback: CallbackQuery, state: FSMContext, bot
         media=media,
         chat_id=chat_id,
         message_id=message_id,
-        reply_markup=resources_keyboard(),
+        reply_markup=resources_keyboard(user_language),
     )
 
     await state.update_data(current_view="resources")
@@ -389,6 +477,14 @@ async def get_daily_bonus_callback_handler(callback: CallbackQuery):
     if not callback.from_user:
         return
 
+    # Проверяем подписку перед выдачей бонуса
+    from handlers.subscription_checker import check_subscription_and_block
+
+    if not await check_subscription_and_block(
+        callback, callback.from_user.id, callback.message.chat.id
+    ):
+        return  # Пользователь заблокирован, сообщение уже отправлено
+
     result = await db.get_daily_bonus(callback.from_user.id)
     status = result.get("status")
     if status == "success":
@@ -422,6 +518,17 @@ async def achievements_handler(
     callback: CallbackQuery, state: FSMContext, bot: Bot, callback_data: MenuCallback
 ):
     """Отображает список достижений (первая страница)."""
+    if not callback.from_user:
+        return
+
+    # Проверяем подписку перед показом достижений
+    from handlers.subscription_checker import check_subscription_and_block
+
+    if not await check_subscription_and_block(
+        callback, callback.from_user.id, callback.message.chat.id
+    ):
+        return  # Пользователь заблокирован, сообщение уже отправлено
+
     await clean_junk_message(state, bot)
     user_id = callback.from_user.id
     page = 1

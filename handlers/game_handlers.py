@@ -21,7 +21,7 @@ from keyboards.inline import (
     coinflip_play_again_keyboard,
     coinflip_stake_keyboard,
 )
-from lexicon.texts import LEXICON
+from lexicon.languages import get_text
 
 router = Router()
 logger = logging.getLogger(__name__)
@@ -40,16 +40,15 @@ async def coinflip_menu_handler(
     """Отображает меню выбора ставки для Coinflip."""
     await clean_junk_message(state, bot)
     balance = await db.get_user_balance(callback.from_user.id)
-    text = LEXICON["coinflip_menu"].format(
-        balance=balance, rake_percent=settings.COINFLIP_RAKE_PERCENT
-    )
+    user_language = await db.get_user_language(callback.from_user.id)
+    text = get_text("coinflip_menu", user_language, balance=balance)
     if callback.message:
         await safe_edit_caption(
             bot,
             caption=text,
             chat_id=callback.message.chat.id,
             message_id=callback.message.message_id,
-            reply_markup=coinflip_stake_keyboard(),
+            reply_markup=coinflip_stake_keyboard(user_language),
         )
     await callback.answer()
 
@@ -86,13 +85,14 @@ async def coinflip_stake_selected_handler(
         await state.set_state(CoinflipState.game_in_progress)
         await state.update_data(stake=stake, stage=0, idem_key=idem_key)
 
-        text = LEXICON["coinflip_choice_prompt"].format(stake=stake)
+        user_language = await db.get_user_language(callback.from_user.id)
+        text = get_text("coinflip_choice_prompt", user_language, stake=stake)
         await safe_edit_caption(
             bot,
             text,
             callback.message.chat.id,
             callback.message.message_id,
-            reply_markup=coinflip_choice_keyboard(),
+            reply_markup=coinflip_choice_keyboard(user_language),
         )
         await callback.answer()
 
@@ -124,8 +124,10 @@ async def coinflip_choice_handler(
 
         await callback.answer()
 
+        user_language = await db.get_user_language(callback.from_user.id)
         media = InputMediaPhoto(
-            media=settings.PHOTO_COINFLIP_PROCESS, caption=LEXICON["coinflip_process"]
+            media=settings.PHOTO_COINFLIP_PROCESS,
+            caption=get_text("coinflip_process", user_language),
         )
         await safe_edit_media(
             bot,
@@ -144,7 +146,7 @@ async def coinflip_choice_handler(
                 "Произошла ошибка, данные игры потеряны. Начните заново.",
                 callback.message.chat.id,
                 callback.message.message_id,
-                reply_markup=coinflip_play_again_keyboard(),
+                reply_markup=coinflip_play_again_keyboard(user_language),
             )
             await state.clear()
             return
@@ -187,7 +189,10 @@ async def process_coinflip_result(
             next_stage = COINFLIP_STAGES[next_stage_index]
             next_gross = int(stake * next_stage["multiplier"])
             next_prize = next_gross - int(next_gross * (COINFLIP_RAKE_PERCENT / 100))
-            text = LEXICON["coinflip_continue"].format(
+            user_language = await db.get_user_language(callback.from_user.id)
+            text = get_text(
+                "coinflip_continue",
+                user_language,
                 current_prize=current_prize,
                 next_prize=next_prize,
                 next_chance=next_stage["chance"],
@@ -198,21 +203,24 @@ async def process_coinflip_result(
                 media,
                 callback.message.chat.id,
                 callback.message.message_id,
-                reply_markup=coinflip_continue_keyboard(),
+                reply_markup=coinflip_continue_keyboard(user_language),
             )
         else:
             await cash_out(callback, bot, state)
     else:
         await state.clear()
         new_balance = await db.get_user_balance(user_id)
-        text = LEXICON["coinflip_loss"].format(stake=stake, new_balance=new_balance)
+        user_language = await db.get_user_language(user_id)
+        text = get_text(
+            "coinflip_loss", user_language, stake=stake, new_balance=new_balance
+        )
         media = InputMediaPhoto(media=settings.PHOTO_GAMES_MENU, caption=text)
         await safe_edit_media(
             bot,
             media,
             callback.message.chat.id,
             callback.message.message_id,
-            reply_markup=coinflip_play_again_keyboard(),
+            reply_markup=coinflip_play_again_keyboard(user_language),
         )
 
 
@@ -225,13 +233,14 @@ async def continue_game_handler(callback: CallbackQuery, bot: Bot, state: FSMCon
     if callback.message:
         fsm_data = await state.get_data()
         stake = fsm_data.get("stake", 0)
-        text = LEXICON["coinflip_choice_prompt"].format(stake=stake)
+        user_language = await db.get_user_language(callback.from_user.id)
+        text = get_text("coinflip_choice_prompt", user_language, stake=stake)
         await safe_edit_caption(
             bot,
             text,
             callback.message.chat.id,
             callback.message.message_id,
-            reply_markup=coinflip_choice_keyboard(),
+            reply_markup=coinflip_choice_keyboard(user_language),
         )
 
 
@@ -267,7 +276,10 @@ async def cash_out(callback: CallbackQuery, bot: Bot, state: FSMContext):
     new_balance = await db.get_user_balance(user_id)
     await state.clear()
 
-    text = LEXICON["coinflip_win_final"].format(prize=prize, new_balance=new_balance)
+    user_language = await db.get_user_language(user_id)
+    text = get_text(
+        "coinflip_win_final", user_language, prize=prize, new_balance=new_balance
+    )
     media = InputMediaPhoto(media=settings.PHOTO_GAMES_MENU, caption=text)
 
     await safe_edit_media(
@@ -275,5 +287,5 @@ async def cash_out(callback: CallbackQuery, bot: Bot, state: FSMContext):
         media,
         callback.message.chat.id,
         callback.message.message_id,
-        reply_markup=coinflip_play_again_keyboard(),
+        reply_markup=coinflip_play_again_keyboard(user_language),
     )

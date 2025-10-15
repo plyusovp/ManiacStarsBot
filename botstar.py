@@ -22,6 +22,7 @@ from handlers import (
     duel_handlers,
     football_handlers,
     game_handlers,
+    language_handlers,
     menu_handler,
     slots_handlers,
     subgram_handlers,
@@ -98,8 +99,8 @@ async def main():
     dp.update.outer_middleware(TracingMiddleware())
     dp.update.outer_middleware(LastSeenMiddleware())
     dp.update.outer_middleware(
-        SubgramMiddleware(enabled=False)
-    )  # Проверка подписки временно отключена
+        SubgramMiddleware(enabled=True)
+    )  # Проверка подписки через SubGram включена
     dp.update.middleware(ThrottlingMiddleware())
 
     # Регистрируем все основные роутеры
@@ -107,6 +108,7 @@ async def main():
         subgram_handlers.router
     )  # Обработчики подписки (высокий приоритет)
     dp.include_router(user_handlers.router)
+    dp.include_router(language_handlers.router)  # Обработчики языков
     dp.include_router(menu_handler.router)
     dp.include_router(admin_handlers.router)
     dp.include_router(game_handlers.router)

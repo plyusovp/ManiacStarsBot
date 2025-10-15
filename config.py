@@ -12,9 +12,13 @@ class Settings(BaseSettings):
     ADMIN_IDS: List[int] = []
     CHANNEL_ID: int = 0
     BOT_USERNAME: str = ""
+    # SubGram API настройки
+    # ВАЖНО: Используйте API Key бота, а не Secret Key!
+    # Получите в @subgram_officialbot → Профиль → Скопировать api token
     SUBGRAM_API_KEY: str = (
-        "40efc97c5631cc7d34d7ebc6f5b4e1165b1c56282f0f1d913442fe90f7e545b9"
+        "f042a25b7c52bbabf29b1a9fdcdd8ede7e098b622359ecfa4a1f7dbdefe51e3d"
     )
+    SUBGRAM_BASE_URL: str = "https://api.subgram.org"
 
     # --- Настройки веб-сервера ---
     WEB_SERVER_HOST: str = "0.0.0.0"  # nosec B104
@@ -67,18 +71,27 @@ class Settings(BaseSettings):
     )
 
     # --- Медиа (FILE_ID) ---
-    PHOTO_MAIN_MENU: str = "AgACAgQAAxkBAAIH42jElgmn6BB8_Id-jKc7SwEWjaIxAAKJzzEbKHEhUmI1AAFPzWmoQAEAAwIAA3kAAzYE"
-    PHOTO_GAMES_MENU: str = "AgACAgQAAxkBAAIH5WjEl27FsoitJkCDl_fls8xltAABPwACMcoxG_KCKVK5XWe6RKn9OQEAAwIAA3kAAzYE"
-    PHOTO_WITHDRAW: str = "AgACAgQAAxkBAAIH52jEmQABRRDUNSU5oeleD3mxdoZ34wACNsoxG_KCKVIa4lfrb-fI6QEAAwIAA3kAAzYE"
-    PHOTO_PROFILE: str = "AgACAgQAAxkBAAIH6WjEmTvcYbN-DwMbOyPrpvg0JVdDAAI3yjEb8oIpUufbqS5NjCJ6AQADAgADeQADNgQ"
-    PHOTO_TOP: str = "AgACAgQAAxkBAAIH62jEmV80plSZCho_rs2aF5NoZuJSAAI4yjEb8oIpUmsSCvSg6q-RAQADAgADeQADNgQ"
-    PHOTO_PROMO: str = "AgACAgQAAxkBAAIH7WjEmZyC46umULOyFQ_eaCVEZz6HAAI6yjEb8oIpUnqOncQsYsXlAQADAgADeQADNgQ"
-    PHOTO_EARN_STARS: str = "AgACAgQAAxkBAAIH8WjEmyW1XdLZSG_qd4z-nEfewxUDAAI9yjEb8oIpUvfGPlFenoImAQADAgADeQADNgQ"
-    PHOTO_ACHIEVEMENTS: str = "AgACAgQAAxkBAAIH72jEmf5nIhZVIeyHkl7o4i3PUrV3AAI7yjEb8oIpUi4QwQoZ0aMDAQADAgADeQADNgQ"
-    PHOTO_RESOURCES: str = "AgACAgQAAxkBAAEBRahoxtbkPuDr2vkDniunHd1eDQRjfwACGs8xGyhxIVIL4TQKmD6kGwEAAwIAA3kAAzYE"
-    PHOTO_DUEL_MENU: str = "AgACAgQAAxkBAAEBRbloxtd_hT3U2PWdnDfyISJsQkYS9AACmcsxG4K_IFLOUIM0qh2bfwEAAwIAA3kAAzYE"
-    PHOTO_COINFLIP_MENU: str = "AgACAgQAAxkBAAEBRatoxtb8z0zCYYgYO9AdMkKTi5FwgAACFc8xGyhxIVJz7d0SDKi2oQEAAwIAA3kAAzYE"
-    PHOTO_COINFLIP_PROCESS: str = "AgACAgQAAxkBAAEBRa5oxtcE-LOFVz26ZnIrRx7SZR9WsgACocsxG4K_IFLHLjFwpfluEgEAAwIAA3kAAzYE"
+    # Временно отключены из-за устаревших FILE_ID
+    PHOTO_MAIN_MENU: str = "AgACAgQAAxkBAAMWaO_XnA8cb6rIjtqnR7LzHc__1Y0AAu3NMRv-bIBTH8ueqXIHToUBAAMCAAN5AAM2BA"  # Экран Меню
+    PHOTO_GAMES_MENU: str = "AgACAgQAAxkBAAMZaO_YLHolZAhr5ZaIyFEwYvcHstAAAvDNMRv-bIBTi-DLIQw4zEsBAAMCAAN5AAM2BA"  # Экран игр
+    PHOTO_WITHDRAW: str = "AgACAgQAAxkBAAMbaO_YUU8XDdjTVVCpN5NQ7CXJsIMAAhnPMRsocSFSjTxn5PHCP0UBAAMCAAN5AAM2BA"  # Выводы
+    PHOTO_PROFILE: str = "AgACAgQAAxkBAAMdaO_YZM1N-4I5tLNigYoOzIEtnXIAAmjKMRszgSlRCmv-a9ynyakBAAMCAAN5AAM2BA"  # Профиль
+    PHOTO_TOP: str = "AgACAgQAAxkBAAMgaO_YklSMmZ9huhaWGHxA6smgyX4AAvHNMRv-bIBTKV9195dSTbcBAAMCAAN5AAM2BA"  # Топ игроков
+    PHOTO_PROMO: str = "AgACAgQAAxkBAAMiaO_YxZLZhaKqoEcd64j8B4KR9PQAAmfKMRszgSlRq5z-pGEQtaEBAAMCAAN5AAM2BA"  # Промокоды
+    PHOTO_EARN_STARS: str = "AgACAgQAAxkBAAMlaO_ZBCd2CPKOM3wnrIu0JdsWrh0AAvPNMRv-bIBT7artb4mO1LcBAAMCAAN5AAM2BA"  # Заработок звёзд
+    PHOTO_ACHIEVEMENTS: str = "AgACAgQAAxkBAAMnaO_ZFwfFPHxXyrZodsa4x1F7omkAAvXNMRv-bIBTBT6hK4F5qaIBAAMCAAN5AAM2BA"  # Для достижений
+    PHOTO_RESOURCES: str = "AgACAgQAAxkBAAMzaO_aGuChCXU6wqy2NqvoImpcT-EAAhrPMRsocSFSxgJxCY3RVYIBAAMCAAN5AAM2BA"  # Наши ресурсы
+    PHOTO_DUEL_MENU: str = "AgACAgQAAxkBAAM4aO_aT7kAAd5I-wop6N-FjoFL1t6-AAKZyzEbgr8gUudybv5KTy7IAQADAgADeQADNgQ"  # Дуели
+    PHOTO_COINFLIP_MENU: str = "AgACAgQAAxkBAAM2aO_aOv46SbvkyCoCW5WHpQRkgiEAA84xG_5sgFPObcXgHdkI_wEAAwIAA3kAAzYE"  # Орёл и решка
+    PHOTO_COINFLIP_PROCESS: str = "AgACAgQAAxkBAAM2aO_aOv46SbvkyCoCW5WHpQRkgiEAA84xG_5sgFPObcXgHdkI_wEAAwIAA3kAAzYE"  # Орёл и решка (процесс)
+
+    # --- Фотографии для игр ---
+    PHOTO_FOOTBALL: str = "AgACAgQAAxkBAAMxaO_ZSPuBXvjSJs3RCLa8n4NCK18AAvvNMRv-bIBTkWo3eDwqmmcBAAMCAAN5AAM2BA"  # Для игры футбол
+    PHOTO_BOWLING: str = "AgACAgQAAxkBAAMvaO_ZP65robpokR9dshjBVgRtGpEAAvrNMRv-bIBTjkUAAbhEnUKFAQADAgADeQADNgQ"  # Для боулинга
+    PHOTO_BASKETBALL: str = "AgACAgQAAxkBAAMtaO_ZPNE1M3KCFpkC4XWyfeQhewkAAvnNMRv-bIBT5Mq3WN6cGGkBAAMCAAN5AAM2BA"  # Баскетбол
+    PHOTO_DARTS: str = "AgACAgQAAxkBAAMtaO_ZPNE1M3KCFpkC4XWyfeQhewkAAvnNMRv-bIBT5Mq3WN6cGGkBAAMCAAN5AAM2BA"  # Для дартса (временно используем баскетбол)
+    PHOTO_SLOTS: str = "AgACAgQAAxkBAAMpaO_ZH51uZJCALrclW3WLfW637VMAAvbNMRv-bIBTuKlfSaoFZV8BAAMCAAN5AAM2BA"  # Для слотов
+    PHOTO_DICE: str = "AgACAgQAAxkBAAMnaO_ZFwfFPHxXyrZodsa4x1F7omkAAvXNMRv-bIBTBT6hK4F5qaIBAAMCAAN5AAM2BA"  # Для костей (dice игра)
 
     model_config = SettingsConfigDict(
         env_file=".env", env_file_encoding="utf-8", extra="ignore"

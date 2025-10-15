@@ -13,7 +13,7 @@ from aiogram.types import CallbackQuery, InputMediaPhoto, Message
 from config import settings
 from database import db
 from gifts import GIFTS_CATALOG
-from handlers.utils import check_subscription, safe_edit_caption, safe_edit_media
+from handlers.utils import escape_markdown_v1, safe_edit_caption, safe_edit_media
 from keyboards.factories import GiftCallback, UserCallback
 from keyboards.inline import (
     back_to_menu_keyboard,
@@ -24,7 +24,7 @@ from keyboards.inline import (
     social_content_keyboard,
 )
 from keyboards.reply import get_main_menu_keyboard
-from lexicon.texts import LEXICON, LEXICON_ERRORS
+from lexicon.languages import get_text
 
 logger = logging.getLogger(__name__)
 router = Router()
@@ -43,7 +43,14 @@ async def command_start(message: Message, state: FSMContext):
     user_id = message.from_user.id
     username = message.from_user.username or f"user_{user_id}"
     full_name = message.from_user.full_name
+    chat_id = message.chat.id
     logger.info(f"Получена команда /start от пользователя {user_id} ({username})")
+
+    # Проверяем подписку перед регистрацией
+    from handlers.subscription_checker import check_subscription_and_block
+
+    if not await check_subscription_and_block(message, user_id, chat_id):
+        return  # Пользователь заблокирован, сообщение уже отправлено
 
     args = message.text.split() if message.text else []
     referrer_id = None
@@ -52,6 +59,7 @@ async def command_start(message: Message, state: FSMContext):
         if referrer_id_str.isdigit() and int(referrer_id_str) != user_id:
             referrer_id = int(referrer_id_str)
 
+    # Добавляем пользователя в базу данных
     is_new_user = await db.add_user(user_id, username, full_name, referrer_id)
 
     if is_new_user and referrer_id:
@@ -60,10 +68,15 @@ async def command_start(message: Message, state: FSMContext):
             await db.add_balance_with_checks(
                 referrer_id, settings.REFERRAL_BONUS, "referral_bonus", idem_key
             )
+            # Получаем язык реферера для уведомления
+            referrer_language = await db.get_user_language(referrer_id)
             await message.bot.send_message(
                 referrer_id,
-                LEXICON["referral_success_notification"].format(
-                    bonus=settings.REFERRAL_BONUS, username=username
+                get_text(
+                    "referral_success_notification",
+                    referrer_language,
+                    bonus=settings.REFERRAL_BONUS,
+                    username=username,
                 ),
             )
             logger.info(
@@ -72,28 +85,72 @@ async def command_start(message: Message, state: FSMContext):
         except Exception as e:
             logger.error(f"Не удалось отправить реферальный бонус {referrer_id}: {e}")
 
-    await message.answer(
-        LEXICON["start_message"].format(full_name=message.from_user.full_name),
-        reply_markup=get_main_menu_keyboard(),
-    )
+    # Если это новый пользователь, показываем выбор языка
+    if is_new_user:
+        from keyboards.inline import language_selection_keyboard
+
+        await message.answer(
+            get_text("language_selection", "ru"),  # Показываем на русском по умолчанию
+            reply_markup=language_selection_keyboard(),
+        )
+    else:
+        # Для существующих пользователей показываем обычное приветствие
+        from handlers.menu_handler import show_main_menu
+
+        await show_main_menu(message.bot, message.chat.id, state=state)
 
 
 @router.message(F.text == "▶️ Старт")
 async def text_start(message: Message, state: FSMContext):
     """Обработчик для кнопки '▶️ Старт'."""
+    # Проверка подписки уже встроена в command_start
     await command_start(message, state)
+
+
+@router.message(F.text == "⚙️ Настройки")
+async def settings_handler(message: Message, state: FSMContext):
+    """Обработчик для кнопки настроек."""
+    if not message.from_user:
+        return
+
+    user_id = message.from_user.id
+    user_language = await db.get_user_language(user_id)
+
+    # Показываем настройки языка
+
+    from keyboards.inline import language_settings_keyboard
+    from lexicon.languages import get_language_name
+
+    text = get_text("settings_menu", user_language)
+    current_lang_name = get_language_name(user_language)
+    current_lang_text = get_text(
+        "current_language", user_language, language=current_lang_name
+    )
+
+    full_text = f"{text}\n\n{current_lang_text}"
+
+    await message.answer_photo(
+        photo=settings.PHOTO_PROFILE,
+        caption=full_text,
+        reply_markup=language_settings_keyboard(user_language),
+        parse_mode="Markdown",
+    )
 
 
 @router.callback_query(UserCallback.filter(F.action == "enter_promo"))
 async def enter_promo_handler(callback: CallbackQuery, state: FSMContext):
     await state.set_state(PromoCodeStates.waiting_for_promo_code)
     if callback.message:
-        await safe_edit_caption(
+        user_language = await db.get_user_language(callback.from_user.id)
+        media = InputMediaPhoto(
+            media=settings.PHOTO_PROMO, caption=get_text("promo_prompt", user_language)
+        )
+        await safe_edit_media(
             callback.bot,
-            caption=LEXICON["promo_prompt"],
+            media=media,
             chat_id=callback.message.chat.id,
             message_id=callback.message.message_id,
-            reply_markup=promo_back_keyboard(),
+            reply_markup=promo_back_keyboard(user_language),
         )
     await callback.answer()
 
@@ -108,14 +165,15 @@ async def transactions_handler(callback: CallbackQuery, state: FSMContext):
 
     # Получаем текущий баланс и историю транзакций
     balance = await db.get_user_balance(user_id)
+    user_language = await db.get_user_language(user_id)
     transactions = await db.get_user_transactions_history(user_id, limit=15)
 
     if not transactions:
         # Если транзакций нет
-        text = LEXICON["transactions_empty"].format(balance=balance)
+        text = get_text("transactions_empty", user_language, balance=balance)
     else:
         # Формируем список транзакций
-        text = LEXICON["transactions_title"].format(balance=balance)
+        text = get_text("transactions_title", user_language, balance=balance)
 
         for transaction in transactions:
             # Форматируем дату
@@ -155,7 +213,9 @@ async def transactions_handler(callback: CallbackQuery, state: FSMContext):
             # Переводим причину операции на русский
             reason_text = get_transaction_reason_text(reason)
 
-            text += LEXICON["transaction_item"].format(
+            text += get_text(
+                "transaction_item",
+                user_language,
                 emoji=emoji,
                 amount_text=amount_text,
                 reason_text=reason_text,
@@ -167,30 +227,29 @@ async def transactions_handler(callback: CallbackQuery, state: FSMContext):
         caption=text,
         chat_id=callback.message.chat.id,
         message_id=callback.message.message_id,
-        reply_markup=back_to_profile_keyboard(),
+        reply_markup=back_to_profile_keyboard(user_language),
     )
     await callback.answer()
 
 
 @router.callback_query(UserCallback.filter(F.action == "daily_challenges"))
 async def daily_challenges_handler(callback: CallbackQuery, state: FSMContext):
-    """Обработчик для показа ежедневных челленджей."""
+    """Обработчик для показа ежедневных челленджей (заглушка)."""
     if not callback.from_user or not callback.message:
         return
 
     user_id = callback.from_user.id
+    user_language = await db.get_user_language(user_id)
 
-    # Получаем количество рефералов за сегодня
-    today_referrals = await db.get_daily_referrals_count(user_id)
-
-    text = LEXICON["daily_challenges"].format(today_referrals=today_referrals)
+    # Показываем заглушку вместо реальных челленджей
+    text = get_text("challenges_stub", user_language)
 
     await safe_edit_caption(
         callback.bot,
         caption=text,
         chat_id=callback.message.chat.id,
         message_id=callback.message.message_id,
-        reply_markup=daily_challenges_keyboard(),
+        reply_markup=daily_challenges_keyboard(user_language),
     )
     await callback.answer()
 
@@ -201,7 +260,8 @@ async def social_content_handler(callback: CallbackQuery, state: FSMContext):
     if not callback.from_user or not callback.message:
         return
 
-    text = LEXICON["social_content"]
+    user_language = await db.get_user_language(callback.from_user.id)
+    text = get_text("social_content", user_language)
 
     media = InputMediaPhoto(
         media=settings.PHOTO_PROFILE, caption=text, parse_mode="Markdown"
@@ -212,7 +272,7 @@ async def social_content_handler(callback: CallbackQuery, state: FSMContext):
         media=media,
         chat_id=callback.message.chat.id,
         message_id=callback.message.message_id,
-        reply_markup=social_content_keyboard(),
+        reply_markup=social_content_keyboard(user_language),
     )
     await callback.answer()
 
@@ -224,10 +284,14 @@ async def tiktok_content_handler(callback: CallbackQuery, state: FSMContext):
         return
 
     user_id = callback.from_user.id
+    user_language = await db.get_user_language(user_id)
     balance = await db.get_user_balance(user_id)
     ref_link = f"https://t.me/{settings.BOT_USERNAME}?start=ref_{user_id}"
+    ref_link_escaped = escape_markdown_v1(ref_link)
 
-    text = LEXICON["tiktok_content"].format(balance=balance, ref_link=ref_link)
+    text = get_text(
+        "tiktok_content", user_language, balance=balance, ref_link=ref_link_escaped
+    )
 
     media = InputMediaPhoto(
         media=settings.PHOTO_PROFILE, caption=text, parse_mode="Markdown"
@@ -238,7 +302,7 @@ async def tiktok_content_handler(callback: CallbackQuery, state: FSMContext):
         media=media,
         chat_id=callback.message.chat.id,
         message_id=callback.message.message_id,
-        reply_markup=social_content_keyboard(),
+        reply_markup=social_content_keyboard(user_language),
     )
     await callback.answer()
 
@@ -250,10 +314,14 @@ async def instagram_content_handler(callback: CallbackQuery, state: FSMContext):
         return
 
     user_id = callback.from_user.id
+    user_language = await db.get_user_language(user_id)
     balance = await db.get_user_balance(user_id)
     ref_link = f"https://t.me/{settings.BOT_USERNAME}?start=ref_{user_id}"
+    ref_link_escaped = escape_markdown_v1(ref_link)
 
-    text = LEXICON["instagram_content"].format(balance=balance, ref_link=ref_link)
+    text = get_text(
+        "instagram_content", user_language, balance=balance, ref_link=ref_link_escaped
+    )
 
     media = InputMediaPhoto(
         media=settings.PHOTO_PROFILE, caption=text, parse_mode="Markdown"
@@ -264,7 +332,7 @@ async def instagram_content_handler(callback: CallbackQuery, state: FSMContext):
         media=media,
         chat_id=callback.message.chat.id,
         message_id=callback.message.message_id,
-        reply_markup=social_content_keyboard(),
+        reply_markup=social_content_keyboard(user_language),
     )
     await callback.answer()
 
@@ -276,10 +344,14 @@ async def telegram_content_handler(callback: CallbackQuery, state: FSMContext):
         return
 
     user_id = callback.from_user.id
+    user_language = await db.get_user_language(user_id)
     balance = await db.get_user_balance(user_id)
     ref_link = f"https://t.me/{settings.BOT_USERNAME}?start=ref_{user_id}"
+    ref_link_escaped = escape_markdown_v1(ref_link)
 
-    text = LEXICON["telegram_content"].format(balance=balance, ref_link=ref_link)
+    text = get_text(
+        "telegram_content", user_language, balance=balance, ref_link=ref_link_escaped
+    )
 
     media = InputMediaPhoto(
         media=settings.PHOTO_PROFILE, caption=text, parse_mode="Markdown"
@@ -290,7 +362,7 @@ async def telegram_content_handler(callback: CallbackQuery, state: FSMContext):
         media=media,
         chat_id=callback.message.chat.id,
         message_id=callback.message.message_id,
-        reply_markup=social_content_keyboard(),
+        reply_markup=social_content_keyboard(user_language),
     )
     await callback.answer()
 
@@ -335,8 +407,23 @@ def get_transaction_reason_text(reason: str) -> str:
 
 @router.message(Command("promo"))
 async def promo_command(message: Message, state: FSMContext):
+    if not message.from_user:
+        return
+
+    # Проверяем подписку перед показом промо
+    from handlers.subscription_checker import check_subscription_and_block
+
+    if not await check_subscription_and_block(
+        message, message.from_user.id, message.chat.id
+    ):
+        return  # Пользователь заблокирован, сообщение уже отправлено
+
+    user_language = await db.get_user_language(message.from_user.id)
     await state.set_state(PromoCodeStates.waiting_for_promo_code)
-    await message.answer(LEXICON["promo_prompt"], reply_markup=promo_back_keyboard())
+    await message.answer(
+        get_text("promo_prompt", user_language),
+        reply_markup=promo_back_keyboard(user_language),
+    )
 
 
 @router.message(StateFilter(PromoCodeStates.waiting_for_promo_code), F.text)
@@ -348,16 +435,17 @@ async def process_promo_code(message: Message, state: FSMContext):
     user_id = message.from_user.id
     idem_key = f"promo-{user_id}-{promo_code}-{uuid.uuid4()}"
 
+    user_language = await db.get_user_language(user_id)
     try:
         result = await db.activate_promo(user_id, promo_code, idem_key)
         if isinstance(result, int):
             await message.answer(
-                LEXICON["promo_success"].format(amount=result),
+                get_text("promo_success", user_language, amount=result),
                 reply_markup=get_main_menu_keyboard(),
             )
         else:
             await message.answer(
-                LEXICON["promo_fail"].format(reason=result),
+                get_text("promo_fail", user_language, reason=result),
                 reply_markup=get_main_menu_keyboard(),
             )
     except Exception as e:
@@ -365,7 +453,9 @@ async def process_promo_code(message: Message, state: FSMContext):
             f"Ошибка при обработке промокода '{promo_code}' для пользователя {user_id}: {e}"
         )
         await message.answer(
-            LEXICON["promo_fail"].format(reason="Произошла внутренняя ошибка."),
+            get_text(
+                "promo_fail", user_language, reason="Произошла внутренняя ошибка."
+            ),
             reply_markup=get_main_menu_keyboard(),
         )
 
@@ -386,8 +476,9 @@ async def select_gift_handler(
         await callback.answer("Подарок не найден!", show_alert=True)
         return
 
-    text = LEXICON["gift_confirm"].format(
-        cost=cost, emoji=gift["emoji"], name=gift["name"]
+    user_language = await db.get_user_language(callback.from_user.id)
+    text = get_text(
+        "gift_confirm", user_language, cost=cost, emoji=gift["emoji"], name=gift["name"]
     )
 
     if callback.message:
@@ -419,21 +510,27 @@ async def confirm_gift_handler(
         await callback.answer("У вас недостаточно средств.", show_alert=True)
         return
 
-    # 2. Проверка количества рефералов (пропускаем для админов)
-    if user_id not in settings.ADMIN_IDS:
-        referrals_count = await db.get_referrals_count(user_id)
-        if referrals_count < settings.MIN_REFERRALS_FOR_WITHDRAW:
-            error_text = LEXICON_ERRORS["error_not_enough_referrals"].format(
-                min_refs=settings.MIN_REFERRALS_FOR_WITHDRAW,
-                current_refs=referrals_count,
-            )
-            await callback.answer(error_text, show_alert=True)
-            return
+    # 2. Проверка количества рефералов
+    referrals_count = await db.get_referrals_count(user_id)
+    user_language = await db.get_user_language(user_id)
+    if referrals_count < settings.MIN_REFERRALS_FOR_WITHDRAW:
+        error_text = get_text(
+            "error_not_enough_referrals",
+            user_language,
+            min_refs=settings.MIN_REFERRALS_FOR_WITHDRAW,
+            current_refs=referrals_count,
+        )
+        await callback.answer(error_text, show_alert=True)
+        return
 
-    # 3. Проверка подписки на канал
-    is_subscribed = await check_subscription(bot, user_id)
-    if not is_subscribed:
-        await callback.answer(LEXICON_ERRORS["error_not_subscribed"], show_alert=True)
+    # 3. Проверка подписки на канал через SubGram
+    from handlers.subscription_checker import check_subscription_silent
+
+    if not await check_subscription_silent(user_id, callback.message.chat.id):
+        await callback.answer(
+            "Для вывода необходимо подписаться на каналы. Используйте /start для проверки подписки.",
+            show_alert=True,
+        )
         return
 
     # Все проверки пройдены, создаем заявку
@@ -443,8 +540,12 @@ async def confirm_gift_handler(
     if result.get("success"):
         gift = next((g for g in GIFTS_CATALOG if g["id"] == item_id), None)
         if gift:
-            success_text = LEXICON["withdrawal_success"].format(
-                emoji=gift["emoji"], name=gift["name"], amount=cost
+            success_text = get_text(
+                "withdrawal_success",
+                user_language,
+                emoji=gift["emoji"],
+                name=gift["name"],
+                amount=cost,
             )
             await safe_edit_caption(
                 bot,
@@ -466,14 +567,26 @@ async def cancel_handler(message: Message, state: FSMContext):
     current_state = await state.get_state()
     if current_state is None:
         return
+    user_language = await db.get_user_language(message.from_user.id)
     await state.clear()
-    await message.answer("Действие отменено.", reply_markup=get_main_menu_keyboard())
+    await message.answer(
+        get_text("cancel", user_language), reply_markup=get_main_menu_keyboard()
+    )
 
 
 @router.message(Command("id"))
 async def get_id(message: Message):
     if not message.from_user:
         return
+
+    # Проверяем подписку перед показом ID
+    from handlers.subscription_checker import check_subscription_and_block
+
+    if not await check_subscription_and_block(
+        message, message.from_user.id, message.chat.id
+    ):
+        return  # Пользователь заблокирован, сообщение уже отправлено
+
     user_id = message.from_user.id
     username = message.from_user.username
     chat_id = message.chat.id

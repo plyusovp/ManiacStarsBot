@@ -122,3 +122,10 @@ class DiceCallback(CallbackData, prefix="dice"):  # type: ignore
     choice: Optional[str] = None
     # ИЗМЕНЯЕМ float НА int
     value: Optional[int] = None
+
+
+class LanguageCallback(CallbackData, prefix="lang"):  # type: ignore
+    """Фабрика для действий с языками."""
+
+    action: str
+    language: Optional[str] = None
