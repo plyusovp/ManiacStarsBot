@@ -46,12 +46,7 @@ async def command_start(message: Message, state: FSMContext):
     chat_id = message.chat.id
     logger.info(f"Получена команда /start от пользователя {user_id} ({username})")
 
-    # Проверяем подписку перед регистрацией
-    from handlers.subscription_checker import check_subscription_and_block
-
-    if not await check_subscription_and_block(message, user_id, chat_id):
-        return  # Пользователь заблокирован, сообщение уже отправлено
-
+    # Извлекаем реферальный ID из аргументов
     args = message.text.split() if message.text else []
     referrer_id = None
     if len(args) > 1 and args[1].startswith("ref_"):
@@ -59,13 +54,124 @@ async def command_start(message: Message, state: FSMContext):
         if referrer_id_str.isdigit() and int(referrer_id_str) != user_id:
             referrer_id = int(referrer_id_str)
 
-    # Добавляем пользователя в базу данных
-    is_new_user = await db.add_user(
-        user_id, username, full_name, referrer_id, bot=message.bot
-    )
+    # Проверяем, существует ли пользователь
+    user_exists = await db.user_exists(user_id)
 
-    # Проверяем достижение "Первые шаги" для новых пользователей
+    # Если новый пользователь, регистрируем его БЕЗ проверки подписки (неактивный реферал)
+    if not user_exists:
+        is_new_user = await db.add_user(
+            user_id,
+            username,
+            full_name,
+            referrer_id,
+            bot=message.bot,
+            is_subscribed=False,
+        )
+
+        # Отправляем уведомление рефереру о НЕАКТИВНОМ реферале
+        if is_new_user and referrer_id:
+            try:
+                referrer_language = await db.get_user_language(referrer_id)
+                await message.bot.send_message(
+                    referrer_id,
+                    get_text(
+                        "referral_pending_notification",
+                        referrer_language,
+                        username=username,
+                        ref_bonus=settings.REFERRAL_BONUS,
+                    ),
+                )
+                logger.info(
+                    f"Уведомление о неактивном реферале {user_id} отправлено {referrer_id}"
+                )
+            except Exception as e:
+                logger.error(
+                    f"Не удалось отправить уведомление о неактивном реферале {referrer_id}: {e}"
+                )
+    else:
+        is_new_user = False
+
+    # Проверяем подписку
+    from handlers.subscription_checker import check_subscription_and_block
+
+    if not await check_subscription_and_block(message, user_id, chat_id):
+        return  # Пользователь заблокирован, сообщение уже отправлено
+
+    # Пытаемся активировать реферала (если он неактивен)
+    # Это работает для любого пользователя, не только нового
+    referral_activated = await db.activate_referral(user_id, message.bot)
+
+    if referral_activated:
+        # Получаем информацию о рефере
+        async with db.connect() as conn:
+            cursor = await conn.execute(
+                "SELECT referrer_id FROM referrals WHERE referred_id = ?", (user_id,)
+            )
+            referral_row = await cursor.fetchone()
+            if referral_row:
+                referrer_id = referral_row[0]
+                if referrer_id is None:
+                    logger.warning(f"Referrer ID is None for user {user_id}")
+                    return
+                try:
+                    # Начисляем бонус рефереру
+                    idem_key = f"ref-{user_id}-{referrer_id}"
+                    await db.add_balance_with_checks(
+                        referrer_id, settings.REFERRAL_BONUS, "referral_bonus", idem_key
+                    )
+
+                    # Проверяем достижения реферера
+                    try:
+                        await db.grant_achievement(
+                            referrer_id, "first_referral", message.bot
+                        )
+                    except Exception as e:
+                        logger.warning(
+                            f"Failed to grant first_referral achievement for user {referrer_id}: {e}"
+                        )
+
+                    # Проверяем достижение "Дружелюбный" (5 рефералов)
+                    try:
+                        referrals_count = await db.get_referrals_count(referrer_id)
+                        if referrals_count == 5:
+                            await db.grant_achievement(
+                                referrer_id, "friendly", message.bot
+                            )
+                    except Exception as e:
+                        logger.warning(
+                            f"Failed to grant friendly achievement for user {referrer_id}: {e}"
+                        )
+
+                    # Проверяем все достижения для реферера
+                    try:
+                        await db.check_all_achievements(referrer_id, message.bot)
+                    except Exception as e:
+                        logger.warning(
+                            f"Failed to check all achievements for user {referrer_id}: {e}"
+                        )
+
+                    # Отправляем уведомление об АКТИВАЦИИ реферала
+                    referrer_language = await db.get_user_language(referrer_id)
+                    await message.bot.send_message(
+                        referrer_id,
+                        get_text(
+                            "referral_success_notification",
+                            referrer_language,
+                            bonus=settings.REFERRAL_BONUS,
+                            username=username,
+                        ),
+                    )
+                    logger.info(
+                        f"Реферальный бонус {settings.REFERRAL_BONUS} отправлен {referrer_id} за активацию пользователя {user_id}"
+                    )
+                except Exception as e:
+                    logger.error(
+                        f"Не удалось отправить реферальный бонус {referrer_id}: {e}"
+                    )
+
+    # Если это новый пользователь, показываем выбор языка и даём достижение
     if is_new_user:
+        # Проверяем достижение "Первые шаги" для нового пользователя
         try:
             await db.grant_achievement(user_id, "first_steps", message.bot)
         except Exception as e:
@@ -73,57 +179,7 @@ async def command_start(message: Message, state: FSMContext):
                 f"Failed to grant first_steps achievement for user {user_id}: {e}"
             )
 
-    if is_new_user and referrer_id:
-        try:
-            idem_key = f"ref-{user_id}-{referrer_id}"
-            await db.add_balance_with_checks(
-                referrer_id, settings.REFERRAL_BONUS, "referral_bonus", idem_key
-            )
-            # Проверяем достижение "Первопроходец" для реферера
-            try:
-                await db.grant_achievement(referrer_id, "first_referral", message.bot)
-            except Exception as e:
-                logger.warning(
-                    f"Failed to grant first_referral achievement for user {referrer_id}: {e}"
-                )
-
-            # Проверяем достижение "Дружелюбный" (5 рефералов)
-            try:
-                referrals_count = await db.get_referrals_count(referrer_id)
-                if referrals_count == 5:
-                    await db.grant_achievement(referrer_id, "friendly", message.bot)
-            except Exception as e:
-                logger.warning(
-                    f"Failed to grant friendly achievement for user {referrer_id}: {e}"
-                )
-
-            # Проверяем все достижения для реферера (включая уровни и ежедневные)
-            try:
-                await db.check_all_achievements(referrer_id, message.bot)
-            except Exception as e:
-                logger.warning(
-                    f"Failed to check all achievements for user {referrer_id}: {e}"
-                )
-
-            # Получаем язык реферера для уведомления
-            referrer_language = await db.get_user_language(referrer_id)
-            await message.bot.send_message(
-                referrer_id,
-                get_text(
-                    "referral_success_notification",
-                    referrer_language,
-                    bonus=settings.REFERRAL_BONUS,
-                    username=username,
-                ),
-            )
-            logger.info(
-                f"Реферальный бонус {settings.REFERRAL_BONUS} отправлен {referrer_id} за нового пользователя {user_id}"
-            )
-        except Exception as e:
-            logger.error(f"Не удалось отправить реферальный бонус {referrer_id}: {e}")
-
-    # Если это новый пользователь, показываем выбор языка
-    if is_new_user:
+        # Показываем выбор языка новому пользователю
         from keyboards.inline import language_selection_keyboard
 
         await message.answer(
@@ -133,6 +189,20 @@ async def command_start(message: Message, state: FSMContext):
     else:
         # Для существующих пользователей показываем обычное приветствие
         from handlers.menu_handler import show_main_menu
+        from keyboards.reply import get_main_menu_keyboard
+
+        # Получаем язык пользователя
+        user_language = await db.get_user_language(user_id)
+
+        # Сначала отправляем короткое сообщение с постоянной клавиатурой, чтобы она всегда была видна
+        welcome_texts = {"ru": "👋", "en": "👋", "uk": "👋", "es": "👋"}
+        try:
+            await message.answer(
+                welcome_texts.get(user_language, "👋"),
+                reply_markup=get_main_menu_keyboard(),
+            )
+        except Exception as e:
+            logger.debug(f"Could not send welcome message: {e}")
 
         await show_main_menu(message.bot, message.chat.id, state=state)
 

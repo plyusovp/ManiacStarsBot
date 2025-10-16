@@ -37,8 +37,13 @@ async def select_language_handler(
         language_name = get_language_name(language)
         success_text = get_text("language_changed", language, language=language_name)
 
-        # Отправляем сообщение об успешной смене языка
-        await callback.message.answer(success_text)
+        # Импортируем постоянную клавиатуру
+        from keyboards.reply import get_main_menu_keyboard
+
+        # Отправляем сообщение об успешной смене языка с постоянной клавиатурой
+        await callback.message.answer(
+            success_text, reply_markup=get_main_menu_keyboard()
+        )
 
         # Показываем главное меню на новом языке с фотографией
         from handlers.menu_handler import show_main_menu

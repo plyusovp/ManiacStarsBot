@@ -163,6 +163,8 @@ async def init_db() -> None:
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             referrer_id INTEGER NOT NULL,
             referred_id INTEGER NOT NULL UNIQUE,
+            is_active INTEGER DEFAULT 0,
+            created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
             FOREIGN KEY(referrer_id) REFERENCES users(user_id) ON DELETE CASCADE,
             FOREIGN KEY(referred_id) REFERENCES users(user_id) ON DELETE CASCADE
         )"""
@@ -383,6 +385,22 @@ async def init_db() -> None:
         if "language" not in columns:
             logging.info("Adding language field to users table...")
             await db.execute("ALTER TABLE users ADD COLUMN language TEXT DEFAULT 'ru'")
+
+        # Migration for referrals table
+        cursor = await db.execute("PRAGMA table_info(referrals)")
+        referrals_columns = [row[1] for row in await cursor.fetchall()]
+
+        if "is_active" not in referrals_columns:
+            logging.info("Adding is_active field to referrals table...")
+            await db.execute(
+                "ALTER TABLE referrals ADD COLUMN is_active INTEGER DEFAULT 0"
+            )
+            # Активируем все существующие рефералы (так как они уже прошли подписку)
+            await db.execute("UPDATE referrals SET is_active = 1 WHERE is_active = 0")
+
+        if "created_at" not in referrals_columns:
+            logging.info("Adding created_at field to referrals table...")
+            await db.execute("ALTER TABLE referrals ADD COLUMN created_at DATETIME")
 
         await db.execute(
             "CREATE INDEX IF NOT EXISTS idx_rewards_user ON rewards (user_id, created_at DESC);"
@@ -834,11 +852,18 @@ async def populate_achievements():
 
 
 async def add_user(
-    user_id, username, full_name, referrer_id=None, initial_balance=None, bot=None
+    user_id,
+    username,
+    full_name,
+    referrer_id=None,
+    initial_balance=None,
+    bot=None,
+    is_subscribed=False,
 ):
     """
     Добавляет нового пользователя в базу данных.
     Возвращает True, если пользователь новый, иначе False.
+    is_subscribed - флаг, указывающий прошел ли пользователь проверку подписки
     """
     if initial_balance is None:
         initial_balance = settings.INITIAL_BALANCE
@@ -870,24 +895,27 @@ async def add_user(
                     )
 
                 if referrer_id:
+                    # Всегда добавляем реферала, но устанавливаем is_active в зависимости от подписки
                     await db.execute(
-                        "INSERT OR IGNORE INTO referrals (referrer_id, referred_id) VALUES (?, ?)",
-                        (referrer_id, user_id),
+                        "INSERT OR IGNORE INTO referrals (referrer_id, referred_id, is_active) VALUES (?, ?, ?)",
+                        (referrer_id, user_id, 1 if is_subscribed else 0),
                     )
 
-                    # Обновляем уровень реферера
-                    referrer_referrals = await db.execute(
-                        "SELECT COUNT(*) FROM referrals WHERE referrer_id = ?",
-                        (referrer_id,),
-                    )
-                    referrer_count = (await referrer_referrals.fetchone())[0]
-                    await update_user_level(referrer_id, referrer_count, bot)
+                    # Если пользователь уже подписан, даем бонус и обновляем уровень
+                    if is_subscribed:
+                        # Обновляем уровень реферера
+                        referrer_referrals = await db.execute(
+                            "SELECT COUNT(*) FROM referrals WHERE referrer_id = ? AND is_active = 1",
+                            (referrer_id,),
+                        )
+                        referrer_count = (await referrer_referrals.fetchone())[0]
+                        await update_user_level(referrer_id, referrer_count, bot)
 
-                    # Проверяем ежедневные челленджи
-                    if bot:
-                        await check_daily_challenges(referrer_id, bot)
-                    else:
-                        await check_daily_challenges(referrer_id)
+                        # Проверяем ежедневные челленджи
+                        if bot:
+                            await check_daily_challenges(referrer_id, bot)
+                        else:
+                            await check_daily_challenges(referrer_id)
 
                 await db.commit()
                 return True
@@ -901,6 +929,64 @@ async def add_user(
         except Exception:
             await db.rollback()
             logging.error("Transaction failed in add_user", exc_info=True)
+            return False
+
+
+async def activate_referral(user_id: int, bot=None) -> bool:
+    """
+    Активирует реферала после успешной подписки.
+    Возвращает True, если реферал был активирован, False если он уже был активен или не существует.
+    """
+    async with connect() as db:
+        await db.execute("BEGIN IMMEDIATE;")
+        try:
+            # Проверяем, существует ли неактивный реферал
+            cursor = await db.execute(
+                "SELECT referrer_id, is_active FROM referrals WHERE referred_id = ?",
+                (user_id,),
+            )
+            referral_row = await cursor.fetchone()
+
+            if not referral_row:
+                # Реферала нет в базе
+                await db.rollback()
+                return False
+
+            referrer_id = referral_row[0]
+            is_active = referral_row[1]
+
+            if is_active:
+                # Реферал уже активен
+                await db.rollback()
+                return False
+
+            # Активируем реферала
+            await db.execute(
+                "UPDATE referrals SET is_active = 1 WHERE referred_id = ?",
+                (user_id,),
+            )
+
+            # Обновляем уровень реферера
+            referrer_referrals = await db.execute(
+                "SELECT COUNT(*) FROM referrals WHERE referrer_id = ? AND is_active = 1",
+                (referrer_id,),
+            )
+            referrer_count = (await referrer_referrals.fetchone())[0]
+
+            await db.commit()
+
+            # Вне транзакции обновляем уровень и проверяем челленджи
+            if bot:
+                await update_user_level(referrer_id, referrer_count, bot)
+                await check_daily_challenges(referrer_id, bot)
+            else:
+                await update_user_level(referrer_id, referrer_count, None)
+                await check_daily_challenges(referrer_id, None)
+
+            return True
+        except Exception:
+            await db.rollback()
+            logging.error("Transaction failed in activate_referral", exc_info=True)
             return False
 
 
@@ -930,11 +1016,21 @@ async def get_user_balance(user_id):
 
 
 # ... (The rest of the file remains the same)
-async def get_referrals_count(user_id):
+async def get_referrals_count(user_id, active_only=True):
+    """
+    Получает количество рефералов пользователя.
+    active_only: если True, считает только активных (подписавшихся) рефералов
+    """
     async with connect() as db:
-        cursor = await db.execute(
-            "SELECT COUNT(id) FROM referrals WHERE referrer_id = ?", (user_id,)
-        )
+        if active_only:
+            cursor = await db.execute(
+                "SELECT COUNT(id) FROM referrals WHERE referrer_id = ? AND is_active = 1",
+                (user_id,),
+            )
+        else:
+            cursor = await db.execute(
+                "SELECT COUNT(id) FROM referrals WHERE referrer_id = ?", (user_id,)
+            )
         result = await cursor.fetchone()
         return result[0] if result else 0
 
@@ -945,17 +1041,23 @@ async def get_full_user_info(user_id):
         user_data = await cursor.fetchone()
         if not user_data:
             return None
+        # Получаем всех рефералов (и активных, и неактивных)
         cursor = await db.execute(
-            "SELECT referred_id FROM referrals WHERE referrer_id = ?", (user_id,)
+            "SELECT referred_id, is_active FROM referrals WHERE referrer_id = ?",
+            (user_id,),
         )
-        invited_users = await cursor.fetchall()
+        referrals_data = await cursor.fetchall()
+        invited_users = [
+            {"user_id": i[0], "is_active": bool(i[1])} for i in referrals_data
+        ]
+
         cursor = await db.execute(
             "SELECT code FROM promo_activations WHERE user_id = ?", (user_id,)
         )
         activated_codes = await cursor.fetchall()
         return {
             "user_data": dict(user_data),
-            "invited_users": [i[0] for i in invited_users],
+            "invited_users": invited_users,
             "activated_codes": [c[0] for c in activated_codes],
         }
 
@@ -967,6 +1069,7 @@ async def get_top_referrers(limit=5):
             SELECT u.full_name, COUNT(r.referred_id) as ref_count
             FROM referrals r
             JOIN users u ON r.referrer_id = u.user_id
+            WHERE r.is_active = 1
             GROUP BY r.referrer_id, u.full_name
             ORDER BY ref_count DESC
             LIMIT ?
@@ -2202,14 +2305,14 @@ async def update_user_streak(user_id: int, bot: Bot = None) -> bool:
 
 # --- Daily Challenges System ---
 async def get_daily_referrals_count(user_id: int) -> int:
-    """Получает количество рефералов за сегодня."""
+    """Получает количество активных рефералов за сегодня."""
     async with connect() as db:
         today = datetime.date.today().isoformat()
         cursor = await db.execute(
             """
             SELECT COUNT(*) FROM referrals r
             JOIN users u ON r.referred_id = u.user_id
-            WHERE r.referrer_id = ? AND DATE(u.created_at) = ?
+            WHERE r.referrer_id = ? AND r.is_active = 1 AND DATE(u.created_at) = ?
             """,
             (user_id, today),
         )

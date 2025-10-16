@@ -33,6 +33,7 @@ MULTILINGUAL_TEXTS = {
         "`{ref_link}`\n\n"
         "✅ **Приглашено:** {invited_count} чел.\n"
         "📊 **Заработано:** {earned} ⭐",
+        "referral_pending_notification": "⏳ @{username} перешел по вашей реферальной ссылке, но еще не подписался на каналы. Как только подпишется, вы получите +{ref_bonus} ⭐!",
         "referral_success_notification": "{username} присоединился по вашей ссылке! Вам начислено +{bonus} ⭐.",
         "top_menu": "🏆 **Лидеры по рефералам** 🏆\n\n{top_users_text}",
         "gifts_menu": "🎁 **Призы** 🎁\n\n"
@@ -274,6 +275,7 @@ MULTILINGUAL_TEXTS = {
         "`{ref_link}`\n\n"
         "✅ **Invited:** {invited_count} people\n"
         "📊 **Earned:** {earned} ⭐",
+        "referral_pending_notification": "⏳ @{username} followed your referral link, but hasn't subscribed to channels yet. Once they subscribe, you'll receive +{ref_bonus} ⭐!",
         "referral_success_notification": "{username} joined via your link! You received +{bonus} ⭐.",
         "top_menu": "🏆 **Referral Leaders** 🏆\n\n{top_users_text}",
         "gifts_menu": "🎁 **Prizes** 🎁\n\n"
@@ -515,6 +517,7 @@ MULTILINGUAL_TEXTS = {
         "`{ref_link}`\n\n"
         "✅ **Запрошено:** {invited_count} осіб\n"
         "📊 **Зароблено:** {earned} ⭐",
+        "referral_pending_notification": "⏳ @{username} перейшов за вашим реферальним посиланням, але ще не підписався на канали. Як тільки підпишеться, ви отримаєте +{ref_bonus} ⭐!",
         "referral_success_notification": "{username} приєднався за вашим посиланням! Вам нараховано +{bonus} ⭐.",
         "top_menu": "🏆 **Лідери за рефералами** 🏆\n\n{top_users_text}",
         "gifts_menu": "🎁 **Призи** 🎁\n\n"
@@ -756,6 +759,7 @@ MULTILINGUAL_TEXTS = {
         "`{ref_link}`\n\n"
         "✅ **Invitados:** {invited_count} personas\n"
         "📊 **Ganado:** {earned} ⭐",
+        "referral_pending_notification": "⏳ @{username} siguió tu enlace de referido, pero aún no se ha suscrito a los canales. ¡Una vez que se suscriba, recibirás +{ref_bonus} ⭐!",
         "referral_success_notification": "¡{username} se unió a través de tu enlace! Recibiste +{bonus} ⭐.",
         "top_menu": "🏆 **Líderes de referidos** 🏆\n\n{top_users_text}",
         "gifts_menu": "🎁 **Premios** 🎁\n\n"
