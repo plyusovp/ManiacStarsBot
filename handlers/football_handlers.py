@@ -106,6 +106,9 @@ async def kick_football_handler(
         result_text = LEXICON["football_lose"].format(
             cost=stake, new_balance=new_balance
         )
+    
+    # Записываем, что пользователь играл в футбол
+    await db.record_game_play(user_id, "football")
 
     menu_text = LEXICON["football_menu"].format(balance=new_balance)
     final_text = f"{result_text}\n\n{menu_text}"

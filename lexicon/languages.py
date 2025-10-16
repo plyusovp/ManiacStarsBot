@@ -1,6 +1,6 @@
 # lexicon/languages.py
 
-from typing import Dict
+from typing import Dict, Optional
 
 # Поддерживаемые языки
 SUPPORTED_LANGUAGES = {
@@ -653,7 +653,7 @@ MULTILINGUAL_TEXTS = {
 
 
 def get_text(
-    key: str, language_code: str = "ru", default: str | None = None, **kwargs
+    key: str, language_code: str = "ru", default: Optional[str] = None, **kwargs
 ) -> str:
     """
     Получает текст на указанном языке.

@@ -149,6 +149,9 @@ async def throw_dice_handler(
             cost=stake,
             new_balance=new_balance,
         )
+    
+    # Записываем, что пользователь играл в кости
+    await db.record_game_play(user_id, "dice")
 
     menu_text = LEXICON["dice_menu"].format(balance=new_balance)
     final_text = f"{result_text}\n\n{menu_text}"

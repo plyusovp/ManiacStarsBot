@@ -101,6 +101,9 @@ async def throw_basketball_handler(
         result_text = LEXICON["basketball_lose"].format(
             cost=stake, new_balance=new_balance
         )
+    
+    # Записываем, что пользователь играл в баскетбол
+    await db.record_game_play(user_id, "basketball")
 
     menu_text = LEXICON["basketball_menu"].format(balance=new_balance)
     final_text = f"{result_text}\n\n{menu_text}"

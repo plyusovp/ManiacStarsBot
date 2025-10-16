@@ -60,7 +60,14 @@ async def command_start(message: Message, state: FSMContext):
             referrer_id = int(referrer_id_str)
 
     # Добавляем пользователя в базу данных
-    is_new_user = await db.add_user(user_id, username, full_name, referrer_id)
+    is_new_user = await db.add_user(user_id, username, full_name, referrer_id, bot=message.bot)
+
+    # Проверяем достижение "Первые шаги" для новых пользователей
+    if is_new_user:
+        try:
+            await db.grant_achievement(user_id, "first_steps", message.bot)
+        except Exception as e:
+            logger.warning(f"Failed to grant first_steps achievement for user {user_id}: {e}")
 
     if is_new_user and referrer_id:
         try:
@@ -68,6 +75,26 @@ async def command_start(message: Message, state: FSMContext):
             await db.add_balance_with_checks(
                 referrer_id, settings.REFERRAL_BONUS, "referral_bonus", idem_key
             )
+            # Проверяем достижение "Первопроходец" для реферера
+            try:
+                await db.grant_achievement(referrer_id, "first_referral", message.bot)
+            except Exception as e:
+                logger.warning(f"Failed to grant first_referral achievement for user {referrer_id}: {e}")
+
+            # Проверяем достижение "Дружелюбный" (5 рефералов)
+            try:
+                referrals_count = await db.get_referrals_count(referrer_id)
+                if referrals_count == 5:
+                    await db.grant_achievement(referrer_id, "friendly", message.bot)
+            except Exception as e:
+                logger.warning(f"Failed to grant friendly achievement for user {referrer_id}: {e}")
+            
+            # Проверяем все достижения для реферера (включая уровни и ежедневные)
+            try:
+                await db.check_all_achievements(referrer_id, message.bot)
+            except Exception as e:
+                logger.warning(f"Failed to check all achievements for user {referrer_id}: {e}")
+
             # Получаем язык реферера для уведомления
             referrer_language = await db.get_user_language(referrer_id)
             await message.bot.send_message(
@@ -439,6 +466,18 @@ async def process_promo_code(message: Message, state: FSMContext):
     try:
         result = await db.activate_promo(user_id, promo_code, idem_key)
         if isinstance(result, int):
+            # Проверяем достижение "Взломщик кодов" при успешной активации промокода
+            try:
+                await db.grant_achievement(user_id, "code_breaker", message.bot)
+            except Exception as e:
+                logger.warning(f"Failed to grant code_breaker achievement for user {user_id}: {e}")
+            
+            # Проверяем все достижения связанные с промокодами
+            try:
+                await db.check_promo_achievements(user_id, message.bot)
+            except Exception as e:
+                logger.warning(f"Failed to check promo achievements for user {user_id}: {e}")
+            
             await message.answer(
                 get_text("promo_success", user_language, amount=result),
                 reply_markup=get_main_menu_keyboard(),

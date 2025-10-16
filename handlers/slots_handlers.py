@@ -52,6 +52,80 @@ async def slots_menu_handler(callback: CallbackQuery, state: FSMContext, bot: Bo
     await callback.answer()
 
 
+async def spin_slots_until_result(bot: Bot, user_id: int, stake: int, user_language: str) -> None:
+    """
+    Крутит слоты до получения финального результата (выигрыш или проигрыш).
+    При двух одинаковых символах продолжает крутить.
+    """
+    symbol_seven = 3
+    total_win_amount = 0
+    
+    while True:
+        # Отправляем дайс
+        msg: Message = await bot.send_dice(chat_id=user_id, emoji="🎰")
+        await asyncio.sleep(2)
+
+        dice_value = msg.dice.value if msg.dice else 0
+        reel1, reel2, reel3 = get_reels_from_dice(dice_value)
+
+        # Проверяем результат
+        if reel1 == reel2 == reel3:
+            # Три одинаковых - финальный результат
+            if reel1 == symbol_seven:
+                # Три семерки
+                win_amount = stake * 7
+                result_text_key = "slots_win"
+            else:
+                # Три одинаковых (не семерки)
+                win_amount = stake * 2
+                result_text_key = "slots_win"
+            
+            total_win_amount += win_amount
+            break
+            
+        elif reel1 == reel2 or reel2 == reel3:
+            # Два одинаковых - продолжаем крутить
+            # Отправляем сообщение о том, что крутим ещё раз
+            await bot.send_message(
+                user_id,
+                LEXICON["slots_two_match"],
+                parse_mode="Markdown"
+            )
+            await asyncio.sleep(1)  # Небольшая пауза перед следующим броском
+            continue
+            
+        else:
+            # Все разные - проигрыш
+            win_amount = 0
+            result_text_key = "slots_lose"
+            break
+
+    # Обрабатываем финальный результат
+    new_balance = await db.get_user_balance(user_id)
+
+    if total_win_amount > 0:
+        await db.add_balance_unrestricted(user_id, total_win_amount, "slots_win")
+        new_balance += total_win_amount
+        result_text = LEXICON[result_text_key].format(
+            prize=total_win_amount, new_balance=new_balance
+        )
+    else:
+        result_text = LEXICON["slots_lose"].format(cost=stake, new_balance=new_balance)
+    
+    # Записываем, что пользователь играл в слоты
+    await db.record_game_play(user_id, "slots")
+
+    menu_text = LEXICON["slots_menu"].format(balance=new_balance)
+    final_text = f"{result_text}\n\n{menu_text}"
+
+    await bot.send_photo(
+        user_id,
+        settings.PHOTO_SLOTS,
+        caption=final_text,
+        reply_markup=slots_stake_keyboard(user_language),
+    )
+
+
 @router.callback_query(SlotsCallback.filter(F.action == "spin"))
 async def spin_slots_handler(
     callback: CallbackQuery, callback_data: SlotsCallback, bot: Bot
@@ -91,48 +165,5 @@ async def spin_slots_handler(
         )
         return
 
-    msg: Message = await bot.send_dice(chat_id=user_id, emoji="🎰")
-    await asyncio.sleep(2)
-
-    dice_value = msg.dice.value if msg.dice else 0
-    reel1, reel2, reel3 = get_reels_from_dice(dice_value)
-    symbol_seven = 3
-
-    win_amount: int = 0  # Инициализируем как int
-    result_text_key = "slots_lose"
-
-    if reel1 == reel2 == reel3:
-        if reel1 == symbol_seven:
-            # Три семерки
-            win_amount = stake * 7
-            result_text_key = "slots_win"
-        else:
-            # Три одинаковых (не семерки)
-            win_amount = stake * 2
-            result_text_key = "slots_win"
-    elif reel1 == reel2 or reel2 == reel3:
-        # Два одинаковых подряд
-        # ИСПРАВЛЕНИЕ: Преобразуем float в int
-        win_amount = int(stake * 1.5)
-        result_text_key = "slots_two_match"
-
-    new_balance = await db.get_user_balance(user_id)
-
-    if win_amount > 0:
-        await db.add_balance_unrestricted(user_id, win_amount, "slots_win")
-        new_balance += win_amount
-        result_text = LEXICON[result_text_key].format(
-            prize=win_amount, new_balance=new_balance
-        )
-    else:
-        result_text = LEXICON["slots_lose"].format(cost=stake, new_balance=new_balance)
-
-    menu_text = LEXICON["slots_menu"].format(balance=new_balance)
-    final_text = f"{result_text}\n\n{menu_text}"
-
-    await bot.send_photo(
-        user_id,
-        settings.PHOTO_SLOTS,
-        caption=final_text,
-        reply_markup=slots_stake_keyboard(user_language),
-    )
+    # Запускаем цикл вращения до получения финального результата
+    await spin_slots_until_result(bot, user_id, stake, user_language)

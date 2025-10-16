@@ -273,6 +273,10 @@ async def cash_out(callback: CallbackQuery, bot: Bot, state: FSMContext):
     prize = gross_prize - rake
 
     await db.add_balance_with_checks(user_id, prize, "coinflip_win")
+    
+    # Записываем, что пользователь играл в coinflip
+    await db.record_game_play(user_id, "coinflip")
+    
     new_balance = await db.get_user_balance(user_id)
     await state.clear()
 

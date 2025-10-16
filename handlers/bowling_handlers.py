@@ -106,6 +106,9 @@ async def throw_bowling_handler(
         result_text = LEXICON["bowling_lose"].format(
             cost=stake, new_balance=new_balance
         )
+    
+    # Записываем, что пользователь играл в боулинг
+    await db.record_game_play(user_id, "bowling")
 
     menu_text = LEXICON["bowling_menu"].format(balance=new_balance)
     final_text = f"{result_text}\n\n{menu_text}"

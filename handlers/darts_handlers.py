@@ -102,6 +102,9 @@ async def throw_darts_handler(
         )
     else:
         result_text = LEXICON["darts_lose"].format(cost=stake, new_balance=new_balance)
+    
+    # Записываем, что пользователь играл в дартс
+    await db.record_game_play(user_id, "darts")
 
     menu_text = LEXICON["darts_menu"].format(balance=new_balance)
     final_text = f"{result_text}\n\n{menu_text}"

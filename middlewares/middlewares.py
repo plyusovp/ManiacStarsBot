@@ -19,6 +19,15 @@ class LastSeenMiddleware(BaseMiddleware):
         if user:
             # Обновляем время последнего визита
             await db.update_user_last_seen(user.id)
+            
+            # Обновляем стрик и проверяем достижения
+            bot = data.get("bot")
+            if bot:
+                try:
+                    await db.update_user_streak(user.id, bot)
+                except Exception:
+                    # Игнорируем ошибки обновления стрика, чтобы не нарушать основной поток
+                    pass
 
         # Пропускаем событие дальше, к основным обработчикам
         return await handler(event, data)

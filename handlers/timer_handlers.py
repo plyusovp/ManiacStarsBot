@@ -236,6 +236,9 @@ async def resolve_timer_game(bot: Bot, match_id: int):
 
         if is_draw:
             await db.finish_timer_match(match_id=match_id, is_draw=True)
+            # Записываем, что оба игрока играли в timer
+            await db.record_game_play(match.p1_id, "timer")
+            await db.record_game_play(match.p2_id, "timer")
             # Одинаковое сообщение для ничьи
             text = LEXICON["timer_draw"].format(
                 target_time=f"{match.target_time:.2f}",
@@ -270,6 +273,9 @@ async def resolve_timer_game(bot: Bot, match_id: int):
                 else (match.p2_id, match.p1_id)
             )
             await db.finish_timer_match(match_id, winner_id=winner_id, new_bank=prize)
+            # Записываем, что оба игрока играли в timer
+            await db.record_game_play(match.p1_id, "timer")
+            await db.record_game_play(match.p2_id, "timer")
 
             # Создаем персональные сообщения
             if winner_id == match.p1_id:

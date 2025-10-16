@@ -195,6 +195,12 @@ async def profile_handler(callback: CallbackQuery, state: FSMContext, bot: Bot):
 
     await clean_junk_message(state, bot)
     if callback.message:
+        # Проверяем достижение "Любопытный" при заходе в профиль
+        try:
+            await db.grant_achievement(callback.from_user.id, "curious", bot)
+        except Exception as e:
+            logger.warning(f"Failed to grant curious achievement for user {callback.from_user.id}: {e}")
+        
         profile_text = await get_user_info_text(callback.from_user.id)
         media = InputMediaPhoto(media=settings.PHOTO_PROFILE, caption=profile_text)
         user_language = await db.get_user_language(callback.from_user.id)
@@ -489,6 +495,20 @@ async def get_daily_bonus_callback_handler(callback: CallbackQuery):
     status = result.get("status")
     if status == "success":
         reward = result.get("reward", 0)
+        new_streak = result.get("new_streak", 0)
+        
+        # Проверяем достижение "Охотник за бонусами"
+        try:
+            await db.grant_achievement(callback.from_user.id, "bonus_hunter", callback.bot)
+        except Exception as e:
+            logger.warning(f"Failed to grant bonus_hunter achievement for user {callback.from_user.id}: {e}")
+        
+        # Проверяем достижения за стрик
+        try:
+            await db.check_streak_achievements(callback.from_user.id, callback.bot)
+        except Exception as e:
+            logger.warning(f"Failed to check streak achievements for user {callback.from_user.id}: {e}")
+        
         await callback.answer(
             f"🎁 Вы получили {reward} ⭐ дневного бонуса!", show_alert=True
         )

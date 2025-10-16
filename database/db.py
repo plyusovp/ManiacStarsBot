@@ -211,6 +211,17 @@ async def init_db() -> None:
         )
         await db.execute(
             """
+        CREATE TABLE IF NOT EXISTS game_plays (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id INTEGER NOT NULL,
+            game_type TEXT NOT NULL,
+            played_at INTEGER NOT NULL,
+            UNIQUE(user_id, game_type),
+            FOREIGN KEY(user_id) REFERENCES users(user_id) ON DELETE CASCADE
+        )"""
+        )
+        await db.execute(
+            """
         CREATE TABLE IF NOT EXISTS duel_matches (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             stake INTEGER NOT NULL CHECK(stake > 0),
@@ -676,7 +687,7 @@ async def populate_achievements():
         # Это гарантирует, что список будет чистым.
         await db.execute("DELETE FROM achievements WHERE id IN ('king', 'meta')")
 
-        # Награда за каждое достижение установлена в 1 ⭐, как ты просил.
+        # Награды за достижения варьируются от 1 до 5 ⭐ в зависимости от сложности и редкости.
         achievements_list = [
             ("first_steps", "Первые шаги", "Просто запустить бота.", 1, "Обычная"),
             ("first_referral", "Первопроходец", "Пригласить 1 друга.", 1, "Обычная"),
@@ -697,7 +708,7 @@ async def populate_achievements():
                 "Обычная",
             ),
             ("social", "Душа компании", "Пригласить 15 друзей.", 1, "Редкая"),
-            ("regular", "Завсегдатай", "Заходить в бота 3 дня подряд.", 1, "Редкая"),
+            ("regular", "Завсегдатай", "Заходить в бота 7 дней подряд.", 1, "Редкая"),
             ("magnate", "Магнат", "Накопить на балансе 100 звёзд.", 1, "Редкая"),
             (
                 "promo_master",
@@ -787,7 +798,7 @@ async def populate_achievements():
             (
                 "balance_master",
                 "Накопитель",
-                "Накопить 100+ ⭐ на балансе.",
+                "Накопить 500+ ⭐ на балансе.",
                 2,
                 "Редкая",
             ),
@@ -822,7 +833,7 @@ async def populate_achievements():
 
 
 async def add_user(
-    user_id, username, full_name, referrer_id=None, initial_balance=None
+    user_id, username, full_name, referrer_id=None, initial_balance=None, bot=None
 ):
     """
     Добавляет нового пользователя в базу данных.
@@ -869,10 +880,13 @@ async def add_user(
                         (referrer_id,),
                     )
                     referrer_count = (await referrer_referrals.fetchone())[0]
-                    await update_user_level(referrer_id, referrer_count)
+                    level_increased = await update_user_level(referrer_id, referrer_count, bot)
 
                     # Проверяем ежедневные челленджи
-                    await check_daily_challenges(referrer_id)
+                    if bot:
+                        await check_daily_challenges(referrer_id, bot)
+                    else:
+                        await check_daily_challenges(referrer_id)
 
                 await db.commit()
                 return True
@@ -1090,6 +1104,9 @@ async def get_daily_bonus(user_id: int) -> Dict[str, Any]:
                         )
                         return {"status": "wait", "seconds_left": seconds_left}
 
+                    # Обновляем streak_days и проверяем достижения за стрик
+                    new_streak = await update_streak_and_check_achievements(db, user_id, current_time)
+
                     # ИСПОЛЬЗУЕМ СУММУ БОНУСА ИЗ CONFIG.PY
                     reward = settings.DAILY_BONUS_AMOUNT
                     if not await _change_balance(db, user_id, reward, "daily_bonus"):
@@ -1097,7 +1114,7 @@ async def get_daily_bonus(user_id: int) -> Dict[str, Any]:
                         return {"status": "error", "reason": "update_failed"}
 
                     await db.commit()
-                    return {"status": "success", "reward": reward}
+                    return {"status": "success", "reward": reward, "new_streak": new_streak}
 
                 except Exception as e:
                     await db.rollback()
@@ -1147,6 +1164,43 @@ async def get_daily_bonus(user_id: int) -> Dict[str, Any]:
 # ... (остальной код файла db.py) ...
 
 
+async def update_streak_and_check_achievements(db, user_id: int, current_time: int) -> int:
+    """Обновляет streak_days и возвращает новый стрик для проверки достижений."""
+    try:
+        # Получаем текущий стрик и последнюю активность
+        cursor = await db.execute(
+            "SELECT streak_days, last_activity_date FROM users WHERE user_id = ?", 
+            (user_id,)
+        )
+        row = await cursor.fetchone()
+        if not row:
+            return 0
+            
+        current_streak = row[0] or 0
+        last_activity = row[1] or 0
+        
+        # Вычисляем количество дней с последней активности
+        days_since_last = (current_time - last_activity) // 86400  # 86400 секунд в дне
+        
+        new_streak = 1  # Начинаем новый стрик
+        if days_since_last <= 1:  # Если заходили вчера или сегодня
+            new_streak = current_streak + 1
+        elif days_since_last > 2:  # Если пропустили больше одного дня
+            new_streak = 1
+            
+        # Обновляем streak_days и last_activity_date
+        await db.execute(
+            "UPDATE users SET streak_days = ?, last_activity_date = ? WHERE user_id = ?",
+            (new_streak, current_time, user_id)
+        )
+        
+        return new_streak
+        
+    except Exception as e:
+        logging.error(f"Error in update_streak_and_check_achievements for user {user_id}: {e}")
+        return 0
+
+
 async def grant_achievement(user_id, ach_id, bot: Bot) -> bool:
     """Награждает пользователя за достижение."""
     async with connect() as db:
@@ -1187,6 +1241,13 @@ async def grant_achievement(user_id, ach_id, bot: Bot) -> bool:
                     exc_info=True,
                     extra={"user_id": user_id},
                 )
+            
+            # Проверяем достижения баланса после начисления награды
+            try:
+                await check_balance_achievements(user_id, bot)
+            except Exception as e:
+                logging.warning(f"Failed to check balance achievements for user {user_id}: {e}")
+            
             return True
         except Exception:
             await db.rollback()
@@ -1196,6 +1257,175 @@ async def grant_achievement(user_id, ach_id, bot: Bot) -> bool:
                 extra={"user_id": user_id},
             )
             return False
+
+
+async def check_level_achievements(user_id: int, bot: Bot) -> None:
+    """Проверяет и выдает достижения за повышение уровня."""
+    try:
+        # Получаем текущий уровень пользователя
+        async with connect() as db:
+            cursor = await db.execute(
+                "SELECT user_level, total_referrals FROM users WHERE user_id = ?", (user_id,)
+            )
+            row = await cursor.fetchone()
+            if not row:
+                return
+            
+            current_level, referrals = row
+            
+            # Проверяем достижения по уровню (используем if вместо elif для получения всех подходящих)
+            if current_level >= 1 and referrals >= 1:
+                await grant_achievement(user_id, "level_up_novice", bot)
+            if current_level >= 2 and referrals >= 10:
+                await grant_achievement(user_id, "level_up_pro", bot)
+            if current_level >= 3 and referrals >= 25:
+                await grant_achievement(user_id, "level_up_legend", bot)
+            if current_level >= 4 and referrals >= 50:
+                await grant_achievement(user_id, "level_up_mafia", bot)
+                
+    except Exception as e:
+        logging.warning(f"Failed to check level achievements for user {user_id}: {e}")
+
+
+async def check_referral_achievements(user_id: int, bot: Bot) -> None:
+    """Проверяет достижения связанные с рефералами."""
+    try:
+        referrals_count = await get_referrals_count(user_id)
+        
+        # Проверяем достижения по количеству рефералов
+        if referrals_count >= 15:
+            await grant_achievement(user_id, "social", bot)  # Душа компании
+        if referrals_count >= 50:
+            await grant_achievement(user_id, "legend", bot)  # Легенда
+            
+    except Exception as e:
+        logging.warning(f"Failed to check referral achievements for user {user_id}: {e}")
+
+
+async def check_promo_achievements(user_id: int, bot: Bot) -> None:
+    """Проверяет достижения связанные с промокодами."""
+    try:
+        async with connect() as db:
+            cursor = await db.execute(
+                "SELECT COUNT(DISTINCT code) FROM promo_activations WHERE user_id = ?",
+                (user_id,)
+            )
+            result = await cursor.fetchone()
+            unique_promos = result[0] if result else 0
+            
+            # Проверяем достижение "Магистр промокодов" (3 разных промокода)
+            if unique_promos >= 3:
+                await grant_achievement(user_id, "promo_master", bot)
+                
+    except Exception as e:
+        logging.warning(f"Failed to check promo achievements for user {user_id}: {e}")
+
+
+async def check_streak_achievements(user_id: int, bot: Bot) -> None:
+    """Проверяет достижения связанные с ежедневными входами."""
+    try:
+        async with connect() as db:
+            cursor = await db.execute(
+                "SELECT streak_days FROM users WHERE user_id = ?", (user_id,)
+            )
+            result = await cursor.fetchone()
+            streak_days = result[0] if result else 0
+            
+            # Проверяем достижения по стрику (используем if вместо elif для получения всех подходящих)
+            if streak_days >= 3:
+                await grant_achievement(user_id, "streak_3", bot)  # Постоянство (3 дня)
+            if streak_days >= 7:
+                await grant_achievement(user_id, "streak_7", bot)  # Привычка (7 дней)
+                await grant_achievement(user_id, "regular", bot)  # Завсегдатай (7 дней)
+            if streak_days >= 30:
+                await grant_achievement(user_id, "streak_30", bot)  # Мастер дисциплины (30 дней)
+                
+    except Exception as e:
+        logging.warning(f"Failed to check streak achievements for user {user_id}: {e}")
+
+
+async def check_balance_achievements(user_id: int, bot: Bot) -> None:
+    """Проверяет достижения связанные с балансом."""
+    try:
+        balance = await get_user_balance(user_id)
+        
+        # Проверяем достижения по балансу (используем if вместо elif для получения всех подходящих)
+        if balance >= 100:
+            await grant_achievement(user_id, "magnate", bot)  # Магнат (100+ звезд)
+        if balance >= 500:
+            await grant_achievement(user_id, "balance_master", bot)  # Накопитель (500+ звезд)
+            
+    except Exception as e:
+        logging.warning(f"Failed to check balance achievements for user {user_id}: {e}")
+
+
+async def record_game_play(user_id: int, game_type: str) -> None:
+    """Записывает, что пользователь играл в определенную игру."""
+    try:
+        async with connect() as db:
+            # Проверяем, не записана ли уже эта игра
+            cursor = await db.execute(
+                "SELECT id FROM game_plays WHERE user_id = ? AND game_type = ?", 
+                (user_id, game_type)
+            )
+            if not await cursor.fetchone():
+                # Записываем новую игру
+                await db.execute(
+                    "INSERT INTO game_plays (user_id, game_type, played_at) VALUES (?, ?, ?)",
+                    (user_id, game_type, int(time.time()))
+                )
+                await db.commit()
+    except Exception as e:
+        logging.warning(f"Failed to record game play for user {user_id}, game {game_type}: {e}")
+
+
+async def check_game_achievements(user_id: int, bot: Bot) -> None:
+    """Проверяет достижения связанные с играми."""
+    try:
+        # Список всех доступных игр
+        available_games = ["duel", "coinflip", "slots", "dice", "bowling", "basketball", "football", "darts", "timer"]
+        
+        # Получаем игры, в которые играл пользователь
+        async with connect() as db:
+            cursor = await db.execute(
+                "SELECT DISTINCT game_type FROM game_plays WHERE user_id = ?", (user_id,)
+            )
+            played_games = [row[0] for row in await cursor.fetchall()]
+            
+            # Проверяем, играл ли пользователь во все доступные игры
+            if len(played_games) >= len(available_games):
+                await grant_achievement(user_id, "game_master", bot)
+                
+    except Exception as e:
+        logging.warning(f"Failed to check game achievements for user {user_id}: {e}")
+
+
+async def check_all_achievements(user_id: int, bot: Bot) -> None:
+    """Проверяет все возможные достижения для пользователя."""
+    try:
+        # Проверяем достижения уровней
+        await check_level_achievements(user_id, bot)
+        
+        # Проверяем достижения рефералов
+        await check_referral_achievements(user_id, bot)
+        
+        # Проверяем достижения промокодов
+        await check_promo_achievements(user_id, bot)
+        
+        # Проверяем достижения стрика
+        await check_streak_achievements(user_id, bot)
+        
+        # Проверяем достижения баланса
+        await check_balance_achievements(user_id, bot)
+        
+        # Проверяем достижения игр
+        await check_game_achievements(user_id, bot)
+        
+        # Проверяем ежедневные челленджи
+        await check_daily_challenges(user_id, bot)
+        
+    except Exception as e:
+        logging.warning(f"Failed to check achievements for user {user_id}: {e}")
 
 
 async def create_duel(p1_id: int, p2_id: int, stake: int) -> Optional[int]:
@@ -1808,7 +2038,7 @@ def calculate_user_level(referrals: int) -> int:
         return 1  # Новичок
 
 
-async def update_user_level(user_id: int, referrals: int) -> bool:
+async def update_user_level(user_id: int, referrals: int, bot: Bot = None) -> bool:
     """Обновляет уровень пользователя и дает бонус за повышение."""
     async with connect() as db:
         try:
@@ -1838,6 +2068,14 @@ async def update_user_level(user_id: int, referrals: int) -> bool:
                 )
 
             await db.commit()
+            
+            # Проверяем достижения за повышение уровня (вне транзакции)
+            if new_level > current_level and bot:
+                try:
+                    await check_level_achievements(user_id, bot)
+                except Exception as e:
+                    logging.warning(f"Failed to check level achievements for user {user_id}: {e}")
+            
             return new_level > current_level
 
         except Exception:
@@ -1846,7 +2084,7 @@ async def update_user_level(user_id: int, referrals: int) -> bool:
             return False
 
 
-async def update_user_streak(user_id: int) -> bool:
+async def update_user_streak(user_id: int, bot: Bot = None) -> bool:
     """Обновляет стрик пользователя и дает бонус за длинные стрики."""
     async with connect() as db:
         try:
@@ -1909,6 +2147,14 @@ async def update_user_streak(user_id: int) -> bool:
                 )
 
             await db.commit()
+            
+            # Проверяем достижения стрика после обновления
+            if bot:
+                try:
+                    await check_streak_achievements(user_id, bot)
+                except Exception as e:
+                    logging.warning(f"Failed to check streak achievements for user {user_id}: {e}")
+            
             return streak_bonus > 0
 
         except Exception:
@@ -1934,7 +2180,7 @@ async def get_daily_referrals_count(user_id: int) -> int:
         return result[0] if result else 0
 
 
-async def check_daily_challenges(user_id: int) -> List[str]:
+async def check_daily_challenges(user_id: int, bot: Bot = None) -> List[str]:
     """Проверяет и выдает достижения за ежедневные челленджи."""
     async with connect() as db:
         try:
@@ -1943,60 +2189,47 @@ async def check_daily_challenges(user_id: int) -> List[str]:
             today_referrals = await get_daily_referrals_count(user_id)
             completed_challenges = []
 
-            # Проверяем челленджи
+            # Проверяем челленджи (одноразовые достижения)
             if today_referrals >= 1:
-                # Проверяем, не получил ли уже достижение сегодня
+                # Проверяем, не получил ли уже достижение
                 cursor = await db.execute(
-                    """
-                    SELECT COUNT(*) FROM user_achievements ua
-                    JOIN achievements a ON ua.achievement_id = a.id
-                    WHERE ua.user_id = ? AND a.id = 'daily_challenge_1'
-                    AND DATE(datetime(ua.completion_date, 'unixepoch')) = ?
-                    """,
-                    (user_id, datetime.date.today().isoformat()),
+                    "SELECT COUNT(*) FROM user_achievements WHERE user_id = ? AND achievement_id = 'daily_challenge_1'",
+                    (user_id,),
                 )
                 result = await cursor.fetchone()
                 if not (result and result[0]):
-                    await _change_balance(
-                        db, user_id, 1, "daily_challenge", "challenge_1"
-                    )
                     completed_challenges.append("daily_challenge_1")
 
             if today_referrals >= 3:
                 cursor = await db.execute(
-                    """
-                    SELECT COUNT(*) FROM user_achievements ua
-                    JOIN achievements a ON ua.achievement_id = a.id
-                    WHERE ua.user_id = ? AND a.id = 'daily_challenge_3'
-                    AND DATE(datetime(ua.completion_date, 'unixepoch')) = ?
-                    """,
-                    (user_id, datetime.date.today().isoformat()),
+                    "SELECT COUNT(*) FROM user_achievements WHERE user_id = ? AND achievement_id = 'daily_challenge_3'",
+                    (user_id,),
                 )
                 result = await cursor.fetchone()
                 if not (result and result[0]):
-                    await _change_balance(
-                        db, user_id, 2, "daily_challenge", "challenge_3"
-                    )
                     completed_challenges.append("daily_challenge_3")
 
             if today_referrals >= 5:
                 cursor = await db.execute(
-                    """
-                    SELECT COUNT(*) FROM user_achievements ua
-                    JOIN achievements a ON ua.achievement_id = a.id
-                    WHERE ua.user_id = ? AND a.id = 'daily_challenge_5'
-                    AND DATE(datetime(ua.completion_date, 'unixepoch')) = ?
-                    """,
-                    (user_id, datetime.date.today().isoformat()),
+                    "SELECT COUNT(*) FROM user_achievements WHERE user_id = ? AND achievement_id = 'daily_challenge_5'",
+                    (user_id,),
                 )
                 result = await cursor.fetchone()
                 if not (result and result[0]):
-                    await _change_balance(
-                        db, user_id, 3, "daily_challenge", "challenge_5"
-                    )
                     completed_challenges.append("daily_challenge_5")
 
             await db.commit()
+            
+            # Выдаем достижения вне транзакции (это автоматически начислит баланс через grant_achievement)
+            if bot and completed_challenges:
+                for challenge in completed_challenges:
+                    if challenge == "daily_challenge_1":
+                        await grant_achievement(user_id, "daily_challenge_1", bot)
+                    elif challenge == "daily_challenge_3":
+                        await grant_achievement(user_id, "daily_challenge_3", bot)
+                    elif challenge == "daily_challenge_5":
+                        await grant_achievement(user_id, "daily_challenge_5", bot)
+            
             return completed_challenges
 
         except Exception:

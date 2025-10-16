@@ -236,6 +236,10 @@ async def resolve_game_end(bot: Bot, match: DuelMatch):
         from aiogram import Bot as BotType
 
         if isinstance(bot, BotType):
+            # Записываем, что оба игрока играли в дуэли
+            await db.record_game_play(winner_id, "duel")
+            await db.record_game_play(loser_id, "duel")
+            
             # Проверяем достижения по количеству побед
             winner_stats = await db.get_user_duel_stats(winner_id)
             wins = winner_stats.get("wins", 0)
@@ -249,6 +253,10 @@ async def resolve_game_end(bot: Bot, match: DuelMatch):
                 await db.grant_achievement(winner_id, "duel_master", bot)
             elif wins == 25:
                 await db.grant_achievement(winner_id, "duel_legend", bot)
+                
+            # Проверяем достижение "Мастер игр" для обоих игроков
+            await db.check_game_achievements(winner_id, bot)
+            await db.check_game_achievements(loser_id, bot)
     except Exception as e:
         logging.warning(f"Failed to check duel achievements: {e}")
     # Создаем персональные сообщения об окончании игры
