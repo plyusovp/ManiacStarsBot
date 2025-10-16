@@ -85,7 +85,7 @@ def main_menu_keyboard(language: str = "ru") -> InlineKeyboardMarkup:
     builder.row(
         InlineKeyboardButton(
             text="⚙️ " + get_text("settings_button", language, default="Настройки"),
-            callback_data=MenuCallback(name="language_settings").pack(),
+            callback_data=MenuCallback(name="settings").pack(),
         )
     )
     support_text = quote_plus("Здравствуйте, у меня проблема с ботом, дело в том что..")
@@ -1215,6 +1215,48 @@ def language_selection_keyboard() -> InlineKeyboardMarkup:
     return builder.as_markup()
 
 
+def settings_keyboard(language: str = "ru") -> InlineKeyboardMarkup:
+    """Генерирует клавиатуру настроек."""
+    from lexicon.languages import get_text
+
+    builder = InlineKeyboardBuilder()
+
+    # FAQ
+    builder.row(
+        InlineKeyboardButton(
+            text="❓ " + get_text("faq_button", language, default="FAQ"),
+            callback_data=MenuCallback(name="faq").pack(),
+        )
+    )
+
+    # Пользовательское соглашение
+    builder.row(
+        InlineKeyboardButton(
+            text="📋 "
+            + get_text("terms_button", language, default="Пользовательское соглашение"),
+            callback_data=MenuCallback(name="terms").pack(),
+        )
+    )
+
+    # Настройки языка
+    builder.row(
+        InlineKeyboardButton(
+            text="🌍 " + get_text("language_button", language, default="Язык"),
+            callback_data=MenuCallback(name="language_settings").pack(),
+        )
+    )
+
+    # Кнопка назад
+    builder.row(
+        InlineKeyboardButton(
+            text="⬅️ " + get_text("back_to_menu", language),
+            callback_data=MenuCallback(name="main_menu").pack(),
+        )
+    )
+
+    return builder.as_markup()
+
+
 def language_settings_keyboard(current_language: str) -> InlineKeyboardMarkup:
     """Генерирует клавиатуру настроек языка."""
     from lexicon.languages import get_text
@@ -1238,11 +1280,50 @@ def language_settings_keyboard(current_language: str) -> InlineKeyboardMarkup:
         )
     )
 
-    # Кнопка назад
+    # Кнопка назад в настройки
     builder.row(
         InlineKeyboardButton(
-            text="⬅️ " + get_text("back_to_menu", current_language),
-            callback_data=MenuCallback(name="main_menu").pack(),
+            text="⬅️ "
+            + get_text(
+                "back_to_settings", current_language, default="Назад в настройки"
+            ),
+            callback_data=MenuCallback(name="settings").pack(),
+        )
+    )
+
+    return builder.as_markup()
+
+
+def faq_keyboard(language: str = "ru") -> InlineKeyboardMarkup:
+    """Генерирует клавиатуру для FAQ."""
+    from lexicon.languages import get_text
+
+    builder = InlineKeyboardBuilder()
+
+    # Кнопка назад в настройки
+    builder.row(
+        InlineKeyboardButton(
+            text="⬅️ "
+            + get_text("back_to_settings", language, default="Назад в настройки"),
+            callback_data=MenuCallback(name="settings").pack(),
+        )
+    )
+
+    return builder.as_markup()
+
+
+def terms_keyboard(language: str = "ru") -> InlineKeyboardMarkup:
+    """Генерирует клавиатуру для пользовательского соглашения."""
+    from lexicon.languages import get_text
+
+    builder = InlineKeyboardBuilder()
+
+    # Кнопка назад в настройки
+    builder.row(
+        InlineKeyboardButton(
+            text="⬅️ "
+            + get_text("back_to_settings", language, default="Назад в настройки"),
+            callback_data=MenuCallback(name="settings").pack(),
         )
     )
 

@@ -26,11 +26,15 @@ from keyboards.inline import (
     achievements_keyboard,
     back_to_achievements_keyboard,
     back_to_menu_keyboard,
+    faq_keyboard,
     games_menu_keyboard,
     gifts_catalog_keyboard,
+    language_settings_keyboard,
     main_menu_keyboard,
     profile_keyboard,
     resources_keyboard,
+    settings_keyboard,
+    terms_keyboard,
     top_users_keyboard,
 )
 from lexicon.languages import get_text
@@ -199,8 +203,10 @@ async def profile_handler(callback: CallbackQuery, state: FSMContext, bot: Bot):
         try:
             await db.grant_achievement(callback.from_user.id, "curious", bot)
         except Exception as e:
-            logger.warning(f"Failed to grant curious achievement for user {callback.from_user.id}: {e}")
-        
+            logger.warning(
+                f"Failed to grant curious achievement for user {callback.from_user.id}: {e}"
+            )
+
         profile_text = await get_user_info_text(callback.from_user.id)
         media = InputMediaPhoto(media=settings.PHOTO_PROFILE, caption=profile_text)
         user_language = await db.get_user_language(callback.from_user.id)
@@ -495,20 +501,25 @@ async def get_daily_bonus_callback_handler(callback: CallbackQuery):
     status = result.get("status")
     if status == "success":
         reward = result.get("reward", 0)
-        new_streak = result.get("new_streak", 0)
-        
+
         # Проверяем достижение "Охотник за бонусами"
         try:
-            await db.grant_achievement(callback.from_user.id, "bonus_hunter", callback.bot)
+            await db.grant_achievement(
+                callback.from_user.id, "bonus_hunter", callback.bot
+            )
         except Exception as e:
-            logger.warning(f"Failed to grant bonus_hunter achievement for user {callback.from_user.id}: {e}")
-        
+            logger.warning(
+                f"Failed to grant bonus_hunter achievement for user {callback.from_user.id}: {e}"
+            )
+
         # Проверяем достижения за стрик
         try:
             await db.check_streak_achievements(callback.from_user.id, callback.bot)
         except Exception as e:
-            logger.warning(f"Failed to check streak achievements for user {callback.from_user.id}: {e}")
-        
+            logger.warning(
+                f"Failed to check streak achievements for user {callback.from_user.id}: {e}"
+            )
+
         await callback.answer(
             f"🎁 Вы получили {reward} ⭐ дневного бонуса!", show_alert=True
         )
@@ -639,4 +650,157 @@ async def achievement_info_handler(
             reply_markup=back_to_achievements_keyboard(),
         )
         await state.update_data(current_view="achievement_info")
+    await callback.answer()
+
+
+# --- Settings Handlers ---
+@router.callback_query(MenuCallback.filter(F.name == "settings"))
+async def settings_handler(callback: CallbackQuery, state: FSMContext, bot: Bot):
+    """Отображает меню настроек."""
+    if not callback.from_user:
+        return
+
+    # Проверяем подписку перед показом настроек
+    from handlers.subscription_checker import check_subscription_and_block
+
+    if not await check_subscription_and_block(
+        callback, callback.from_user.id, callback.message.chat.id
+    ):
+        return  # Пользователь заблокирован, сообщение уже отправлено
+
+    await clean_junk_message(state, bot)
+    user_language = await db.get_user_language(callback.from_user.id)
+    text = get_text("settings_menu", user_language)
+
+    if callback.message:
+        # Проверяем, есть ли фото в текущем сообщении
+        if callback.message.photo:
+            # Редактируем существующее фото
+            await safe_edit_caption(
+                bot=bot,
+                caption=text,
+                chat_id=callback.message.chat.id,
+                message_id=callback.message.message_id,
+                reply_markup=settings_keyboard(user_language),
+            )
+        else:
+            # Удаляем текстовое сообщение и отправляем новое с фото
+            await safe_delete(
+                bot, callback.message.chat.id, callback.message.message_id
+            )
+            new_msg = await bot.send_photo(
+                chat_id=callback.message.chat.id,
+                photo=settings.PHOTO_MAIN_MENU,
+                caption=text,
+                reply_markup=settings_keyboard(user_language),
+            )
+            await state.update_data(last_bot_message_id=new_msg.message_id)
+        await state.update_data(current_view="settings")
+    await callback.answer()
+
+
+@router.callback_query(MenuCallback.filter(F.name == "faq"))
+async def faq_handler(callback: CallbackQuery, state: FSMContext, bot: Bot):
+    """Отображает FAQ."""
+    if not callback.from_user:
+        return
+
+    # Проверяем подписку перед показом FAQ
+    from handlers.subscription_checker import check_subscription_and_block
+
+    if not await check_subscription_and_block(
+        callback, callback.from_user.id, callback.message.chat.id
+    ):
+        return  # Пользователь заблокирован, сообщение уже отправлено
+
+    await clean_junk_message(state, bot)
+    user_language = await db.get_user_language(callback.from_user.id)
+    text = get_text("faq_menu", user_language)
+
+    if callback.message:
+        # Удаляем старое сообщение и отправляем новое текстовое с HTML-форматированием
+        await safe_delete(bot, callback.message.chat.id, callback.message.message_id)
+        new_msg = await bot.send_message(
+            chat_id=callback.message.chat.id,
+            text=text,
+            reply_markup=faq_keyboard(user_language),
+            parse_mode="HTML",  # Используем HTML для стабильного форматирования длинных текстов
+        )
+        await state.update_data(
+            current_view="faq", last_bot_message_id=new_msg.message_id
+        )
+    await callback.answer()
+
+
+@router.callback_query(MenuCallback.filter(F.name == "terms"))
+async def terms_handler(callback: CallbackQuery, state: FSMContext, bot: Bot):
+    """Отображает пользовательское соглашение."""
+    if not callback.from_user:
+        return
+
+    # Проверяем подписку перед показом соглашения
+    from handlers.subscription_checker import check_subscription_and_block
+
+    if not await check_subscription_and_block(
+        callback, callback.from_user.id, callback.message.chat.id
+    ):
+        return  # Пользователь заблокирован, сообщение уже отправлено
+
+    await clean_junk_message(state, bot)
+    user_language = await db.get_user_language(callback.from_user.id)
+
+    # Добавляем текущую дату в текст соглашения
+    from datetime import datetime
+
+    current_date = datetime.now().strftime("%d.%m.%Y")
+    text = get_text("terms_of_service", user_language, current_date=current_date)
+
+    if callback.message:
+        # Удаляем старое сообщение и отправляем новое текстовое с HTML-форматированием
+        await safe_delete(bot, callback.message.chat.id, callback.message.message_id)
+        new_msg = await bot.send_message(
+            chat_id=callback.message.chat.id,
+            text=text,
+            reply_markup=terms_keyboard(user_language),
+            parse_mode="HTML",  # Используем HTML для стабильного форматирования длинных текстов
+        )
+        await state.update_data(
+            current_view="terms", last_bot_message_id=new_msg.message_id
+        )
+    await callback.answer()
+
+
+@router.callback_query(MenuCallback.filter(F.name == "language_settings"))
+async def language_settings_handler(
+    callback: CallbackQuery, state: FSMContext, bot: Bot
+):
+    """Отображает настройки языка."""
+    if not callback.from_user:
+        return
+
+    # Проверяем подписку перед показом настроек языка
+    from handlers.subscription_checker import check_subscription_and_block
+
+    if not await check_subscription_and_block(
+        callback, callback.from_user.id, callback.message.chat.id
+    ):
+        return  # Пользователь заблокирован, сообщение уже отправлено
+
+    await clean_junk_message(state, bot)
+    user_language = await db.get_user_language(callback.from_user.id)
+    text = get_text(
+        "language_settings",
+        user_language,
+        default="🌍 **Настройки языка** 🌍\n\nВыберите язык интерфейса:",
+    )
+
+    if callback.message:
+        await safe_edit_caption(
+            bot=bot,
+            caption=text,
+            chat_id=callback.message.chat.id,
+            message_id=callback.message.message_id,
+            reply_markup=language_settings_keyboard(user_language),
+        )
+        await state.update_data(current_view="language_settings")
     await callback.answer()
