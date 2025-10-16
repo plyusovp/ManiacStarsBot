@@ -11,7 +11,7 @@ class Settings(BaseSettings):
     BOT_TOKEN: str = ""
     ADMIN_IDS: List[int] = []
     CHANNEL_ID: int = 0
-    BOT_USERNAME: str = ""
+    BOT_USERNAME: str = "maniacstarsbot"
     # SubGram API настройки
     # ВАЖНО: Используйте API Key бота, а не Secret Key!
     # Получите в @subgram_officialbot → Профиль → Скопировать api token
@@ -79,7 +79,7 @@ class Settings(BaseSettings):
     PHOTO_TOP: str = "AgACAgQAAxkBAAMgaO_YklSMmZ9huhaWGHxA6smgyX4AAvHNMRv-bIBTKV9195dSTbcBAAMCAAN5AAM2BA"  # Топ игроков
     PHOTO_PROMO: str = "AgACAgQAAxkBAAMiaO_YxZLZhaKqoEcd64j8B4KR9PQAAmfKMRszgSlRq5z-pGEQtaEBAAMCAAN5AAM2BA"  # Промокоды
     PHOTO_EARN_STARS: str = "AgACAgQAAxkBAAMlaO_ZBCd2CPKOM3wnrIu0JdsWrh0AAvPNMRv-bIBT7artb4mO1LcBAAMCAAN5AAM2BA"  # Заработок звёзд
-    PHOTO_ACHIEVEMENTS: str = "AgACAgQAAxkBAAMnaO_ZFwfFPHxXyrZodsa4x1F7omkAAvXNMRv-bIBTBT6hK4F5qaIBAAMCAAN5AAM2BA"  # Для достижений
+    PHOTO_ACHIEVEMENTS: str = "AgACAgQAAxkBAAMgaO_YklSMmZ9huhaWGHxA6smgyX4AAvHNMRv-bIBTKV9195dSTbcBAAMCAAN5AAM2BA"  # Для достижений
     PHOTO_RESOURCES: str = "AgACAgQAAxkBAAMzaO_aGuChCXU6wqy2NqvoImpcT-EAAhrPMRsocSFSxgJxCY3RVYIBAAMCAAN5AAM2BA"  # Наши ресурсы
     PHOTO_DUEL_MENU: str = "AgACAgQAAxkBAAM4aO_aT7kAAd5I-wop6N-FjoFL1t6-AAKZyzEbgr8gUudybv5KTy7IAQADAgADeQADNgQ"  # Дуели
     PHOTO_COINFLIP_MENU: str = "AgACAgQAAxkBAAM2aO_aOv46SbvkyCoCW5WHpQRkgiEAA84xG_5sgFPObcXgHdkI_wEAAwIAA3kAAzYE"  # Орёл и решка
@@ -104,7 +104,7 @@ settings = Settings()
 # Сложные игры
 DUEL_STAKES = [1, 2, 3, 4, 5]
 TIMER_STAKES = [1, 2, 3, 4, 5]
-COINFLIP_STAKES = [10, 25, 50, 100, 250, 500]
+COINFLIP_STAKES = [1, 2, 3, 4, 5]
 
 # Игры с маленькими ставками
 SLOTS_STAKES = [1, 3, 5, 10]

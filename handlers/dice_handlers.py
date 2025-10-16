@@ -45,6 +45,26 @@ async def dice_menu_handler(callback: CallbackQuery, state: FSMContext, bot: Bot
     await callback.answer()
 
 
+@router.callback_query(GameCallback.filter((F.name == "dice") & (F.action == "rules")))
+async def dice_rules_handler(callback: CallbackQuery, bot: Bot):
+    """Отображает правила игры 'Кости'."""
+    if not callback.message:
+        return
+
+    user_language = await db.get_user_language(callback.from_user.id)
+    text = LEXICON["dice_rules"]
+
+    await safe_edit_caption(
+        bot,
+        caption=text,
+        chat_id=callback.message.chat.id,
+        message_id=callback.message.message_id,
+        reply_markup=dice_stake_keyboard(user_language),
+        photo=settings.PHOTO_DICE,
+    )
+    await callback.answer("📖 Правила игры")
+
+
 @router.callback_query(DiceCallback.filter(F.action == "stake"))
 async def dice_stake_selected_handler(
     callback: CallbackQuery, callback_data: DiceCallback, bot: Bot, state: FSMContext
@@ -149,7 +169,7 @@ async def throw_dice_handler(
             cost=stake,
             new_balance=new_balance,
         )
-    
+
     # Записываем, что пользователь играл в кости
     await db.record_game_play(user_id, "dice")
 

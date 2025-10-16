@@ -53,6 +53,29 @@ async def coinflip_menu_handler(
     await callback.answer()
 
 
+@router.callback_query(
+    GameCallback.filter((F.name == "coinflip") & (F.action == "rules"))
+)
+async def coinflip_rules_handler(callback: CallbackQuery, bot: Bot) -> None:
+    """Отображает правила игры 'Орёл и решка'."""
+    if not callback.message:
+        return
+
+    user_language = await db.get_user_language(callback.from_user.id)
+    from lexicon.texts import LEXICON
+
+    text = LEXICON["coinflip_rules"]
+
+    await safe_edit_caption(
+        bot,
+        caption=text,
+        chat_id=callback.message.chat.id,
+        message_id=callback.message.message_id,
+        reply_markup=coinflip_stake_keyboard(user_language),
+    )
+    await callback.answer("📖 Правила игры")
+
+
 @router.callback_query(CoinflipCallback.filter(F.action == "stake"))
 async def coinflip_stake_selected_handler(
     callback: CallbackQuery,
@@ -273,10 +296,10 @@ async def cash_out(callback: CallbackQuery, bot: Bot, state: FSMContext):
     prize = gross_prize - rake
 
     await db.add_balance_with_checks(user_id, prize, "coinflip_win")
-    
+
     # Записываем, что пользователь играл в coinflip
     await db.record_game_play(user_id, "coinflip")
-    
+
     new_balance = await db.get_user_balance(user_id)
     await state.clear()
 

@@ -13,7 +13,7 @@ from aiogram.types import CallbackQuery, InputMediaPhoto, Message
 from config import settings
 from database import db
 from gifts import GIFTS_CATALOG
-from handlers.utils import escape_markdown_v1, safe_edit_caption, safe_edit_media
+from handlers.utils import safe_edit_caption, safe_edit_media
 from keyboards.factories import GiftCallback, UserCallback
 from keyboards.inline import (
     back_to_menu_keyboard,
@@ -60,14 +60,18 @@ async def command_start(message: Message, state: FSMContext):
             referrer_id = int(referrer_id_str)
 
     # Добавляем пользователя в базу данных
-    is_new_user = await db.add_user(user_id, username, full_name, referrer_id, bot=message.bot)
+    is_new_user = await db.add_user(
+        user_id, username, full_name, referrer_id, bot=message.bot
+    )
 
     # Проверяем достижение "Первые шаги" для новых пользователей
     if is_new_user:
         try:
             await db.grant_achievement(user_id, "first_steps", message.bot)
         except Exception as e:
-            logger.warning(f"Failed to grant first_steps achievement for user {user_id}: {e}")
+            logger.warning(
+                f"Failed to grant first_steps achievement for user {user_id}: {e}"
+            )
 
     if is_new_user and referrer_id:
         try:
@@ -79,7 +83,9 @@ async def command_start(message: Message, state: FSMContext):
             try:
                 await db.grant_achievement(referrer_id, "first_referral", message.bot)
             except Exception as e:
-                logger.warning(f"Failed to grant first_referral achievement for user {referrer_id}: {e}")
+                logger.warning(
+                    f"Failed to grant first_referral achievement for user {referrer_id}: {e}"
+                )
 
             # Проверяем достижение "Дружелюбный" (5 рефералов)
             try:
@@ -87,13 +93,17 @@ async def command_start(message: Message, state: FSMContext):
                 if referrals_count == 5:
                     await db.grant_achievement(referrer_id, "friendly", message.bot)
             except Exception as e:
-                logger.warning(f"Failed to grant friendly achievement for user {referrer_id}: {e}")
-            
+                logger.warning(
+                    f"Failed to grant friendly achievement for user {referrer_id}: {e}"
+                )
+
             # Проверяем все достижения для реферера (включая уровни и ежедневные)
             try:
                 await db.check_all_achievements(referrer_id, message.bot)
             except Exception as e:
-                logger.warning(f"Failed to check all achievements for user {referrer_id}: {e}")
+                logger.warning(
+                    f"Failed to check all achievements for user {referrer_id}: {e}"
+                )
 
             # Получаем язык реферера для уведомления
             referrer_language = await db.get_user_language(referrer_id)
@@ -314,11 +324,8 @@ async def tiktok_content_handler(callback: CallbackQuery, state: FSMContext):
     user_language = await db.get_user_language(user_id)
     balance = await db.get_user_balance(user_id)
     ref_link = f"https://t.me/{settings.BOT_USERNAME}?start=ref_{user_id}"
-    ref_link_escaped = escape_markdown_v1(ref_link)
 
-    text = get_text(
-        "tiktok_content", user_language, balance=balance, ref_link=ref_link_escaped
-    )
+    text = get_text("tiktok_content", user_language, balance=balance, ref_link=ref_link)
 
     media = InputMediaPhoto(
         media=settings.PHOTO_PROFILE, caption=text, parse_mode="Markdown"
@@ -344,10 +351,9 @@ async def instagram_content_handler(callback: CallbackQuery, state: FSMContext):
     user_language = await db.get_user_language(user_id)
     balance = await db.get_user_balance(user_id)
     ref_link = f"https://t.me/{settings.BOT_USERNAME}?start=ref_{user_id}"
-    ref_link_escaped = escape_markdown_v1(ref_link)
 
     text = get_text(
-        "instagram_content", user_language, balance=balance, ref_link=ref_link_escaped
+        "instagram_content", user_language, balance=balance, ref_link=ref_link
     )
 
     media = InputMediaPhoto(
@@ -374,10 +380,9 @@ async def telegram_content_handler(callback: CallbackQuery, state: FSMContext):
     user_language = await db.get_user_language(user_id)
     balance = await db.get_user_balance(user_id)
     ref_link = f"https://t.me/{settings.BOT_USERNAME}?start=ref_{user_id}"
-    ref_link_escaped = escape_markdown_v1(ref_link)
 
     text = get_text(
-        "telegram_content", user_language, balance=balance, ref_link=ref_link_escaped
+        "telegram_content", user_language, balance=balance, ref_link=ref_link
     )
 
     media = InputMediaPhoto(
@@ -470,14 +475,18 @@ async def process_promo_code(message: Message, state: FSMContext):
             try:
                 await db.grant_achievement(user_id, "code_breaker", message.bot)
             except Exception as e:
-                logger.warning(f"Failed to grant code_breaker achievement for user {user_id}: {e}")
-            
+                logger.warning(
+                    f"Failed to grant code_breaker achievement for user {user_id}: {e}"
+                )
+
             # Проверяем все достижения связанные с промокодами
             try:
                 await db.check_promo_achievements(user_id, message.bot)
             except Exception as e:
-                logger.warning(f"Failed to check promo achievements for user {user_id}: {e}")
-            
+                logger.warning(
+                    f"Failed to check promo achievements for user {user_id}: {e}"
+                )
+
             await message.answer(
                 get_text("promo_success", user_language, amount=result),
                 reply_markup=get_main_menu_keyboard(),

@@ -52,14 +52,36 @@ async def slots_menu_handler(callback: CallbackQuery, state: FSMContext, bot: Bo
     await callback.answer()
 
 
-async def spin_slots_until_result(bot: Bot, user_id: int, stake: int, user_language: str) -> None:
+@router.callback_query(GameCallback.filter((F.name == "slots") & (F.action == "rules")))
+async def slots_rules_handler(callback: CallbackQuery, bot: Bot):
+    """Отображает правила игры 'Слоты'."""
+    if not callback.message:
+        return
+
+    user_language = await db.get_user_language(callback.from_user.id)
+    text = LEXICON["slots_rules"]
+
+    await safe_edit_caption(
+        bot,
+        caption=text,
+        chat_id=callback.message.chat.id,
+        message_id=callback.message.message_id,
+        reply_markup=slots_stake_keyboard(user_language),
+        photo=settings.PHOTO_SLOTS,
+    )
+    await callback.answer("📖 Правила игры")
+
+
+async def spin_slots_until_result(
+    bot: Bot, user_id: int, stake: int, user_language: str
+) -> None:
     """
     Крутит слоты до получения финального результата (выигрыш или проигрыш).
     При двух одинаковых символах продолжает крутить.
     """
     symbol_seven = 3
     total_win_amount = 0
-    
+
     while True:
         # Отправляем дайс
         msg: Message = await bot.send_dice(chat_id=user_id, emoji="🎰")
@@ -79,21 +101,19 @@ async def spin_slots_until_result(bot: Bot, user_id: int, stake: int, user_langu
                 # Три одинаковых (не семерки)
                 win_amount = stake * 2
                 result_text_key = "slots_win"
-            
+
             total_win_amount += win_amount
             break
-            
+
         elif reel1 == reel2 or reel2 == reel3:
             # Два одинаковых - продолжаем крутить
             # Отправляем сообщение о том, что крутим ещё раз
             await bot.send_message(
-                user_id,
-                LEXICON["slots_two_match"],
-                parse_mode="Markdown"
+                user_id, LEXICON["slots_two_match"], parse_mode="Markdown"
             )
             await asyncio.sleep(1)  # Небольшая пауза перед следующим броском
             continue
-            
+
         else:
             # Все разные - проигрыш
             win_amount = 0
@@ -111,7 +131,7 @@ async def spin_slots_until_result(bot: Bot, user_id: int, stake: int, user_langu
         )
     else:
         result_text = LEXICON["slots_lose"].format(cost=stake, new_balance=new_balance)
-    
+
     # Записываем, что пользователь играл в слоты
     await db.record_game_play(user_id, "slots")
 

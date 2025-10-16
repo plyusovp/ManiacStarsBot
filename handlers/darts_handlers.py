@@ -37,6 +37,26 @@ async def darts_menu_handler(callback: CallbackQuery, bot: Bot):
     await callback.answer()
 
 
+@router.callback_query(GameCallback.filter((F.name == "darts") & (F.action == "rules")))
+async def darts_rules_handler(callback: CallbackQuery, bot: Bot):
+    """Отображает правила игры 'Дартс'."""
+    if not callback.message:
+        return
+
+    user_language = await db.get_user_language(callback.from_user.id)
+    text = LEXICON["darts_rules"]
+
+    await safe_edit_caption(
+        bot,
+        caption=text,
+        chat_id=callback.message.chat.id,
+        message_id=callback.message.message_id,
+        reply_markup=darts_stake_keyboard(user_language),
+        photo=settings.PHOTO_DARTS,
+    )
+    await callback.answer("📖 Правила игры")
+
+
 @router.callback_query(DartsCallback.filter(F.action == "throw"))
 async def throw_darts_handler(
     callback: CallbackQuery, callback_data: DartsCallback, bot: Bot
@@ -102,7 +122,7 @@ async def throw_darts_handler(
         )
     else:
         result_text = LEXICON["darts_lose"].format(cost=stake, new_balance=new_balance)
-    
+
     # Записываем, что пользователь играл в дартс
     await db.record_game_play(user_id, "darts")
 

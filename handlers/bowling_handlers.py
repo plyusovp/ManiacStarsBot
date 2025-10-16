@@ -41,6 +41,28 @@ async def bowling_menu_handler(callback: CallbackQuery, state: FSMContext, bot: 
     await callback.answer()
 
 
+@router.callback_query(
+    GameCallback.filter((F.name == "bowling") & (F.action == "rules"))
+)
+async def bowling_rules_handler(callback: CallbackQuery, bot: Bot):
+    """Отображает правила игры 'Боулинг'."""
+    if not callback.message:
+        return
+
+    user_language = await db.get_user_language(callback.from_user.id)
+    text = LEXICON["bowling_rules"]
+
+    await safe_edit_caption(
+        bot,
+        caption=text,
+        chat_id=callback.message.chat.id,
+        message_id=callback.message.message_id,
+        reply_markup=bowling_stake_keyboard(user_language),
+        photo=settings.PHOTO_BOWLING,
+    )
+    await callback.answer("📖 Правила игры")
+
+
 @router.callback_query(BowlingCallback.filter(F.action == "throw"))
 async def throw_bowling_handler(
     callback: CallbackQuery, callback_data: BowlingCallback, bot: Bot
@@ -106,7 +128,7 @@ async def throw_bowling_handler(
         result_text = LEXICON["bowling_lose"].format(
             cost=stake, new_balance=new_balance
         )
-    
+
     # Записываем, что пользователь играл в боулинг
     await db.record_game_play(user_id, "bowling")
 

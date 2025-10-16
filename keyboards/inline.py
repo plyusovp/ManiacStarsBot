@@ -88,7 +88,7 @@ def main_menu_keyboard(language: str = "ru") -> InlineKeyboardMarkup:
             callback_data=MenuCallback(name="settings").pack(),
         )
     )
-    support_text = quote_plus("Здравствуйте, у меня проблема с ботом, дело в том что..")
+    support_text = quote_plus("Здравствуйте, у меня проблема с ботом")
     builder.row(
         InlineKeyboardButton(
             text="Техподдержка 12:00-21:00 🆘",
@@ -621,6 +621,12 @@ def coinflip_stake_keyboard(language: str = "ru") -> InlineKeyboardMarkup:
     builder.row(*stakes, width=3)
     builder.row(
         InlineKeyboardButton(
+            text="📖 " + get_text("rules_button", language, default="Правила"),
+            callback_data=GameCallback(name="coinflip", action="rules").pack(),
+        )
+    )
+    builder.row(
+        InlineKeyboardButton(
             text="⬅️ " + get_text("back_to_games", language, default="Назад"),
             callback_data=MenuCallback(name="games").pack(),
         )
@@ -1025,6 +1031,12 @@ def slots_stake_keyboard(language: str = "ru") -> InlineKeyboardMarkup:
     builder.row(*buttons, width=4)
     builder.row(
         InlineKeyboardButton(
+            text="📖 " + get_text("rules_button", language, default="Правила"),
+            callback_data=GameCallback(name="slots", action="rules").pack(),
+        )
+    )
+    builder.row(
+        InlineKeyboardButton(
             text="⬅️ "
             + get_text("to_other_games_button", language, default="К другим играм"),
             callback_data=MenuCallback(name="games").pack(),
@@ -1052,6 +1064,13 @@ def football_stake_keyboard(language: str = "ru") -> InlineKeyboardMarkup:
     ]
     # Создаем ряд из кнопок со ставками, по 4 в ряд
     builder.row(*buttons, width=4)
+    # Добавляем кнопку "Правила"
+    builder.row(
+        InlineKeyboardButton(
+            text="📖 " + get_text("rules_button", language, default="Правила"),
+            callback_data=GameCallback(name="football", action="rules").pack(),
+        )
+    )
     # Добавляем кнопку "Назад"
     builder.row(
         InlineKeyboardButton(
@@ -1076,6 +1095,12 @@ def bowling_stake_keyboard(language: str = "ru") -> InlineKeyboardMarkup:
         for stake in BOWLING_STAKES
     ]
     builder.row(*buttons, width=4)
+    builder.row(
+        InlineKeyboardButton(
+            text="📖 " + get_text("rules_button", language, default="Правила"),
+            callback_data=GameCallback(name="bowling", action="rules").pack(),
+        )
+    )
     builder.row(
         InlineKeyboardButton(
             text="⬅️ "
@@ -1128,6 +1153,12 @@ def basketball_stake_keyboard(language: str = "ru") -> InlineKeyboardMarkup:
     builder.row(*buttons, width=4)
     builder.row(
         InlineKeyboardButton(
+            text="📖 " + get_text("rules_button", language, default="Правила"),
+            callback_data=GameCallback(name="basketball", action="rules").pack(),
+        )
+    )
+    builder.row(
+        InlineKeyboardButton(
             text="⬅️ "
             + get_text("to_other_games_button", language, default="К другим играм"),
             callback_data=MenuCallback(name="games").pack(),
@@ -1156,6 +1187,12 @@ def darts_stake_keyboard(language: str = "ru") -> InlineKeyboardMarkup:
     builder.row(*buttons, width=4)
     builder.row(
         InlineKeyboardButton(
+            text="📖 " + get_text("rules_button", language, default="Правила"),
+            callback_data=GameCallback(name="darts", action="rules").pack(),
+        )
+    )
+    builder.row(
+        InlineKeyboardButton(
             text="⬅️ "
             + get_text("to_other_games_button", language, default="К другим играм"),
             callback_data=MenuCallback(name="games").pack(),
@@ -1180,6 +1217,12 @@ def dice_stake_keyboard(language: str = "ru") -> InlineKeyboardMarkup:
         for stake in DICE_STAKES
     ]
     builder.row(*buttons, width=4)
+    builder.row(
+        InlineKeyboardButton(
+            text="📖 " + get_text("rules_button", language, default="Правила"),
+            callback_data=GameCallback(name="dice", action="rules").pack(),
+        )
+    )
     builder.row(
         InlineKeyboardButton(
             text="⬅️ "

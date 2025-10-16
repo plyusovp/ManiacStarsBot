@@ -13,7 +13,6 @@ from config import settings
 from database import db
 from handlers.utils import (
     clean_junk_message,
-    escape_markdown_v1,
     generate_referral_link,
     get_safe_media,
     get_user_info_text,
@@ -236,7 +235,6 @@ async def referral_handler(callback: CallbackQuery, state: FSMContext, bot: Bot)
     await clean_junk_message(state, bot)
     if callback.message:
         referral_link = generate_referral_link(callback.from_user.id)
-        referral_link_escaped = escape_markdown_v1(referral_link)
         referrals_count = await db.get_referrals_count(callback.from_user.id)
         # Вычисляем заработанную сумму
         earned = referrals_count * settings.REFERRAL_BONUS
@@ -245,7 +243,7 @@ async def referral_handler(callback: CallbackQuery, state: FSMContext, bot: Bot)
         text = get_text(
             "referral_menu",
             user_language,
-            ref_link=referral_link_escaped,
+            ref_link=referral_link,
             invited_count=referrals_count,
             ref_bonus=settings.REFERRAL_BONUS,
             earned=earned,

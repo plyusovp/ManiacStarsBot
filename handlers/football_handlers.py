@@ -42,6 +42,28 @@ async def football_menu_handler(callback: CallbackQuery, state: FSMContext, bot:
     await callback.answer()
 
 
+@router.callback_query(
+    GameCallback.filter((F.name == "football") & (F.action == "rules"))
+)
+async def football_rules_handler(callback: CallbackQuery, bot: Bot):
+    """Отображает правила игры 'Футбол'."""
+    if not callback.message:
+        return
+
+    user_language = await db.get_user_language(callback.from_user.id)
+    text = LEXICON["football_rules"]
+
+    await safe_edit_caption(
+        bot,
+        caption=text,
+        chat_id=callback.message.chat.id,
+        message_id=callback.message.message_id,
+        reply_markup=football_stake_keyboard(user_language),
+        photo=settings.PHOTO_FOOTBALL,
+    )
+    await callback.answer("📖 Правила игры")
+
+
 @router.callback_query(FootballCallback.filter(F.action == "kick"))
 async def kick_football_handler(
     callback: CallbackQuery,
@@ -106,7 +128,7 @@ async def kick_football_handler(
         result_text = LEXICON["football_lose"].format(
             cost=stake, new_balance=new_balance
         )
-    
+
     # Записываем, что пользователь играл в футбол
     await db.record_game_play(user_id, "football")
 

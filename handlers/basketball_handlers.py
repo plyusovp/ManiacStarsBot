@@ -40,6 +40,28 @@ async def basketball_menu_handler(callback: CallbackQuery, bot: Bot):
     await callback.answer()
 
 
+@router.callback_query(
+    GameCallback.filter((F.name == "basketball") & (F.action == "rules"))
+)
+async def basketball_rules_handler(callback: CallbackQuery, bot: Bot):
+    """Отображает правила игры 'Баскетбол'."""
+    if not callback.message:
+        return
+
+    user_language = await db.get_user_language(callback.from_user.id)
+    text = LEXICON["basketball_rules"]
+
+    await safe_edit_caption(
+        bot,
+        caption=text,
+        chat_id=callback.message.chat.id,
+        message_id=callback.message.message_id,
+        reply_markup=basketball_stake_keyboard(user_language),
+        photo=settings.PHOTO_BASKETBALL,
+    )
+    await callback.answer("📖 Правила игры")
+
+
 @router.callback_query(BasketballCallback.filter(F.action == "throw"))
 async def throw_basketball_handler(
     callback: CallbackQuery, callback_data: BasketballCallback, bot: Bot
@@ -101,7 +123,7 @@ async def throw_basketball_handler(
         result_text = LEXICON["basketball_lose"].format(
             cost=stake, new_balance=new_balance
         )
-    
+
     # Записываем, что пользователь играл в баскетбол
     await db.record_game_play(user_id, "basketball")
 
