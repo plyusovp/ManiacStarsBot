@@ -19,6 +19,7 @@ async def check_subscription_and_block(
 ) -> bool:
     """
     Проверяет подписку пользователя и блокирует доступ если не подписан.
+    Администраторы пропускаются без проверки.
 
     Args:
         event: Событие (Message или CallbackQuery)
@@ -28,6 +29,11 @@ async def check_subscription_and_block(
     Returns:
         True если пользователь подписан и может продолжить, False если заблокирован
     """
+
+    # Проверяем, является ли пользователь администратором
+    from config import settings
+    if user_id in settings.ADMIN_IDS:
+        return True  # Администраторы пропускаются без проверки подписки
 
     try:
         # Проверяем подписку через SubGram API
@@ -153,6 +159,7 @@ async def _handle_subscription_required(
 async def check_subscription_silent(user_id: int, chat_id: int) -> bool:
     """
     Тихо проверяет подписку пользователя без отправки сообщений.
+    Администраторы пропускаются без проверки.
 
     Args:
         user_id: ID пользователя
@@ -161,6 +168,11 @@ async def check_subscription_silent(user_id: int, chat_id: int) -> bool:
     Returns:
         True если пользователь подписан, False если нет
     """
+
+    # Проверяем, является ли пользователь администратором
+    from config import settings
+    if user_id in settings.ADMIN_IDS:
+        return True  # Администраторы пропускаются без проверки подписки
 
     try:
         # Проверяем подписку через SubGram API
